@@ -3,9 +3,11 @@ main = "src/worker.ts"
 compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
 
-# Environment variables to define locally or in Cloudflare Dashboard
+# Environment variables for Cloudflare Workers
 [vars]
-# SUPABASE_URL = "https://your-project.supabase.co"
-# SUPABASE_KEY = "your-supabase-anon-or-service-key"
-# BOT_TOKEN = "your-telegram-bot-token"
-# WEBHOOK_SECRET = "your-optional-secret-token"
+BOT_TOKEN = "5739131290:AAHM5TB69gTJHDDGpN3bzieUpYwa_luooWk"
+SUPABASE_URL = "https://eokmyjesbphdxxxlwfdd.supabase.co"
+SUPABASE_KEY = "sb_publishable_ViWgqXJRhRb2RMu8OEVlyg_5saOMqMH"
+ADMIN_USER_ID = "747573651"
+UPI_ID = "examplayer@upi"
+PREMIUM_PRICE = "99"
