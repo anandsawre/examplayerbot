@@ -48,6 +48,14 @@ function escapeMarkdown(text: string): string {
     .replace(/`/g, '\\`');
 }
 
+function escapeHtml(text: string): string {
+  if (!text) return '';
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
 /**
  * Starts a solo quiz in Telegram Native Quiz Poll Mode with live circular timer & confetti!
  */
@@ -212,9 +220,9 @@ export async function sendNextPollQuestion(
   }
 
   const pollQuestionText =
-    cleanQuestionText.length > 280
-      ? `${qNum}. Sahi option chunein:`
-      : `${qNum}. ${cleanQuestionText}`.slice(0, 300);
+    cleanQuestionText.length > 270
+      ? `<b>Q</b>${qNum}. Sahi option chunein:`
+      : `<b>Q</b>${qNum}. ${escapeHtml(cleanQuestionText.slice(0, 260))}`;
 
   const rawOptions = Array.isArray(q.options) ? q.options : [];
   const cleanOptions = rawOptions.map((opt) => String(opt).slice(0, 100));
@@ -239,6 +247,7 @@ export async function sendNextPollQuestion(
         correct_option_id: safeCorrectIndex,
         is_anonymous: false, // Essential to capture user's vote via poll_answer
         open_period: timeLimit,
+        question_parse_mode: 'HTML',
         explanation: q.explanation ? q.explanation.slice(0, 200) : undefined,
       } as any
     );

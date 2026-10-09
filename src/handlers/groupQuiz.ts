@@ -124,18 +124,25 @@ export async function handleLaunchGroupQuiz(
     // Clean existing leading numbers if present in JSON text
     const cleanQuestionText = q.question_text.replace(/^(Q\.?\s*\d+[\.\)]?\s*|\d+[\.\)]\s*)/i, '').trim();
 
-    // Question poll title (Telegram poll limit is 300 chars for question)
-    const pollQuestion = `${i + 1}. ${cleanQuestionText}`;
+    // Escape HTML for safe parsing
+    const escapedText = cleanQuestionText.slice(0, 260)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+
+    // Question poll title with bold Q
+    const pollQuestion = `<b>Q</b>${i + 1}. ${escapedText}`;
 
     // Ensure options don't exceed Telegram limit of 100 chars each
-    const cleanOptions = options.map((opt) => opt.slice(0, 100));
+    const cleanOptions = options.map((opt) => String(opt).slice(0, 100));
 
     try {
-      await ctx.api.sendPoll(chatId, pollQuestion.slice(0, 300), cleanOptions, {
+      await ctx.api.sendPoll(chatId, pollQuestion, cleanOptions, {
         type: 'quiz',
         correct_option_id: q.correct_option_index,
         is_anonymous: false, // Let students see who got it right
         open_period: Math.min(600, Math.max(10, quiz.time_limit_seconds)),
+        question_parse_mode: 'HTML',
         explanation: q.explanation ? q.explanation.slice(0, 200) : undefined,
       } as any);
     } catch (err: any) {
