@@ -1,0 +1,29 @@
+{
+  "title": "SSC CGL 2026 - General Awareness Mock",
+  "category": "SSC Exam",
+  "description": "Important GK and Science questions for upcoming SSC CGL exam.",
+  "total_questions": 3,
+  "marks_per_question": 2.0,
+  "negative_marks": 0.5,
+  "time_limit_seconds": 30,
+  "questions": [
+    {
+      "question_text": "Which Article of the Indian Constitution deals with the Fundamental Rights?",
+      "options": ["Articles 12 to 35", "Articles 36 to 51", "Articles 51A", "Articles 1 to 4"],
+      "correct_option_index": 0,
+      "explanation": "Part III of the Constitution (Articles 12 to 35) deals with Fundamental Rights."
+    },
+    {
+      "question_text": "What is the SI unit of electric current?",
+      "options": ["Volt", "Ampere", "Ohm", "Watt"],
+      "correct_option_index": 1,
+      "explanation": "The SI unit of electric current is the Ampere (A)."
+    },
+    {
+      "question_text": "Who founded the Maurya Empire?",
+      "options": ["Ashoka", "Bindusara", "Chandragupta Maurya", "Harsha"],
+      "correct_option_index": 2,
+      "explanation": "Chandragupta Maurya founded the Maurya Empire with the help of Chanakya in 322 BCE."
+    }
+  ]
+}
