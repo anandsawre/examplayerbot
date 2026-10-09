@@ -1,4 +1,4 @@
-import { Context } from 'grammy';
+import { Context, Api, InlineKeyboard } from 'grammy';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { Env } from '../config';
 import {
@@ -12,12 +12,45 @@ import {
   recordQuizAttempt,
   getUser,
 } from '../db/queries';
-import { renderQuestionMessage, renderScorecardMessage } from '../services/quizEngine';
+import { renderScorecardMessage } from '../services/quizEngine';
 import { calculateQuizResult } from '../services/scoring';
-import { AnswerRecord } from '../types';
+import { AnswerRecord, Question, Quiz } from '../types';
 import { checkChannelMembership, sendJoinChannelPrompt } from './membership';
 import { showPaymentPrompt } from './payment';
+import { isAdmin } from '../utils/admin';
 
+export interface SoloPollSession {
+  quizId: string;
+  userId: number;
+  chatId: number;
+  questions: Question[];
+  currentIndex: number;
+  answers: AnswerRecord[];
+  startedAt: string;
+  currentPollId?: string;
+  questionTimer?: NodeJS.Timeout;
+}
+
+// In-memory active solo poll sessions map (keyed by Telegram userId)
+export const soloPollSessions = new Map<number, SoloPollSession>();
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function escapeMarkdown(text: string): string {
+  if (!text) return '';
+  return text
+    .replace(/_/g, '\\_')
+    .replace(/\*/g, '\\*')
+    .replace(/\[/g, '\\[')
+    .replace(/\]/g, '\\]')
+    .replace(/`/g, '\\`');
+}
+
+/**
+ * Starts a solo quiz in Telegram Native Quiz Poll Mode with live circular timer & confetti!
+ */
 export async function handleStartQuiz(
   ctx: Context,
   supabase: SupabaseClient,
@@ -25,7 +58,8 @@ export async function handleStartQuiz(
   quizId: string
 ) {
   const userId = ctx.from?.id;
-  if (!userId) return;
+  const chatId = ctx.chat?.id;
+  if (!userId || !chatId) return;
 
   // 1. Force Channel Subscription Check
   const { isMember, channelUrl } = await checkChannelMembership(ctx, supabase, env);
@@ -41,8 +75,8 @@ export async function handleStartQuiz(
     return;
   }
 
-  // 2. Premium Test Check
-  if (quiz.is_premium) {
+  // 2. Premium Test Check (Admin automatically bypasses lock)
+  if (quiz.is_premium && !isAdmin(ctx, env)) {
     const user = await getUser(supabase, userId);
     if (!user?.is_premium) {
       return showPaymentPrompt(ctx, supabase, env);
@@ -60,153 +94,316 @@ export async function handleStartQuiz(
     return;
   }
 
-  // Shuffle question IDs for fairness / anti-cheat
-  const shuffledIds = [...questions.map((q) => q.id)].sort(() => Math.random() - 0.5);
+  // Clear any existing active poll session for this user
+  const existingSession = soloPollSessions.get(userId);
+  if (existingSession?.questionTimer) {
+    clearTimeout(existingSession.questionTimer);
+  }
+  soloPollSessions.delete(userId);
 
-  // Initialize session in Supabase
-  const sessionSuccess = await createActiveSession(supabase, {
+  // Shuffle questions for fairness
+  const shuffledQuestions = [...questions].sort(() => Math.random() - 0.5);
+  const timeLimit = Math.min(600, Math.max(10, quiz.time_limit_seconds || 30));
+
+  // Initialize new session
+  const newSession: SoloPollSession = {
+    quizId,
+    userId,
+    chatId,
+    questions: shuffledQuestions,
+    currentIndex: 0,
+    answers: [],
+    startedAt: new Date().toISOString(),
+  };
+
+  soloPollSessions.set(userId, newSession);
+
+  // Also persist in Supabase active_sessions
+  await createActiveSession(supabase, {
     user_id: userId,
     quiz_id: quizId,
     current_index: 0,
-    question_ids: shuffledIds,
+    question_ids: shuffledQuestions.map((q) => q.id),
     answers: [],
-    started_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
+    started_at: newSession.startedAt,
+    updated_at: newSession.startedAt,
   });
 
-  if (!sessionSuccess) {
-    if (ctx.callbackQuery) {
-      await ctx.answerCallbackQuery({
-        text: 'Session shuru karne me error aayi. Please dobara try karein.',
-        show_alert: true,
-      });
-    }
-    return;
-  }
-
-  // Fetch the first question
-  const firstQuestion = questions.find((q) => q.id === shuffledIds[0]) || questions[0];
-  const { text, keyboard } = renderQuestionMessage(quiz, firstQuestion, 0, shuffledIds.length);
+  const introText =
+    `🎯 *MOCK TEST SHURU HO RAHA HAI!*\n` +
+    `━━━━━━━━━━━━━━━━━━━━━\n` +
+    `📚 *Test:* ${escapeMarkdown(quiz.title)}\n` +
+    `❓ *Total Questions:* \`${shuffledQuestions.length}\`\n` +
+    `⏱️ *Timer:* \`${timeLimit}s\` per question (Circular Countdown)\n` +
+    `⚠️ *Marking Scheme:* +${quiz.marks_per_question} / -${quiz.negative_marks}\n\n` +
+    `⚡ *Instructions:*\n` +
+    `• Har question Telegram Quiz Poll ke roop me aayega.\n` +
+    `• Screen par *Live Circular Countdown Timer* chalega.\n` +
+    `• Option tap karte hi instant feedback & confetti 🎉 dikhega!\n` +
+    `• Agar test rokna ho toh kisi bhi waqt \`/quit\` type karein.\n\n` +
+    `_First question 2 second me aa raha hai..._`;
 
   if (ctx.callbackQuery) {
-    await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup: keyboard });
-    await ctx.answerCallbackQuery({ text: 'Test shuru ho gaya! All the best 🎯' });
+    await ctx.answerCallbackQuery({ text: 'Starting Quiz!' });
+    try {
+      await ctx.editMessageText(introText, { parse_mode: 'Markdown' });
+    } catch {
+      await ctx.reply(introText, { parse_mode: 'Markdown' });
+    }
   } else {
-    await ctx.reply(text, { parse_mode: 'Markdown', reply_markup: keyboard });
+    await ctx.reply(introText, { parse_mode: 'Markdown' });
+  }
+
+  // Brief pause then dispatch first question
+  await sleep(2000);
+  await sendNextPollQuestion(ctx.api, supabase, env, userId);
+}
+
+/**
+ * Sends the next question as a native Telegram Quiz Poll with timer
+ */
+export async function sendNextPollQuestion(
+  api: Api,
+  supabase: SupabaseClient,
+  env: Env,
+  userId: number
+) {
+  const session = soloPollSessions.get(userId);
+  if (!session) return;
+
+  // Clear any existing timer
+  if (session.questionTimer) {
+    clearTimeout(session.questionTimer);
+    session.questionTimer = undefined;
+  }
+
+  // Check if all questions are finished
+  if (session.currentIndex >= session.questions.length) {
+    return finishSoloPollQuiz(api, supabase, env, session);
+  }
+
+  const q = session.questions[session.currentIndex];
+  const quiz = await getQuizById(supabase, session.quizId);
+  if (!quiz) return;
+
+  const totalQuestions = session.questions.length;
+  const qNum = session.currentIndex + 1;
+  const timeLimit = Math.min(600, Math.max(10, quiz.time_limit_seconds || 30));
+
+  // If question text is long, send full text first
+  if (q.question_text.length > 270) {
+    await api.sendMessage(
+      session.chatId,
+      `📖 *Question ${qNum}/${totalQuestions}:*\n\n${escapeMarkdown(q.question_text)}`,
+      { parse_mode: 'Markdown' }
+    );
+  }
+
+  // If image URL is present, send photo
+  if (q.image_url) {
+    try {
+      await api.sendPhoto(session.chatId, q.image_url);
+    } catch (e) {
+      console.error('Failed to send question image:', e);
+    }
+  }
+
+  const pollQuestionText =
+    q.question_text.length > 270
+      ? `[Q ${qNum}/${totalQuestions}] Sahi option chunein:`
+      : `[Q ${qNum}/${totalQuestions}] ${q.question_text}`.slice(0, 300);
+
+  const rawOptions = Array.isArray(q.options) ? q.options : [];
+  const cleanOptions = rawOptions.map((opt) => String(opt).slice(0, 100));
+
+  // Telegram requires 2-10 options for a poll
+  if (cleanOptions.length < 2) {
+    cleanOptions.push('Option A', 'Option B');
+  }
+
+  const safeCorrectIndex = Math.min(
+    cleanOptions.length - 1,
+    Math.max(0, q.correct_option_index)
+  );
+
+  try {
+    const pollMessage = await api.sendPoll(
+      session.chatId,
+      pollQuestionText,
+      cleanOptions,
+      {
+        type: 'quiz',
+        correct_option_id: safeCorrectIndex,
+        is_anonymous: false, // Essential to capture user's vote via poll_answer
+        open_period: timeLimit,
+        explanation: q.explanation ? q.explanation.slice(0, 200) : undefined,
+      } as any
+    );
+
+    session.currentPollId = pollMessage.poll.id;
+
+    // Timeout countdown timer: If user doesn't answer within timeLimit seconds
+    session.questionTimer = setTimeout(async () => {
+      const curSession = soloPollSessions.get(userId);
+      if (!curSession || curSession.currentIndex !== session.currentIndex) return;
+
+      // Mark as timed out / skipped (0 marks)
+      curSession.answers.push({
+        question_id: q.id,
+        selected_option_index: -1,
+        is_correct: false,
+      });
+
+      await api.sendMessage(
+        curSession.chatId,
+        `⏰ *Time Out! (Question ${qNum})*\n_Samay samapt! Agla question aa raha hai..._`,
+        { parse_mode: 'Markdown' }
+      );
+
+      curSession.currentIndex++;
+      await sleep(1500);
+      await sendNextPollQuestion(api, supabase, env, userId);
+    }, (timeLimit + 2) * 1000);
+
+  } catch (err: any) {
+    console.error(`Error sending poll for Q${qNum}:`, err);
+    // If poll fails for any reason, skip forward
+    session.currentIndex++;
+    await sendNextPollQuestion(api, supabase, env, userId);
   }
 }
 
-export async function handleAnswerCallback(
+/**
+ * Handles user answering via Telegram Native Quiz Poll
+ */
+export async function handleSoloPollAnswer(
   ctx: Context,
   supabase: SupabaseClient,
-  questionId: string,
-  optionIndex: number
+  env: Env
 ) {
-  const userId = ctx.from?.id;
-  if (!userId) return;
+  const pollAnswer = ctx.pollAnswer;
+  if (!pollAnswer || !pollAnswer.user) return;
 
-  const session = await getActiveSession(supabase, userId);
-  if (!session) {
-    if (ctx.callbackQuery) {
-      await ctx.answerCallbackQuery({
-        text: 'Aapka test session expire ho chuka hai. Kripya naya test shuru karein.',
-        show_alert: true,
-      });
-    }
-    return;
+  const userId = pollAnswer.user.id;
+  const session = soloPollSessions.get(userId);
+  if (!session) return; // Might be a group quiz poll, ignore
+
+  // Ensure poll matches current active question
+  if (session.currentPollId !== pollAnswer.poll_id) return;
+
+  // Clear timeout timer
+  if (session.questionTimer) {
+    clearTimeout(session.questionTimer);
+    session.questionTimer = undefined;
   }
 
-  const quiz = await getQuizById(supabase, session.quiz_id);
-  if (!quiz) return;
+  const currentQ = session.questions[session.currentIndex];
+  if (!currentQ) return;
 
-  const question = await getQuestionById(supabase, questionId);
-  if (!question) return;
+  const selectedOption = pollAnswer.option_ids[0]; // Selected option index
+  const isCorrect = selectedOption === currentQ.correct_option_index;
 
-  // Evaluate Answer
-  const isSkip = optionIndex === -1;
-  const isCorrect = !isSkip && optionIndex === question.correct_option_index;
-
-  let toastText = '';
-  if (isSkip) {
-    toastText = '⏭️ Question Skipped (0 Marks)';
-  } else if (isCorrect) {
-    toastText = `✅ Sahi Jawab! (+${quiz.marks_per_question} Marks)`;
-  } else {
-    const correctLetter = ['A', 'B', 'C', 'D'][question.correct_option_index] || '';
-    toastText = `❌ Galat Jawab! (-${quiz.negative_marks} Penalty) Sahi tha: Option ${correctLetter}`;
-  }
-
-  if (ctx.callbackQuery) {
-    await ctx.answerCallbackQuery({ text: toastText, show_alert: !isCorrect && !isSkip });
-  }
-
-  // Save answer record
-  const currentAnswers: AnswerRecord[] = session.answers || [];
-  currentAnswers.push({
-    question_id: questionId,
-    selected_option_index: optionIndex,
+  // Record answer
+  session.answers.push({
+    question_id: currentQ.id,
+    selected_option_index: selectedOption,
     is_correct: isCorrect,
   });
 
-  const nextIndex = session.current_index + 1;
-  const totalQuestions = session.question_ids.length;
+  // Advance index
+  session.currentIndex++;
 
-  if (nextIndex < totalQuestions) {
-    // Test continues -> Render Next Question
-    await updateActiveSession(supabase, userId, nextIndex, currentAnswers);
+  // Wait 2.5 seconds so user can see their confetti / red highlight & read bulb explanation
+  await sleep(2500);
 
-    const nextQuestionId = session.question_ids[nextIndex];
-    const nextQuestion = await getQuestionById(supabase, nextQuestionId);
-
-    if (nextQuestion) {
-      const { text, keyboard } = renderQuestionMessage(quiz, nextQuestion, nextIndex, totalQuestions);
-      try {
-        await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup: keyboard });
-      } catch (e) {
-        // Fallback if edit fails
-        await ctx.reply(text, { parse_mode: 'Markdown', reply_markup: keyboard });
-      }
-    }
-  } else {
-    // Test Finished! Calculate Final Score
-    const result = calculateQuizResult(quiz, currentAnswers, session.started_at);
-
-    // Save attempt in database
-    await recordQuizAttempt(supabase, {
-      user_id: userId,
-      quiz_id: quiz.id,
-      total_questions: result.totalQuestions,
-      correct_count: result.correctCount,
-      wrong_count: result.wrongCount,
-      skipped_count: result.skippedCount,
-      score: result.finalScore,
-      accuracy_percent: result.accuracy,
-      time_taken_seconds: result.timeTakenSeconds,
-    });
-
-    // Cleanup active session
-    await deleteActiveSession(supabase, userId);
-
-    // Render Scorecard
-    const studentName = ctx.from.first_name || 'Student';
-    const { text, keyboard } = renderScorecardMessage(quiz, studentName, result);
-
-    try {
-      await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup: keyboard });
-    } catch {
-      await ctx.reply(text, { parse_mode: 'Markdown', reply_markup: keyboard });
-    }
-  }
+  // Send next question
+  await sendNextPollQuestion(ctx.api, supabase, env, userId);
 }
 
+/**
+ * Finishes the quiz, records attempts in Supabase, and displays the official scorecard
+ */
+async function finishSoloPollQuiz(
+  api: Api,
+  supabase: SupabaseClient,
+  env: Env,
+  session: SoloPollSession
+) {
+  soloPollSessions.delete(session.userId);
+
+  const quiz = await getQuizById(supabase, session.quizId);
+  if (!quiz) return;
+
+  // Calculate official test result with negative marking
+  const result = calculateQuizResult(quiz, session.answers, session.startedAt);
+
+  // Record attempt in database
+  await recordQuizAttempt(supabase, {
+    user_id: session.userId,
+    quiz_id: quiz.id,
+    total_questions: result.totalQuestions,
+    correct_count: result.correctCount,
+    wrong_count: result.wrongCount,
+    skipped_count: result.skippedCount,
+    score: result.finalScore,
+    accuracy_percent: result.accuracy,
+    time_taken_seconds: result.timeTakenSeconds,
+  });
+
+  // Cleanup active session in Supabase
+  await deleteActiveSession(supabase, session.userId);
+
+  // Get user details
+  const user = await getUser(supabase, session.userId);
+  const studentName = user?.first_name || 'Student';
+
+  // Render official scorecard
+  const { text, keyboard } = renderScorecardMessage(quiz, studentName, result);
+
+  await api.sendMessage(session.chatId, text, {
+    parse_mode: 'Markdown',
+    reply_markup: keyboard,
+  });
+}
+
+/**
+ * Cancels active quiz if user types /quit
+ */
 export async function handleQuitQuiz(ctx: Context, supabase: SupabaseClient) {
   const userId = ctx.from?.id;
   if (!userId) return;
+
+  const session = soloPollSessions.get(userId);
+  if (session) {
+    if (session.questionTimer) clearTimeout(session.questionTimer);
+    soloPollSessions.delete(userId);
+  }
 
   await deleteActiveSession(supabase, userId);
 
   if (ctx.callbackQuery) {
     await ctx.answerCallbackQuery({ text: 'Test cancel kar diya gaya.' });
     await ctx.editMessageText('❌ Test cancel kar diya gaya hai.\nNaya test lene ke liye /quizzes type karein.');
+  } else {
+    await ctx.reply('❌ *Test Cancel Kar Diya Gaya Hai.*\n\nNaya test shuru karne ke liye /quizzes open karein.', {
+      parse_mode: 'Markdown',
+    });
+  }
+}
+
+/**
+ * Backward compatibility handler for any inline callback buttons
+ */
+export async function handleAnswerCallback(
+  ctx: Context,
+  supabase: SupabaseClient,
+  questionId: string,
+  optionIndex: number
+) {
+  if (ctx.callbackQuery) {
+    await ctx.answerCallbackQuery({
+      text: 'Yeh test Telegram Quiz Poll format me hai, kripya screen par poll option par tap karein! 🎯',
+      show_alert: true,
+    });
   }
 }

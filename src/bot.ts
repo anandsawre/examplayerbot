@@ -3,7 +3,7 @@ import { Env } from './config';
 import { getSupabase } from './db/supabase';
 import { handleStart, handleHelp } from './handlers/start';
 import { handleQuizzesList, handleViewQuiz, handleToggleQuizPremium } from './handlers/quizzes';
-import { handleStartQuiz, handleAnswerCallback, handleQuitQuiz } from './handlers/quizPlay';
+import { handleStartQuiz, handleAnswerCallback, handleQuitQuiz, handleSoloPollAnswer } from './handlers/quizPlay';
 import { handleGlobalLeaderboard, handleQuizLeaderboard } from './handlers/leaderboard';
 import { handleProfile } from './handlers/profile';
 import { handleDocumentImport, handleImportHelp, handleTextImport } from './handlers/adminImport';
@@ -70,8 +70,11 @@ export function createBot(env: Env): Bot {
   bot.command('auth', (ctx) => handleAuthCommand(ctx, supabase, env));
   bot.command('unauth', (ctx) => handleUnauthCommand(ctx, supabase, env));
   bot.command('groups', (ctx) => handleListGroupsCommand(ctx, supabase, env));
+  bot.command('quit', (ctx) => handleQuitQuiz(ctx, supabase));
 
   // ================= EVENTS =================
+  // Solo Quiz Poll Answer Event (Interactive Countdown Polls)
+  bot.on('poll_answer', (ctx) => handleSoloPollAnswer(ctx, supabase, env));
   // Bot Added to Group Event
   bot.on(':new_chat_members', async (ctx) => {
     const newMembers = ctx.message?.new_chat_members || [];
