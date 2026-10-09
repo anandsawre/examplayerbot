@@ -121,8 +121,11 @@ export async function handleLaunchGroupQuiz(
     const q = questions[i];
     const options = Array.isArray(q.options) ? q.options : [];
 
+    // Clean existing leading numbers if present in JSON text
+    const cleanQuestionText = q.question_text.replace(/^(Q\.?\s*\d+[\.\)]?\s*|\d+[\.\)]\s*)/i, '').trim();
+
     // Question poll title (Telegram poll limit is 300 chars for question)
-    const pollQuestion = `[Q ${i + 1}/${questions.length}] ${q.question_text}`;
+    const pollQuestion = `${i + 1}. ${cleanQuestionText}`;
 
     // Ensure options don't exceed Telegram limit of 100 chars each
     const cleanOptions = options.map((opt) => opt.slice(0, 100));

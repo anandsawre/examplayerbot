@@ -190,11 +190,14 @@ export async function sendNextPollQuestion(
   const qNum = session.currentIndex + 1;
   const timeLimit = Math.min(600, Math.max(10, quiz.time_limit_seconds || 30));
 
+  // Clean existing leading numbers if present in JSON text to prevent "1. 1."
+  const cleanQuestionText = q.question_text.replace(/^(Q\.?\s*\d+[\.\)]?\s*|\d+[\.\)]\s*)/i, '').trim();
+
   // If question text is long, send full text first
-  if (q.question_text.length > 270) {
+  if (cleanQuestionText.length > 280) {
     await api.sendMessage(
       session.chatId,
-      `📖 *Question ${qNum}/${totalQuestions}:*\n\n${escapeMarkdown(q.question_text)}`,
+      `📖 *Question ${qNum}:*\n\n${escapeMarkdown(cleanQuestionText)}`,
       { parse_mode: 'Markdown' }
     );
   }
@@ -209,9 +212,9 @@ export async function sendNextPollQuestion(
   }
 
   const pollQuestionText =
-    q.question_text.length > 270
-      ? `[Q ${qNum}/${totalQuestions}] Sahi option chunein:`
-      : `[Q ${qNum}/${totalQuestions}] ${q.question_text}`.slice(0, 300);
+    cleanQuestionText.length > 280
+      ? `${qNum}. Sahi option chunein:`
+      : `${qNum}. ${cleanQuestionText}`.slice(0, 300);
 
   const rawOptions = Array.isArray(q.options) ? q.options : [];
   const cleanOptions = rawOptions.map((opt) => String(opt).slice(0, 100));
