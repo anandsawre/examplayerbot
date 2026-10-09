@@ -94,6 +94,31 @@ export async function getQuizById(supabase: SupabaseClient, quizId: string): Pro
   return data;
 }
 
+export async function deleteQuiz(
+  supabase: SupabaseClient,
+  quizId: string
+): Promise<boolean> {
+  const { error } = await supabase.from('quizzes').delete().eq('id', quizId);
+  if (error) {
+    console.error('Error deleting quiz:', error);
+    return false;
+  }
+  return true;
+}
+
+export async function updateQuiz(
+  supabase: SupabaseClient,
+  quizId: string,
+  updates: Partial<Quiz>
+): Promise<boolean> {
+  const { error } = await supabase.from('quizzes').update(updates).eq('id', quizId);
+  if (error) {
+    console.error('Error updating quiz:', error);
+    return false;
+  }
+  return true;
+}
+
 export async function getQuestionsForQuiz(
   supabase: SupabaseClient,
   quizId: string

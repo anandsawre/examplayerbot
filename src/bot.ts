@@ -2,7 +2,23 @@ import { Bot } from 'grammy';
 import { Env } from './config';
 import { getSupabase } from './db/supabase';
 import { handleStart, handleHelp } from './handlers/start';
-import { handleQuizzesList, handleViewQuiz, handleToggleQuizPremium } from './handlers/quizzes';
+import {
+  handleQuizzesList,
+  handleViewQuiz,
+  handleToggleQuizPremium,
+  handleAskDeleteQuiz,
+  handleConfirmDeleteQuiz,
+  handleEditQuizPanel,
+  handleEditTimerOptions,
+  handleSetQuizTimer,
+  handleEditMarksOptions,
+  handleSetQuizMarks,
+  handleEditTitlePrompt,
+  handleEditCategoryPrompt,
+  handleEditTitleCommand,
+  handleEditCategoryCommand,
+  handleDeleteQuizCommand,
+} from './handlers/quizzes';
 import { handleStartQuiz, handleAnswerCallback, handleQuitQuiz, handleSoloPollAnswer, handlePollClosed } from './handlers/quizPlay';
 import { handleGlobalLeaderboard, handleQuizLeaderboard } from './handlers/leaderboard';
 import { handleProfile } from './handlers/profile';
@@ -71,6 +87,9 @@ export function createBot(env: Env): Bot {
   bot.command('unauth', (ctx) => handleUnauthCommand(ctx, supabase, env));
   bot.command('groups', (ctx) => handleListGroupsCommand(ctx, supabase, env));
   bot.command('quit', (ctx) => handleQuitQuiz(ctx, supabase));
+  bot.command('delquiz', (ctx) => handleDeleteQuizCommand(ctx, supabase, env));
+  bot.command('edittitle', (ctx) => handleEditTitleCommand(ctx, supabase, env));
+  bot.command('editcat', (ctx) => handleEditCategoryCommand(ctx, supabase, env));
 
   // ================= EVENTS =================
   // Solo Quiz Poll Answer Event (User voted)
@@ -134,6 +153,60 @@ export function createBot(env: Env): Bot {
     if (data.startsWith('toggle_prem:')) {
       const quizId = data.replace('toggle_prem:', '');
       return handleToggleQuizPremium(ctx, supabase, env, quizId);
+    }
+
+    // Ask Delete Quiz (Admin): "ask_del_quiz:<quiz_id>"
+    if (data.startsWith('ask_del_quiz:')) {
+      const quizId = data.replace('ask_del_quiz:', '');
+      return handleAskDeleteQuiz(ctx, supabase, env, quizId);
+    }
+
+    // Confirm Delete Quiz (Admin): "confirm_del_quiz:<quiz_id>"
+    if (data.startsWith('confirm_del_quiz:')) {
+      const quizId = data.replace('confirm_del_quiz:', '');
+      return handleConfirmDeleteQuiz(ctx, supabase, env, quizId);
+    }
+
+    // Edit Quiz Panel (Admin): "edit_quiz:<quiz_id>"
+    if (data.startsWith('edit_quiz:')) {
+      const quizId = data.replace('edit_quiz:', '');
+      return handleEditQuizPanel(ctx, supabase, env, quizId);
+    }
+
+    // Edit Timer Options (Admin): "ed_timer_opt:<quiz_id>"
+    if (data.startsWith('ed_timer_opt:')) {
+      const quizId = data.replace('ed_timer_opt:', '');
+      return handleEditTimerOptions(ctx, supabase, env, quizId);
+    }
+
+    // Set Timer Value (Admin): "set_q_time:<quiz_id>:<seconds>"
+    if (data.startsWith('set_q_time:')) {
+      const parts = data.split(':');
+      return handleSetQuizTimer(ctx, supabase, env, parts[1], parseInt(parts[2], 10));
+    }
+
+    // Edit Marks Options (Admin): "ed_marks_opt:<quiz_id>"
+    if (data.startsWith('ed_marks_opt:')) {
+      const quizId = data.replace('ed_marks_opt:', '');
+      return handleEditMarksOptions(ctx, supabase, env, quizId);
+    }
+
+    // Set Marks Value (Admin): "set_q_marks:<quiz_id>:<marks>:<neg>"
+    if (data.startsWith('set_q_marks:')) {
+      const parts = data.split(':');
+      return handleSetQuizMarks(ctx, supabase, env, parts[1], parseFloat(parts[2]), parseFloat(parts[3]));
+    }
+
+    // Edit Title Prompt (Admin): "ed_title_prompt:<quiz_id>"
+    if (data.startsWith('ed_title_prompt:')) {
+      const quizId = data.replace('ed_title_prompt:', '');
+      return handleEditTitlePrompt(ctx, supabase, env, quizId);
+    }
+
+    // Edit Category Prompt (Admin): "ed_cat_prompt:<quiz_id>"
+    if (data.startsWith('ed_cat_prompt:')) {
+      const quizId = data.replace('ed_cat_prompt:', '');
+      return handleEditCategoryPrompt(ctx, supabase, env, quizId);
     }
 
     // Start quiz: "start_quiz:<quiz_id>"
