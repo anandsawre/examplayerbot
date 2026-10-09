@@ -176,8 +176,31 @@ export async function sendNextPollQuestion(
   env: Env,
   userId: number
 ) {
-  const session = soloPollSessions.get(userId);
-  if (!session) return;
+  let session = soloPollSessions.get(userId);
+  if (!session) {
+    const dbSession = await getActiveSession(supabase, userId);
+    if (!dbSession) return;
+
+    const allQuestions = await getQuestionsForQuiz(supabase, dbSession.quiz_id);
+    if (!allQuestions || allQuestions.length === 0) return;
+
+    const orderedQuestions: Question[] = [];
+    for (const qid of dbSession.question_ids) {
+      const found = allQuestions.find((q) => q.id === qid);
+      if (found) orderedQuestions.push(found);
+    }
+
+    session = {
+      quizId: dbSession.quiz_id,
+      userId,
+      chatId: userId,
+      questions: orderedQuestions.length > 0 ? orderedQuestions : allQuestions,
+      currentIndex: dbSession.current_index,
+      answers: dbSession.answers || [],
+      startedAt: dbSession.started_at,
+    };
+    soloPollSessions.set(userId, session);
+  }
 
   // Clear any existing timer
   if (session.questionTimer) {
@@ -253,6 +276,17 @@ export async function sendNextPollQuestion(
     );
 
     session.currentPollId = pollMessage.poll.id;
+
+    // Track poll in Supabase bot_settings for serverless timeout expiration
+    await supabase.from('bot_settings').upsert({
+      key: `poll:${pollMessage.poll.id}`,
+      value: JSON.stringify({
+        userId,
+        quizId: session.quizId,
+        qIndex: session.currentIndex,
+        questionId: q.id,
+      }),
+    });
 
     // Timeout countdown timer: If user doesn't answer within timeLimit seconds
     session.questionTimer = setTimeout(async () => {
@@ -339,6 +373,9 @@ export async function handleSoloPollAnswer(
   // Advance index
   session.currentIndex++;
 
+  // Delete poll tracking from Supabase since user answered
+  await supabase.from('bot_settings').delete().eq('key', `poll:${pollAnswer.poll_id}`);
+
   // Persist session to Supabase active_sessions
   await updateActiveSession(supabase, userId, session.currentIndex, session.answers);
 
@@ -347,6 +384,106 @@ export async function handleSoloPollAnswer(
 
   // Send next question
   await sendNextPollQuestion(ctx.api, supabase, env, userId);
+}
+
+/**
+ * Handles Telegram Poll timer expiration on Serverless Cloudflare Workers (when poll closes without answer)
+ */
+export async function handlePollClosed(
+  ctx: Context,
+  supabase: SupabaseClient,
+  env: Env
+) {
+  const poll = ctx.poll;
+  if (!poll || !poll.is_closed) return;
+
+  // Retrieve tracked poll mapping from bot_settings
+  const { data } = await supabase
+    .from('bot_settings')
+    .select('value')
+    .eq('key', `poll:${poll.id}`)
+    .single();
+
+  if (!data?.value) return; // Not a tracked solo test poll or already answered
+
+  // Clean up tracking key
+  await supabase.from('bot_settings').delete().eq('key', `poll:${poll.id}`);
+
+  let meta: { userId: number; quizId: string; qIndex: number; questionId: string };
+  try {
+    meta = JSON.parse(data.value);
+  } catch {
+    return;
+  }
+
+  const activeSession = await getActiveSession(supabase, meta.userId);
+  if (!activeSession) return;
+
+  // If user already answered, current_index would have advanced past meta.qIndex
+  if (activeSession.current_index !== meta.qIndex) return;
+
+  const currentAnswers = activeSession.answers || [];
+  // Record timed out / skipped question (0 marks)
+  currentAnswers.push({
+    question_id: meta.questionId,
+    selected_option_index: -1,
+    is_correct: false,
+  });
+
+  const nextIndex = activeSession.current_index + 1;
+  const totalQuestions = activeSession.question_ids.length;
+
+  // Notify student that time is up for this question
+  await ctx.api.sendMessage(
+    meta.userId,
+    `⏰ *Time Up! (Question ${meta.qIndex + 1})*\n_Samay samapt ho gaya. Agla question aa raha hai..._`,
+    { parse_mode: 'Markdown' }
+  );
+
+  if (nextIndex < totalQuestions) {
+    await updateActiveSession(supabase, meta.userId, nextIndex, currentAnswers);
+
+    // Update in-memory session if present
+    const memSession = soloPollSessions.get(meta.userId);
+    if (memSession) {
+      memSession.currentIndex = nextIndex;
+      memSession.answers = currentAnswers;
+    }
+
+    await sleep(1500);
+    await sendNextPollQuestion(ctx.api, supabase, env, meta.userId);
+  } else {
+    // All questions done! Finish test
+    const quiz = await getQuizById(supabase, activeSession.quiz_id);
+    if (!quiz) return;
+
+    const result = calculateQuizResult(quiz, currentAnswers, activeSession.started_at);
+
+    await recordQuizAttempt(supabase, {
+      user_id: meta.userId,
+      quiz_id: quiz.id,
+      total_questions: result.totalQuestions,
+      correct_count: result.correctCount,
+      wrong_count: result.wrongCount,
+      skipped_count: result.skippedCount,
+      score: result.finalScore,
+      accuracy_percent: result.accuracy,
+      time_taken_seconds: result.timeTakenSeconds,
+    });
+
+    await deleteActiveSession(supabase, meta.userId);
+    soloPollSessions.delete(meta.userId);
+
+    const user = await getUser(supabase, meta.userId);
+    const studentName = user?.first_name || 'Student';
+
+    const { text, keyboard } = renderScorecardMessage(quiz, studentName, result);
+
+    await ctx.api.sendMessage(meta.userId, text, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard,
+    });
+  }
 }
 
 /**
