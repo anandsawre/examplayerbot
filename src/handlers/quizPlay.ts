@@ -297,11 +297,25 @@ export async function handleSoloPollAnswer(
   if (!pollAnswer || !pollAnswer.user) return;
 
   const userId = pollAnswer.user.id;
-  const session = soloPollSessions.get(userId);
-  if (!session) return; // Might be a group quiz poll, ignore
+  let session = soloPollSessions.get(userId);
+  if (!session) {
+    const dbSession = await getActiveSession(supabase, userId);
+    if (!dbSession) return; // Might be a group quiz poll, ignore
 
-  // Ensure poll matches current active question
-  if (session.currentPollId !== pollAnswer.poll_id) return;
+    const questions = await getQuestionsForQuiz(supabase, dbSession.quiz_id);
+    if (!questions || questions.length === 0) return;
+
+    session = {
+      quizId: dbSession.quiz_id,
+      userId,
+      chatId: userId,
+      questions,
+      currentIndex: dbSession.current_index,
+      answers: dbSession.answers || [],
+      startedAt: dbSession.started_at,
+    };
+    soloPollSessions.set(userId, session);
+  }
 
   // Clear timeout timer
   if (session.questionTimer) {
@@ -324,6 +338,9 @@ export async function handleSoloPollAnswer(
 
   // Advance index
   session.currentIndex++;
+
+  // Persist session to Supabase active_sessions
+  await updateActiveSession(supabase, userId, session.currentIndex, session.answers);
 
   // Wait 2.5 seconds so user can see their confetti / red highlight & read bulb explanation
   await sleep(2500);

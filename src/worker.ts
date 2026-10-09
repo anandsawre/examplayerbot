@@ -7,8 +7,8 @@ export default {
     try {
       const url = new URL(request.url);
 
-      // Simple health check endpoint
-      if (url.pathname === '/' || url.pathname === '/health') {
+      // Simple health check endpoint on GET
+      if (request.method === 'GET') {
         return new Response(JSON.stringify({ status: 'ok', name: 'Examplayer Bot Serverless' }), {
           headers: { 'Content-Type': 'application/json' },
         });
