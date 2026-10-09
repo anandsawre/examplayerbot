@@ -117,57 +117,106 @@ export async function handleGroupApprovalCallback(
   }
 }
 
-// /auth command (run inside a group by bot admin)
+// /auth command (run inside a group OR in private chat with group ID)
 export async function handleAuthCommand(
   ctx: Context,
   supabase: SupabaseClient,
   env: Env
 ) {
-  const chat = ctx.chat;
-  if (!chat || (chat.type !== 'group' && chat.type !== 'supergroup')) {
-    await ctx.reply('⚠️ Yeh command kisi group ke andar run kijiye.');
-    return;
-  }
-
-  // Security check: Strict bot admin only
   if (!isAdmin(ctx, env)) {
     await ctx.reply('⚠️ Access Denied! Sirf Bot Admin hi kisi group ko authorize kar sakta hai.');
     return;
   }
 
-  await authorizeGroup(supabase, chat.id, chat.title || 'Group', ctx.from?.id);
+  const chat = ctx.chat;
+  const text = ctx.message?.text || '';
+  const parts = text.split(' ').filter(Boolean);
+
+  let targetGroupId: number | null = null;
+  let targetGroupTitle = 'Group';
+
+  if (chat && (chat.type === 'group' || chat.type === 'supergroup')) {
+    targetGroupId = chat.id;
+    targetGroupTitle = chat.title || 'Group';
+  } else if (parts.length >= 2) {
+    targetGroupId = parseInt(parts[1], 10);
+    if (isNaN(targetGroupId)) {
+      await ctx.reply('⚠️ Invalid Group ID! Format: `/auth <group_id> [Optional Group Title]`', { parse_mode: 'Markdown' });
+      return;
+    }
+    if (parts.length >= 3) {
+      targetGroupTitle = parts.slice(2).join(' ');
+    }
+  } else {
+    await ctx.reply(
+      `ℹ️ *Group Authorize Karne Ke 2 Tarike:*\n━━━━━━━━━━━━━━━━━━━━━\n` +
+      `1. Group ke andar jakar seedha type karein: \`/auth\`\n` +
+      `2. Ya yahan private chat me type karein: \`/auth <group_id> [Group Title]\`\n\n` +
+      `Example:\n\`/auth -100123456789 Railway Batch\``,
+      { parse_mode: 'Markdown' }
+    );
+    return;
+  }
+
+  await authorizeGroup(supabase, targetGroupId, targetGroupTitle, ctx.from?.id);
 
   await ctx.reply(
     `✅ *GROUP AUTHORIZED!*\n━━━━━━━━━━━━━━━━━━━━━\n` +
-    `👥 Group: *${chat.title}*\n` +
-    `🆔 ID: \`${chat.id}\`\n\n` +
-    `Ab is group me live quizzes chalenge! Type \`/groupquiz\` to start. 🚀`,
+    `👥 Group: *${targetGroupTitle}*\n` +
+    `🆔 ID: \`${targetGroupId}\`\n\n` +
+    `Ab is group me live quizzes chalenge! Admin wahan \`/groupquiz\` run kar sakte hain. 🚀`,
     { parse_mode: 'Markdown' }
   );
+
+  // If authorized from private chat, try sending a notification to that group
+  if (chat?.type === 'private') {
+    try {
+      await ctx.api.sendMessage(
+        targetGroupId,
+        `🎉 *CONGRATULATIONS!*\n━━━━━━━━━━━━━━━━━━━━━\n` +
+        `Is group ko *Examplayer Bot* use karne ki permission de di gayi hai!\n` +
+        `Admin ab \`/groupquiz\` run karke live battle test shuru kar sakte hain. 🎯`,
+        { parse_mode: 'Markdown' }
+      );
+    } catch {}
+  }
 }
 
-// /unauth command (run inside a group by bot admin)
+// /unauth command (run inside a group OR in private chat with group ID)
 export async function handleUnauthCommand(
   ctx: Context,
   supabase: SupabaseClient,
   env: Env
 ) {
-  const chat = ctx.chat;
-  if (!chat || (chat.type !== 'group' && chat.type !== 'supergroup')) {
-    await ctx.reply('⚠️ Yeh command kisi group ke andar run kijiye.');
-    return;
-  }
-
   if (!isAdmin(ctx, env)) {
     await ctx.reply('⚠️ Access Denied!');
     return;
   }
 
-  await revokeGroup(supabase, chat.id);
+  const chat = ctx.chat;
+  const text = ctx.message?.text || '';
+  const parts = text.split(' ').filter(Boolean);
+
+  let targetGroupId: number | null = null;
+
+  if (chat && (chat.type === 'group' || chat.type === 'supergroup')) {
+    targetGroupId = chat.id;
+  } else if (parts.length >= 2) {
+    targetGroupId = parseInt(parts[1], 10);
+    if (isNaN(targetGroupId)) {
+      await ctx.reply('⚠️ Invalid Group ID! Format: `/unauth <group_id>`', { parse_mode: 'Markdown' });
+      return;
+    }
+  } else {
+    await ctx.reply('⚠️ Format: `/unauth` (group ke andar) ya `/unauth <group_id>` (yahan chat me)');
+    return;
+  }
+
+  await revokeGroup(supabase, targetGroupId);
 
   await ctx.reply(
     `🚫 *GROUP PERMISSION REVOKED!*\n━━━━━━━━━━━━━━━━━━━━━\n` +
-    `Is group ki permission hata di gayi hai. Ab yahan quizzes nahi chalenge.`,
+    `Group \`${targetGroupId}\` ki permission hata di gayi hai.`,
     { parse_mode: 'Markdown' }
   );
 }
