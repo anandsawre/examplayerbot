@@ -69,7 +69,7 @@ async function main() {
       res.end('Not Found');
     });
 
-    server.listen(port, () => {
+    server.listen(port, '0.0.0.0', () => {
       console.log(`🎯 HTTP Webhook server running on port ${port}`);
     });
 
@@ -102,7 +102,7 @@ async function main() {
       );
     });
 
-    server.listen(port, () => {
+    server.listen(port, '0.0.0.0', () => {
       console.log(`🎯 HTTP Health-check server running on port ${port}`);
     });
 

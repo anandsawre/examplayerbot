@@ -282,7 +282,11 @@ export function createBot(env: Env): Bot {
     // Launch group quiz: "launch_grp:<quiz_id>"
     if (data.startsWith('launch_grp:')) {
       const quizId = data.replace('launch_grp:', '');
-      return handleLaunchGroupQuiz(ctx, supabase, quizId);
+      ctx.answerCallbackQuery().catch(() => {});
+      handleLaunchGroupQuiz(ctx, supabase, quizId).catch((err) => {
+        console.error('Error in background group quiz execution:', err);
+      });
+      return;
     }
 
     // Group Authorization callbacks

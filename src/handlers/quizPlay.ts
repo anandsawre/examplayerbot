@@ -326,27 +326,31 @@ export async function sendNextPollQuestion(
 
     // Timeout countdown timer: If user doesn't answer within timeLimit seconds
     session.questionTimer = setTimeout(async () => {
-      const curSession = soloPollSessions.get(userId);
-      if (!curSession || curSession.currentIndex !== session.currentIndex) return;
+      try {
+        const curSession = soloPollSessions.get(userId) || (await getOrRestoreSession(supabase, userId));
+        if (!curSession || curSession.currentIndex !== session.currentIndex) return;
 
-      // Mark as timed out / skipped (0 marks)
-      curSession.answers.push({
-        question_id: q.id,
-        selected_option_index: -1,
-        is_correct: false,
-      });
+        // Mark as timed out / skipped (0 marks)
+        curSession.answers.push({
+          question_id: q.id,
+          selected_option_index: -1,
+          is_correct: false,
+        });
 
-      await api.sendMessage(
-        curSession.chatId,
-        `⏰ *Time Out! (Question ${qNum})*\n_Samay samapt! Agla question aa raha hai..._`,
-        { parse_mode: 'Markdown' }
-      );
+        await api.sendMessage(
+          curSession.chatId,
+          `⏰ *Time Out! (Question ${qNum})*\n_Samay samapt! Agla question aa raha hai..._`,
+          { parse_mode: 'Markdown' }
+        );
 
-      curSession.currentIndex++;
-      await updateActiveSession(supabase, userId, curSession.currentIndex, curSession.answers);
-      await sleep(1500);
-      await sendNextPollQuestion(api, supabase, env, userId);
-    }, (timeLimit + 2) * 1000);
+        curSession.currentIndex++;
+        await updateActiveSession(supabase, userId, curSession.currentIndex, curSession.answers);
+        await sleep(1000);
+        await sendNextPollQuestion(api, supabase, env, userId);
+      } catch (timerErr) {
+        console.error(`Error in questionTimer for user ${userId}:`, timerErr);
+      }
+    }, (timeLimit + 1) * 1000);
 
   } catch (err: any) {
     console.error(`Error sending poll for Q${qNum}:`, err);
