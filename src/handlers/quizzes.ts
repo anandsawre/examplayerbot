@@ -105,8 +105,8 @@ export async function handleViewQuiz(
     .text('🏆 Leaderboard', `lb:${quiz.id}`)
     .row();
 
-  // Admin Controls (Toggle Premium, Edit Quiz, Delete Quiz)
-  if (isAdmin(ctx, env)) {
+  // Admin Controls (Toggle Premium, Edit Quiz, Delete Quiz) - ONLY in Private Chat
+  if (!isGroup && isAdmin(ctx, env)) {
     const toggleLabel = quiz.is_premium ? '🔓 Make Free' : '🔒 Make Premium';
     keyboard
       .text(toggleLabel, `toggle_prem:${quiz.id}`)
@@ -116,7 +116,11 @@ export async function handleViewQuiz(
       .row();
   }
 
-  keyboard.text('🔙 All Tests', 'menu_quizzes');
+  if (!isGroup) {
+    keyboard.text('🔙 All Tests', 'menu_quizzes');
+  } else {
+    keyboard.url('📚 Browse All Tests in Bot DM', `https://t.me/${botUsername}?start=quizzes`);
+  }
 
   if (ctx.callbackQuery) {
     await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup: keyboard });

@@ -512,7 +512,13 @@ export async function handlePollClosed(
     const user = await getUser(supabase, meta.userId);
     const studentName = user?.first_name || 'Student';
 
-    const { text, keyboard } = renderScorecardMessage(quiz, studentName, result);
+    let botUsername = 'Examplayer_bot';
+    try {
+      const me = await ctx.api.getMe();
+      botUsername = me.username;
+    } catch {}
+
+    const { text, keyboard } = renderScorecardMessage(quiz, studentName, result, botUsername);
 
     await ctx.api.sendMessage(meta.userId, text, {
       parse_mode: 'Markdown',
@@ -558,8 +564,14 @@ async function finishSoloPollQuiz(
   const user = await getUser(supabase, session.userId);
   const studentName = user?.first_name || 'Student';
 
+  let botUsername = 'Examplayer_bot';
+  try {
+    const me = await api.getMe();
+    botUsername = me.username;
+  } catch {}
+
   // Render official scorecard
-  const { text, keyboard } = renderScorecardMessage(quiz, studentName, result);
+  const { text, keyboard } = renderScorecardMessage(quiz, studentName, result, botUsername);
 
   await api.sendMessage(session.chatId, text, {
     parse_mode: 'Markdown',
@@ -571,6 +583,10 @@ async function finishSoloPollQuiz(
  * Cancels active quiz if user types /quit
  */
 export async function handleQuitQuiz(ctx: Context, supabase: SupabaseClient) {
+  if (ctx.chat && ctx.chat.type !== 'private') {
+    return ctx.reply('⚠️ Solo test cancel karne ke liye bot ke personal chat me /quit type karein. Group quiz ko sirf Group Admin /stopquiz se rok sakte hain.');
+  }
+
   const userId = ctx.from?.id;
   if (!userId) return;
 

@@ -1,6 +1,7 @@
 import { Context, InlineKeyboard } from 'grammy';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { getActiveQuizzes, getQuizById, getQuestionsForQuiz, isGroupAuthorized } from '../db/queries';
+import { isGroupAdmin } from '../utils/admin';
 
 export async function handleGroupQuizCommand(ctx: Context, supabase: SupabaseClient) {
   if (!ctx.chat) return;
@@ -32,18 +33,17 @@ export async function handleGroupQuizCommand(ctx: Context, supabase: SupabaseCli
     return;
   }
 
-  // Verify that the person who typed /groupquiz is an Admin in the group
-  if (ctx.from) {
-    try {
-      const member = await ctx.getChatMember(ctx.from.id);
-      const isAdmin = member.status === 'administrator' || member.status === 'creator';
-      if (!isAdmin) {
-        await ctx.reply('⚠️ Sirf Group Admins hi group quiz launch kar sakte hain.');
-        return;
-      }
-    } catch {
-      // Continue if permissions check fails
-    }
+  // Verify that the caller is an Admin in the group
+  const userIsAdmin = await isGroupAdmin(ctx);
+  if (!userIsAdmin) {
+    await ctx.reply('⚠️ Sirf Group Admins hi group quiz launch kar sakte hain.');
+    return;
+  }
+
+  // Check if a quiz is already in progress
+  if (activeGroupBattles.has(ctx.chat.id)) {
+    await ctx.reply('⚠️ Is group me pehle se ek quiz chal raha hai! Pehle use pura hone dein ya /stopquiz karein.');
+    return;
   }
 
   const quizzes = await getActiveQuizzes(supabase);
@@ -76,6 +76,7 @@ export interface GroupQuizBattle {
   currentPollId?: string;
   currentCorrectIndex: number;
   participants: Map<number, GroupParticipant>;
+  isCancelled?: boolean;
 }
 
 export const activeGroupBattles = new Map<number, GroupQuizBattle>(); // chatId -> battle
@@ -123,36 +124,52 @@ export async function handleLaunchGroupQuiz(
   const chatId = ctx.chat?.id;
   if (!chatId) return;
 
-  // Check if button clicker is admin
-  if (ctx.from) {
-    try {
-      const member = await ctx.getChatMember(ctx.from.id);
-      const isAdmin = member.status === 'administrator' || member.status === 'creator';
-      if (!isAdmin) {
-        await ctx.answerCallbackQuery({
-          text: '⚠️ Sirf Group Admin test launch kar sakta hai.',
-          show_alert: true,
-        });
-        return;
-      }
-    } catch {
-      // Proceed
+  // Check if caller is admin
+  const userIsAdmin = await isGroupAdmin(ctx);
+  if (!userIsAdmin) {
+    if (ctx.callbackQuery) {
+      await ctx.answerCallbackQuery({
+        text: '⚠️ Sirf Group Admin test launch kar sakta hai!',
+        show_alert: true,
+      });
+    } else {
+      await ctx.reply('⚠️ Sirf Group Admin test launch kar sakta hai.');
     }
+    return;
+  }
+
+  // Prevent duplicate concurrent quizzes in the same group
+  if (activeGroupBattles.has(chatId)) {
+    if (ctx.callbackQuery) {
+      await ctx.answerCallbackQuery({
+        text: '⚠️ Is group me pehle se ek quiz chal raha hai! Pehle use pura hone dein ya /stopquiz karein.',
+        show_alert: true,
+      });
+    } else {
+      await ctx.reply('⚠️ Is group me pehle se ek quiz chal raha hai! Pehle use pura hone dein ya /stopquiz karein.');
+    }
+    return;
   }
 
   const quiz = await getQuizById(supabase, quizId);
   if (!quiz) {
-    await ctx.answerCallbackQuery({ text: 'Quiz nahi mila!', show_alert: true });
+    if (ctx.callbackQuery) {
+      await ctx.answerCallbackQuery({ text: 'Quiz nahi mila!', show_alert: true });
+    }
     return;
   }
 
   const questions = await getQuestionsForQuiz(supabase, quizId);
   if (!questions || questions.length === 0) {
-    await ctx.answerCallbackQuery({ text: 'Is quiz me questions nahi hain!', show_alert: true });
+    if (ctx.callbackQuery) {
+      await ctx.answerCallbackQuery({ text: 'Is quiz me questions nahi hain!', show_alert: true });
+    }
     return;
   }
 
-  await ctx.answerCallbackQuery({ text: 'Starting group quiz!' });
+  if (ctx.callbackQuery) {
+    await ctx.answerCallbackQuery({ text: 'Starting group quiz!' });
+  }
 
   const timeLimit = Math.min(600, Math.max(10, Number(quiz.time_limit_seconds) || 30));
 
@@ -162,24 +179,38 @@ export async function handleLaunchGroupQuiz(
     quizId,
     currentCorrectIndex: 0,
     participants: new Map(),
+    isCancelled: false,
   };
   activeGroupBattles.set(chatId, battle);
 
   // 1. Send 5-second countdown warning
-  await ctx.editMessageText(
+  const introMsg =
     `🔔 *GROUP QUIZ STARTING IN 5 SECONDS!*\n` +
     `━━━━━━━━━━━━━━━━━━━━━\n` +
     `📝 *Test:* ${quiz.title}\n` +
     `❓ *Total Questions:* \`${questions.length}\`\n` +
     `⏱️ *Time per Question:* \`${timeLimit}s\` (Sabhi ke liye pura timer chalega!)\n\n` +
-    `⚡ Sabhi members screen par ready rahein! Confetti & Polls aane wale hain...`,
-    { parse_mode: 'Markdown' }
-  );
+    `⚡ Sabhi members screen par ready rahein! Confetti & Polls aane wale hain...`;
+
+  if (ctx.callbackQuery) {
+    try {
+      await ctx.editMessageText(introMsg, { parse_mode: 'Markdown' });
+    } catch {
+      await ctx.reply(introMsg, { parse_mode: 'Markdown' });
+    }
+  } else {
+    await ctx.reply(introMsg, { parse_mode: 'Markdown' });
+  }
 
   await sleep(5000);
 
   // 2. Loop through questions and send as Telegram Native Quiz Polls
   for (let i = 0; i < questions.length; i++) {
+    // Check if admin stopped the quiz
+    if (battle.isCancelled) {
+      break;
+    }
+
     const q = questions[i];
     const options = Array.isArray(q.options) ? q.options : [];
 
@@ -224,6 +255,16 @@ export async function handleLaunchGroupQuiz(
     if (battle.currentPollId) {
       groupPollToChatMap.delete(battle.currentPollId);
     }
+
+    if (battle.isCancelled) {
+      break;
+    }
+  }
+
+  // If quiz was stopped mid-way by an admin
+  if (battle.isCancelled) {
+    activeGroupBattles.delete(chatId);
+    return;
   }
 
   // 3. Quiz Completion Announcement with Group Battle Leaderboard Podium!
@@ -254,6 +295,36 @@ export async function handleLaunchGroupQuiz(
     `🎉 *${quiz.title}* khatam ho chuka hai!${leaderboardText}\n\n` +
     `Sabhi participants ko badhai! Apna detailed scorecard dekhne ke liye neeche button par tap karein:`,
     { parse_mode: 'Markdown', reply_markup: finishKeyboard }
+  );
+}
+
+/**
+ * Stops an ongoing group quiz (Group Admin only)
+ */
+export async function handleStopGroupQuiz(ctx: Context, supabase: SupabaseClient) {
+  if (!ctx.chat || ctx.chat.type === 'private') {
+    return ctx.reply('⚠️ Yeh command Telegram groups ke liye hai.');
+  }
+
+  const chatId = ctx.chat.id;
+  const battle = activeGroupBattles.get(chatId);
+  if (!battle) {
+    return ctx.reply('ℹ️ Is group me abhi koi quiz nahi chal raha hai.');
+  }
+
+  const userIsAdmin = await isGroupAdmin(ctx);
+  if (!userIsAdmin) {
+    return ctx.reply('⚠️ Sirf Group Admins hi chal rahe quiz ko rok sakte hain.');
+  }
+
+  battle.isCancelled = true;
+  activeGroupBattles.delete(chatId);
+
+  const adminName = ctx.from?.first_name || 'Admin';
+  await ctx.reply(
+    `🛑 *GROUP QUIZ STOPPED!*\n━━━━━━━━━━━━━━━━━━━━━\n` +
+    `Group Admin *${escapeMarkdown(adminName)}* dwara test ko rok diya gaya hai.`,
+    { parse_mode: 'Markdown' }
   );
 }
 

@@ -16,3 +16,29 @@ export function isAdmin(ctx: Context, env: Env): boolean {
   const allowedAdmins = env.ADMIN_USER_ID.split(',').map((id) => id.trim());
   return allowedAdmins.includes(String(userId));
 }
+
+/**
+ * Checks if user is an administrator in the current chat.
+ * Returns true if private chat, or if user is bot super admin, or if user has admin/creator status in group.
+ */
+export async function isGroupAdmin(ctx: Context, env?: Env): Promise<boolean> {
+  if (!ctx.chat || ctx.chat.type === 'private') return true;
+  const userId = ctx.from?.id;
+  if (!userId) return false;
+
+  // Bot Super Admin check
+  if (env && isAdmin(ctx, env)) return true;
+  const adminId = process.env.ADMIN_USER_ID;
+  if (adminId && adminId.split(',').map((s) => s.trim()).includes(String(userId))) {
+    return true;
+  }
+
+  try {
+    const member = await ctx.api.getChatMember(ctx.chat.id, userId);
+    return member.status === 'administrator' || member.status === 'creator';
+  } catch (err) {
+    console.error('Failed to get chat member status:', err);
+    return false;
+  }
+}
+

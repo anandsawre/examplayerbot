@@ -48,7 +48,8 @@ export function renderQuestionMessage(
 export function renderScorecardMessage(
   quiz: Quiz,
   userName: string,
-  result: ScoreResult
+  result: ScoreResult,
+  botUsername: string = 'Examplayer_bot'
 ): { text: string; keyboard: InlineKeyboard } {
   const timeFormatted = formatTime(result.timeTakenSeconds);
 
@@ -70,11 +71,11 @@ export function renderScorecardMessage(
   text += `🎖️ *Verdict:* ${result.remark}\n`;
 
   const keyboard = new InlineKeyboard()
-    .text('🏆 Test Leaderboard', `lb:${quiz.id}`)
-    .text('🔄 Retake Test', `start_quiz:${quiz.id}`)
+    .url('🔄 Retake Solo Test', `https://t.me/${botUsername}?start=quiz_${quiz.id}`)
+    .text('🏆 Leaderboard', `lb:${quiz.id}`)
     .row()
-    .text('📋 All Quizzes', 'menu_quizzes')
-    .text('👤 My Profile', 'menu_profile');
+    .url('📋 All Quizzes', `https://t.me/${botUsername}?start=quizzes`)
+    .url('👤 My Profile', `https://t.me/${botUsername}?start=profile`);
 
   return { text, keyboard };
 }

@@ -2,7 +2,7 @@ import { Context, InlineKeyboard } from 'grammy';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { Env } from '../config';
 import { upsertUser } from '../db/queries';
-import { handleViewQuiz } from './quizzes';
+import { handleViewQuiz, handleQuizzesList } from './quizzes';
 import { handleProfile } from './profile';
 
 export async function handleStart(ctx: Context, supabase: SupabaseClient, env?: Env) {
@@ -17,7 +17,7 @@ export async function handleStart(ctx: Context, supabase: SupabaseClient, env?: 
     username: from.username,
   });
 
-  // Check Deep Linking payload (e.g. /start quiz_<quiz_id> or /start profile)
+  // Check Deep Linking payload (e.g. /start quiz_<quiz_id> or /start profile or /start quizzes)
   const payload = ctx.match as string | undefined;
   if (payload) {
     if (payload.startsWith('quiz_')) {
@@ -26,6 +26,9 @@ export async function handleStart(ctx: Context, supabase: SupabaseClient, env?: 
     }
     if (payload === 'profile') {
       return handleProfile(ctx, supabase);
+    }
+    if (payload === 'quizzes') {
+      return handleQuizzesList(ctx, supabase);
     }
   }
 

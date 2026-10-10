@@ -23,7 +23,12 @@ import { handleStartQuiz, handleAnswerCallback, handleQuitQuiz, handleSoloPollAn
 import { handleGlobalLeaderboard, handleQuizLeaderboard } from './handlers/leaderboard';
 import { handleProfile } from './handlers/profile';
 import { handleDocumentImport, handleImportHelp, handleTextImport } from './handlers/adminImport';
-import { handleGroupQuizCommand, handleLaunchGroupQuiz, handleGroupPollAnswer } from './handlers/groupQuiz';
+import {
+  handleGroupQuizCommand,
+  handleLaunchGroupQuiz,
+  handleGroupPollAnswer,
+  handleStopGroupQuiz,
+} from './handlers/groupQuiz';
 import {
   handleAuthCommand,
   handleUnauthCommand,
@@ -85,8 +90,13 @@ export function createBot(env: Env): Bot {
   // Group Authorization Commands
   bot.command('auth', (ctx) => handleAuthCommand(ctx, supabase, env));
   bot.command('unauth', (ctx) => handleUnauthCommand(ctx, supabase, env));
-  bot.command('groups', (ctx) => handleListGroupsCommand(ctx, supabase, env));
-  bot.command('quit', (ctx) => handleQuitQuiz(ctx, supabase));
+  bot.command('stopquiz', (ctx) => handleStopGroupQuiz(ctx, supabase));
+  bot.command('quit', async (ctx) => {
+    if (ctx.chat?.type !== 'private') {
+      return handleStopGroupQuiz(ctx, supabase);
+    }
+    return handleQuitQuiz(ctx, supabase);
+  });
   bot.command('delquiz', (ctx) => handleDeleteQuizCommand(ctx, supabase, env));
   bot.command('edittitle', (ctx) => handleEditTitleCommand(ctx, supabase, env));
   bot.command('editcat', (ctx) => handleEditCategoryCommand(ctx, supabase, env));
@@ -116,11 +126,27 @@ export function createBot(env: Env): Bot {
   bot.on('message:text', (ctx) => handleTextImport(ctx, supabase, env));
 
   // ================= STATIC CALLBACK QUERIES =================
-  bot.callbackQuery('menu_start', (ctx) => handleStart(ctx, supabase, env));
+  bot.callbackQuery('menu_start', async (ctx) => {
+    if (ctx.chat?.type !== 'private') {
+      return ctx.answerCallbackQuery({
+        text: 'Main menu sirf bot ke private chat me available hai.',
+        show_alert: true,
+      });
+    }
+    return handleStart(ctx, supabase, env);
+  });
   bot.callbackQuery('menu_help', (ctx) => handleHelp(ctx));
   bot.callbackQuery('menu_quizzes', (ctx) => handleQuizzesList(ctx, supabase));
   bot.callbackQuery('menu_global_lb', (ctx) => handleGlobalLeaderboard(ctx, supabase));
-  bot.callbackQuery('menu_profile', (ctx) => handleProfile(ctx, supabase));
+  bot.callbackQuery('menu_profile', async (ctx) => {
+    if (ctx.chat?.type !== 'private') {
+      return ctx.answerCallbackQuery({
+        text: 'Apna personal profile dekhne ke liye bot ke private chat me jayein!',
+        show_alert: true,
+      });
+    }
+    return handleProfile(ctx, supabase);
+  });
 
   // Payment UI callbacks
   bot.callbackQuery('pay_send_ss', async (ctx) => {
@@ -214,6 +240,14 @@ export function createBot(env: Env): Bot {
 
     // Start quiz: "start_quiz:<quiz_id>"
     if (data.startsWith('start_quiz:')) {
+      if (ctx.chat?.type !== 'private') {
+        const qId = data.replace('start_quiz:', '');
+        const botUsername = ctx.me.username;
+        return ctx.answerCallbackQuery({
+          text: 'Solo test bot ke private chat me kheliye!',
+          show_alert: true,
+        });
+      }
       const quizId = data.replace('start_quiz:', '');
       return handleStartQuiz(ctx, supabase, env, quizId);
     }
