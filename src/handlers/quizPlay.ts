@@ -18,6 +18,7 @@ import { AnswerRecord, Question, Quiz } from '../types';
 import { checkChannelMembership, sendJoinChannelPrompt } from './membership';
 import { showPaymentPrompt } from './payment';
 import { isAdmin } from '../utils/admin';
+import { groupPollToChatMap } from './groupQuiz';
 
 export interface SoloPollSession {
   quizId: string;
@@ -68,6 +69,28 @@ export async function handleStartQuiz(
   const userId = ctx.from?.id;
   const chatId = ctx.chat?.id;
   if (!userId || !chatId) return;
+
+  // Solo test must only run in Private DM chat!
+  if (ctx.chat?.type !== 'private') {
+    const botUsername = ctx.me.username;
+    const soloUrl = `https://t.me/${botUsername}?start=quiz_${quizId}`;
+    const keyboard = new InlineKeyboard()
+      .text('👥 Launch Group Battle Here', `launch_grp:${quizId}`)
+      .row()
+      .url('🎯 Play Solo Test in Bot DM', soloUrl);
+
+    if (ctx.callbackQuery) {
+      await ctx.answerCallbackQuery();
+    }
+    await ctx.reply(
+      `⚠️ *Solo Mock Test Private Chat ke liye hai!*\n━━━━━━━━━━━━━━━━━━━━━\n` +
+      `Group me agar personal test chalega toh ek student ke answer dete hi sabhi ka timer cancel ho jayega.\n\n` +
+      `• *Pure group ke saath khelne ke liye:* "👥 Launch Group Battle Here" dabayein (is-me sabhi ke liye pura timer chalega).\n` +
+      `• *Apna individual test dene ke liye:* "🎯 Play Solo Test in Bot DM" dabayein.`,
+      { parse_mode: 'Markdown', reply_markup: keyboard }
+    );
+    return;
+  }
 
   // 1. Force Channel Subscription Check
   const { isMember, channelUrl } = await checkChannelMembership(ctx, supabase, env);
@@ -344,9 +367,24 @@ export async function handleSoloPollAnswer(
   const pollAnswer = ctx.pollAnswer;
   if (!pollAnswer || !pollAnswer.user) return;
 
+  // If this poll belongs to an active group battle, ignore it here!
+  if (groupPollToChatMap.has(pollAnswer.poll_id)) {
+    return;
+  }
+
   const userId = pollAnswer.user.id;
   const session = await getOrRestoreSession(supabase, userId);
   if (!session) return; // Might be a group quiz poll, ignore
+
+  // Ensure this session belongs to a private chat (DM)
+  if (session.chatId !== userId) {
+    return;
+  }
+
+  // Ensure this poll answer matches the user's currently active solo poll
+  if (session.currentPollId && session.currentPollId !== pollAnswer.poll_id) {
+    return;
+  }
 
   // Clear timeout timer
   if (session.questionTimer) {

@@ -85,9 +85,22 @@ export async function handleViewQuiz(
   const botUsername = ctx.me.username;
   const shareUrl = `https://t.me/share/url?url=https://t.me/${botUsername}?start=quiz_${quiz.id}&text=Join%20${encodeURIComponent(quiz.title)}%20Mock%20Test%20on%20Examplayer%20Bot!`;
 
-  const keyboard = new InlineKeyboard()
-    .text('🚀 Start Test Now', `start_quiz:${quiz.id}`)
-    .row()
+  const isGroup = ctx.chat?.type === 'group' || ctx.chat?.type === 'supergroup';
+  const keyboard = new InlineKeyboard();
+
+  if (isGroup) {
+    keyboard
+      .text('👥 Launch Group Battle Here', `launch_grp:${quiz.id}`)
+      .row()
+      .url('🎯 Play Solo in Bot DM', `https://t.me/${botUsername}?start=quiz_${quiz.id}`)
+      .row();
+  } else {
+    keyboard
+      .text('🚀 Start Test Now', `start_quiz:${quiz.id}`)
+      .row();
+  }
+
+  keyboard
     .url('📢 Share to Channel / Group', shareUrl)
     .text('🏆 Leaderboard', `lb:${quiz.id}`)
     .row();

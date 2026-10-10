@@ -64,6 +64,57 @@ export async function handleGroupQuizCommand(ctx: Context, supabase: SupabaseCli
   await ctx.reply(text, { parse_mode: 'Markdown', reply_markup: keyboard });
 }
 
+export interface GroupParticipant {
+  userId: number;
+  name: string;
+  correctCount: number;
+}
+
+export interface GroupQuizBattle {
+  chatId: number;
+  quizId: string;
+  currentPollId?: string;
+  currentCorrectIndex: number;
+  participants: Map<number, GroupParticipant>;
+}
+
+export const activeGroupBattles = new Map<number, GroupQuizBattle>(); // chatId -> battle
+export const groupPollToChatMap = new Map<string, number>(); // pollId -> chatId
+
+function escapeMarkdown(text: string): string {
+  if (!text) return '';
+  return text
+    .replace(/_/g, '\\_')
+    .replace(/\*/g, '\\*')
+    .replace(/\[/g, '\\[')
+    .replace(/\]/g, '\\]')
+    .replace(/`/g, '\\`');
+}
+
+export function handleGroupPollAnswer(pollAnswer: any) {
+  if (!pollAnswer || !pollAnswer.poll_id || !pollAnswer.user) return;
+  const chatId = groupPollToChatMap.get(pollAnswer.poll_id);
+  if (!chatId) return;
+
+  const battle = activeGroupBattles.get(chatId);
+  if (!battle || battle.currentPollId !== pollAnswer.poll_id) return;
+
+  const userId = pollAnswer.user.id;
+  const name = pollAnswer.user.first_name || 'Participant';
+  const selectedOption = Array.isArray(pollAnswer.option_ids) ? pollAnswer.option_ids[0] : -1;
+  const isCorrect = selectedOption === battle.currentCorrectIndex;
+
+  let participant = battle.participants.get(userId);
+  if (!participant) {
+    participant = { userId, name, correctCount: 0 };
+    battle.participants.set(userId, participant);
+  }
+
+  if (isCorrect) {
+    participant.correctCount++;
+  }
+}
+
 export async function handleLaunchGroupQuiz(
   ctx: Context,
   supabase: SupabaseClient,
@@ -103,13 +154,24 @@ export async function handleLaunchGroupQuiz(
 
   await ctx.answerCallbackQuery({ text: 'Starting group quiz!' });
 
+  const timeLimit = Math.min(600, Math.max(10, Number(quiz.time_limit_seconds) || 30));
+
+  // Initialize group battle state
+  const battle: GroupQuizBattle = {
+    chatId,
+    quizId,
+    currentCorrectIndex: 0,
+    participants: new Map(),
+  };
+  activeGroupBattles.set(chatId, battle);
+
   // 1. Send 5-second countdown warning
   await ctx.editMessageText(
     `🔔 *GROUP QUIZ STARTING IN 5 SECONDS!*\n` +
     `━━━━━━━━━━━━━━━━━━━━━\n` +
     `📝 *Test:* ${quiz.title}\n` +
     `❓ *Total Questions:* \`${questions.length}\`\n` +
-    `⏱️ *Time per Question:* \`${quiz.time_limit_seconds}s\`\n\n` +
+    `⏱️ *Time per Question:* \`${timeLimit}s\` (Sabhi ke liye pura timer chalega!)\n\n` +
     `⚡ Sabhi members screen par ready rahein! Confetti & Polls aane wale hain...`,
     { parse_mode: 'Markdown' }
   );
@@ -137,33 +199,60 @@ export async function handleLaunchGroupQuiz(
     const cleanOptions = options.map((opt) => String(opt).slice(0, 100));
 
     try {
-      await ctx.api.sendPoll(chatId, pollQuestion, cleanOptions, {
+      battle.currentCorrectIndex = q.correct_option_index;
+
+      const pollMessage = await ctx.api.sendPoll(chatId, pollQuestion, cleanOptions, {
         type: 'quiz',
         correct_option_id: q.correct_option_index,
         is_anonymous: false, // Let students see who got it right
-        open_period: Math.min(600, Math.max(10, quiz.time_limit_seconds)),
+        open_period: timeLimit,
         question_parse_mode: 'HTML',
         explanation: q.explanation ? q.explanation.slice(0, 200) : undefined,
       } as any);
+
+      battle.currentPollId = pollMessage.poll.id;
+      groupPollToChatMap.set(pollMessage.poll.id, chatId);
     } catch (err: any) {
       console.error(`Error sending poll for question ${i + 1}:`, err);
     }
 
     // Wait for the poll countdown timer to finish before sending the next question
-    await sleep((quiz.time_limit_seconds + 3) * 1000);
+    // Group members have the full timeLimit seconds to answer!
+    await sleep((timeLimit + 3) * 1000);
+
+    // Clean up mapping for this poll
+    if (battle.currentPollId) {
+      groupPollToChatMap.delete(battle.currentPollId);
+    }
   }
 
-  // 3. Quiz Completion Announcement
+  // 3. Quiz Completion Announcement with Group Battle Leaderboard Podium!
+  const finalBattle = activeGroupBattles.get(chatId);
+  activeGroupBattles.delete(chatId);
+
+  let leaderboardText = '';
+  if (finalBattle && finalBattle.participants.size > 0) {
+    const ranked = Array.from(finalBattle.participants.values())
+      .sort((a, b) => b.correctCount - a.correctCount)
+      .slice(0, 10);
+
+    const medals = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
+    leaderboardText = `\n\n🏆 *GROUP LIVE BATTLE TOPPERS:*\n━━━━━━━━━━━━━━━━━━━━━\n`;
+    ranked.forEach((p, idx) => {
+      leaderboardText += `${medals[idx] || '🎖️'} *${escapeMarkdown(p.name)}* — \`${p.correctCount}/${questions.length}\` Sahi\n`;
+    });
+  }
+
   const botUsername = ctx.me.username;
   const finishKeyboard = new InlineKeyboard()
     .url('👤 Check My Profile & Score', `https://t.me/${botUsername}?start=profile`)
-    .url('📚 Take Solo Test', `https://t.me/${botUsername}?start=quiz_${quiz.id}`);
+    .url('📚 Take Solo Test in DM', `https://t.me/${botUsername}?start=quiz_${quiz.id}`);
 
   await ctx.reply(
     `🏁 *GROUP QUIZ COMPLETE!*\n` +
     `━━━━━━━━━━━━━━━━━━━━━\n` +
-    `🎉 *${quiz.title}* khatam ho chuka hai!\n\n` +
-    `Sabhi participants ko badhai! Aap apna personal score aur accuracy check karne ke liye neeche button par tap karein:`,
+    `🎉 *${quiz.title}* khatam ho chuka hai!${leaderboardText}\n\n` +
+    `Sabhi participants ko badhai! Apna detailed scorecard dekhne ke liye neeche button par tap karein:`,
     { parse_mode: 'Markdown', reply_markup: finishKeyboard }
   );
 }

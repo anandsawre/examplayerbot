@@ -23,7 +23,7 @@ import { handleStartQuiz, handleAnswerCallback, handleQuitQuiz, handleSoloPollAn
 import { handleGlobalLeaderboard, handleQuizLeaderboard } from './handlers/leaderboard';
 import { handleProfile } from './handlers/profile';
 import { handleDocumentImport, handleImportHelp, handleTextImport } from './handlers/adminImport';
-import { handleGroupQuizCommand, handleLaunchGroupQuiz } from './handlers/groupQuiz';
+import { handleGroupQuizCommand, handleLaunchGroupQuiz, handleGroupPollAnswer } from './handlers/groupQuiz';
 import {
   handleAuthCommand,
   handleUnauthCommand,
@@ -92,8 +92,11 @@ export function createBot(env: Env): Bot {
   bot.command('editcat', (ctx) => handleEditCategoryCommand(ctx, supabase, env));
 
   // ================= EVENTS =================
-  // Solo Quiz Poll Answer Event (User voted)
-  bot.on('poll_answer', (ctx) => handleSoloPollAnswer(ctx, supabase, env));
+  // Quiz Poll Answer Event (Solo or Group)
+  bot.on('poll_answer', (ctx) => {
+    handleGroupPollAnswer(ctx.pollAnswer);
+    return handleSoloPollAnswer(ctx, supabase, env);
+  });
   // Solo Quiz Poll Expiration Event (Timer ended without answer on Serverless)
   bot.on('poll', (ctx) => handlePollClosed(ctx, supabase, env));
   // Bot Added to Group Event
