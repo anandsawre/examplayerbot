@@ -271,6 +271,10 @@ export async function getQuizLeaderboard(
     .select(`
       user_id,
       score,
+      total_questions,
+      correct_count,
+      wrong_count,
+      skipped_count,
       accuracy_percent,
       time_taken_seconds,
       users:user_id ( first_name, username )
@@ -287,6 +291,10 @@ export async function getQuizLeaderboard(
     first_name: item.users?.first_name || 'Anonymous',
     username: item.users?.username,
     score: item.score,
+    total_questions: item.total_questions,
+    correct_count: item.correct_count ?? 0,
+    wrong_count: item.wrong_count ?? 0,
+    skipped_count: item.skipped_count ?? 0,
     accuracy_percent: item.accuracy_percent,
     time_taken_seconds: item.time_taken_seconds,
   }));

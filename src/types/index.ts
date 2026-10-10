@@ -75,4 +75,9 @@ export interface LeaderboardEntry {
   score: number;
   accuracy_percent?: number;
   time_taken_seconds?: number;
+  total_questions?: number;
+  correct_count?: number;
+  wrong_count?: number;
+  skipped_count?: number;
 }
+
