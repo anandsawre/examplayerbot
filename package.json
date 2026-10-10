@@ -4,6 +4,7 @@
   "description": "Advanced Serverless Telegram Quiz & Exam Bot powered by grammY, Cloudflare Workers and Supabase",
   "main": "src/worker.ts",
   "scripts": {
+    "start": "tsx src/server.ts",
     "dev": "tsx src/local.ts",
     "build": "wrangler deploy --dry-run --outdir dist",
     "deploy": "wrangler deploy",
@@ -22,12 +23,12 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.49.1",
     "dotenv": "^16.4.7",
-    "grammy": "^1.35.0"
+    "grammy": "^1.35.0",
+    "tsx": "^4.19.3"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250224.0",
     "@types/node": "^22.13.9",
-    "tsx": "^4.19.3",
     "typescript": "^5.8.2",
     "wrangler": "^3.111.0"
   }

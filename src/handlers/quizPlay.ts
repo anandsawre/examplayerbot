@@ -334,6 +334,7 @@ export async function sendNextPollQuestion(
       );
 
       curSession.currentIndex++;
+      await updateActiveSession(supabase, userId, curSession.currentIndex, curSession.answers);
       await sleep(1500);
       await sendNextPollQuestion(api, supabase, env, userId);
     }, (timeLimit + 2) * 1000);
