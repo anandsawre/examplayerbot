@@ -290,20 +290,6 @@ export async function sendNextPollQuestion(
     );
     session.currentPollId = pollMessage.poll.id;
 
-    // Send Control Button Bar below the Poll (Next / Skip & Quit)
-    const controlKeyboard = new InlineKeyboard()
-      .text('⏭️ Next / Skip Question', `skip_q:${session.quizId}:${session.currentIndex}`)
-      .text('❌ Quit Test', `quit_test:${session.quizId}`);
-
-    await api.sendMessage(
-      session.chatId,
-      `⏱️ *Time Limit: ${timeLimit}s* | _Answer karein ya Next dabayein:_`,
-      {
-        parse_mode: 'Markdown',
-        reply_markup: controlKeyboard,
-      }
-    );
-
     // Track poll in Supabase bot_settings for serverless timeout expiration
     await supabase.from('bot_settings').upsert({
       key: `poll:${pollMessage.poll.id}`,
