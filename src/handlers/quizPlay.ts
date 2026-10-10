@@ -168,6 +168,43 @@ export async function handleStartQuiz(
 }
 
 /**
+ * Retrieves the in-memory session or restores it from Supabase active_sessions
+ */
+export async function getOrRestoreSession(
+  supabase: SupabaseClient,
+  userId: number
+): Promise<SoloPollSession | null> {
+  let session = soloPollSessions.get(userId);
+  if (session) return session;
+
+  const dbSession = await getActiveSession(supabase, userId);
+  if (!dbSession) return null;
+
+  const allQuestions = await getQuestionsForQuiz(supabase, dbSession.quiz_id);
+  if (!allQuestions || allQuestions.length === 0) return null;
+
+  const orderedQuestions: Question[] = [];
+  if (dbSession.question_ids && dbSession.question_ids.length > 0) {
+    for (const qid of dbSession.question_ids) {
+      const found = allQuestions.find((q) => q.id === qid);
+      if (found) orderedQuestions.push(found);
+    }
+  }
+
+  session = {
+    quizId: dbSession.quiz_id,
+    userId,
+    chatId: userId,
+    questions: orderedQuestions.length > 0 ? orderedQuestions : allQuestions,
+    currentIndex: dbSession.current_index,
+    answers: dbSession.answers || [],
+    startedAt: dbSession.started_at,
+  };
+  soloPollSessions.set(userId, session);
+  return session;
+}
+
+/**
  * Sends the next question as a native Telegram Quiz Poll with timer
  */
 export async function sendNextPollQuestion(
@@ -176,31 +213,8 @@ export async function sendNextPollQuestion(
   env: Env,
   userId: number
 ) {
-  let session = soloPollSessions.get(userId);
-  if (!session) {
-    const dbSession = await getActiveSession(supabase, userId);
-    if (!dbSession) return;
-
-    const allQuestions = await getQuestionsForQuiz(supabase, dbSession.quiz_id);
-    if (!allQuestions || allQuestions.length === 0) return;
-
-    const orderedQuestions: Question[] = [];
-    for (const qid of dbSession.question_ids) {
-      const found = allQuestions.find((q) => q.id === qid);
-      if (found) orderedQuestions.push(found);
-    }
-
-    session = {
-      quizId: dbSession.quiz_id,
-      userId,
-      chatId: userId,
-      questions: orderedQuestions.length > 0 ? orderedQuestions : allQuestions,
-      currentIndex: dbSession.current_index,
-      answers: dbSession.answers || [],
-      startedAt: dbSession.started_at,
-    };
-    soloPollSessions.set(userId, session);
-  }
+  const session = await getOrRestoreSession(supabase, userId);
+  if (!session) return;
 
   // Clear any existing timer
   if (session.questionTimer) {
@@ -274,8 +288,21 @@ export async function sendNextPollQuestion(
         explanation: q.explanation ? q.explanation.slice(0, 200) : undefined,
       } as any
     );
-
     session.currentPollId = pollMessage.poll.id;
+
+    // Send Control Button Bar below the Poll (Next / Skip & Quit)
+    const controlKeyboard = new InlineKeyboard()
+      .text('⏭️ Next / Skip Question', `skip_q:${session.quizId}:${session.currentIndex}`)
+      .text('❌ Quit Test', `quit_test:${session.quizId}`);
+
+    await api.sendMessage(
+      session.chatId,
+      `⏱️ *Time Limit: ${timeLimit}s* | _Answer karein ya Next dabayein:_`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: controlKeyboard,
+      }
+    );
 
     // Track poll in Supabase bot_settings for serverless timeout expiration
     await supabase.from('bot_settings').upsert({
@@ -331,25 +358,8 @@ export async function handleSoloPollAnswer(
   if (!pollAnswer || !pollAnswer.user) return;
 
   const userId = pollAnswer.user.id;
-  let session = soloPollSessions.get(userId);
-  if (!session) {
-    const dbSession = await getActiveSession(supabase, userId);
-    if (!dbSession) return; // Might be a group quiz poll, ignore
-
-    const questions = await getQuestionsForQuiz(supabase, dbSession.quiz_id);
-    if (!questions || questions.length === 0) return;
-
-    session = {
-      quizId: dbSession.quiz_id,
-      userId,
-      chatId: userId,
-      questions,
-      currentIndex: dbSession.current_index,
-      answers: dbSession.answers || [],
-      startedAt: dbSession.started_at,
-    };
-    soloPollSessions.set(userId, session);
-  }
+  const session = await getOrRestoreSession(supabase, userId);
+  if (!session) return; // Might be a group quiz poll, ignore
 
   // Clear timeout timer
   if (session.questionTimer) {
@@ -571,5 +581,91 @@ export async function handleAnswerCallback(
       text: 'Yeh test Telegram Quiz Poll format me hai, kripya screen par poll option par tap karein! 🎯',
       show_alert: true,
     });
+  }
+}
+
+/**
+ * Handles user clicking "⏭️ Next / Skip Question" button
+ */
+export async function handleSkipQuestion(
+  ctx: Context,
+  supabase: SupabaseClient,
+  env: Env,
+  quizId: string,
+  targetIndex: number
+) {
+  const userId = ctx.from?.id;
+  if (!userId) return;
+
+  const session = await getOrRestoreSession(supabase, userId);
+  if (!session || session.quizId !== quizId) {
+    if (ctx.callbackQuery) {
+      await ctx.answerCallbackQuery({
+        text: 'Active test session nahi mila.',
+      });
+    }
+    return;
+  }
+
+  // Prevent skipping if current index doesn't match target index (e.g. already answered or skipped)
+  if (session.currentIndex !== targetIndex) {
+    if (ctx.callbackQuery) {
+      await ctx.answerCallbackQuery({
+        text: session.currentIndex > targetIndex
+          ? 'Aapne is question ka answer pehle hi de diya hai!'
+          : 'Kripya vartaman question par dhyan dein.',
+      });
+    }
+    return;
+  }
+
+  // Acknowledge callback immediately
+  if (ctx.callbackQuery) {
+    await ctx.answerCallbackQuery({
+      text: `⏭️ Question ${targetIndex + 1} skip kar diya gaya!`,
+    });
+  }
+
+  // Clear timeout timer if running
+  if (session.questionTimer) {
+    clearTimeout(session.questionTimer);
+    session.questionTimer = undefined;
+  }
+
+  // Also clean up poll tracking in bot_settings if present
+  if (session.currentPollId) {
+    await supabase.from('bot_settings').delete().eq('key', `poll:${session.currentPollId}`);
+  }
+
+  const currentQ = session.questions[session.currentIndex];
+  if (currentQ) {
+    session.answers.push({
+      question_id: currentQ.id,
+      selected_option_index: -1,
+      is_correct: false,
+    });
+  }
+
+  // Increment index
+  session.currentIndex++;
+
+  // Update DB session
+  await updateActiveSession(supabase, userId, session.currentIndex, session.answers);
+
+  // Edit companion message so buttons are no longer clickable
+  try {
+    await ctx.editMessageText(
+      `⏭️ *Question ${targetIndex + 1} Skipped!* ⏩ _Agla question aa raha hai..._`,
+      { parse_mode: 'Markdown' }
+    );
+  } catch {
+    // In case message can't be edited, safe to ignore
+  }
+
+  // Dispatch next question or finish
+  if (session.currentIndex < session.questions.length) {
+    await sendNextPollQuestion(ctx.api, supabase, env, userId);
+  } else {
+    await finishSoloPollQuiz(ctx.api, supabase, env, session);
   }
 }

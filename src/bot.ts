@@ -19,7 +19,7 @@ import {
   handleEditCategoryCommand,
   handleDeleteQuizCommand,
 } from './handlers/quizzes';
-import { handleStartQuiz, handleAnswerCallback, handleQuitQuiz, handleSoloPollAnswer, handlePollClosed } from './handlers/quizPlay';
+import { handleStartQuiz, handleAnswerCallback, handleQuitQuiz, handleSoloPollAnswer, handlePollClosed, handleSkipQuestion } from './handlers/quizPlay';
 import { handleGlobalLeaderboard, handleQuizLeaderboard } from './handlers/leaderboard';
 import { handleProfile } from './handlers/profile';
 import { handleDocumentImport, handleImportHelp, handleTextImport } from './handlers/adminImport';
@@ -226,6 +226,14 @@ export function createBot(env: Env): Bot {
     // Quit test: "quit_test:<quiz_id>"
     if (data.startsWith('quit_test:')) {
       return handleQuitQuiz(ctx, supabase);
+    }
+
+    // Skip / Next Question: "skip_q:<quiz_id>:<target_index>"
+    if (data.startsWith('skip_q:')) {
+      const parts = data.split(':');
+      const quizId = parts[1];
+      const targetIndex = parseInt(parts[2], 10);
+      return handleSkipQuestion(ctx, supabase, env, quizId, targetIndex);
     }
 
     // Per-quiz leaderboard: "lb:<quiz_id>"
