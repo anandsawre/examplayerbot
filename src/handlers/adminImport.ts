@@ -20,17 +20,17 @@ export async function handleDocumentImport(
 
   // Security check: Strict Admin only
   if (!isAdmin(ctx, env)) {
-    await ctx.reply('⚠️ Access Denied! Sirf Admin hi quizzes import kar sakta hai.');
+    await ctx.reply('⚠️ Access Denied: Test import operations restricted to Platform Administrators.');
     return;
   }
 
-  const waitMsg = await ctx.reply('⏳ JSON file download aur process ho rahi hai...');
+  const waitMsg = await ctx.reply('⏳ Downloading and parsing JSON payload...');
 
   try {
     // 1. Get file path from Telegram
     const file = await ctx.getFile();
     if (!file.file_path) {
-      throw new Error('Telegram file path nahi mil paya.');
+      throw new Error('Telegram file retrieval failed.');
     }
 
     const downloadUrl = `https://api.telegram.org/file/bot${env.BOT_TOKEN}/${file.file_path}`;
@@ -55,7 +55,7 @@ export async function handleDocumentImport(
     await ctx.api.editMessageText(
       ctx.chat!.id,
       waitMsg.message_id,
-      `❌ File Download Error: ${err.message || 'Timeout'}\n\n💡 *Tip:* Aap seedhe JSON text copy karke yahan chat me paste bhi kar sakte hain!`
+      `❌ Document Import Error: ${err.message || 'Timeout'}\n\n💡 *Tip:* You can also directly paste JSON text payload into this chat!`
     );
   }
 }
@@ -76,11 +76,11 @@ export async function handleTextImport(
 
   // Security check: Strict Admin only
   if (!isAdmin(ctx, env)) {
-    await ctx.reply('⚠️ Access Denied! Sirf Admin hi quizzes import kar sakta hai.');
+    await ctx.reply('⚠️ Access Denied: Test import operations restricted to Platform Administrators.');
     return;
   }
 
-  const waitMsg = await ctx.reply('⏳ JSON text process ho raha hai...');
+  const waitMsg = await ctx.reply('⏳ Parsing raw JSON examination payload...');
 
   try {
     const quizData = JSON.parse(text);
@@ -90,7 +90,7 @@ export async function handleTextImport(
     await ctx.api.editMessageText(
       ctx.chat!.id,
       waitMsg.message_id,
-      `❌ Invalid JSON Text: ${err.message}`
+      `❌ Invalid JSON Payload: ${err.message}`
     );
   }
 }
@@ -106,7 +106,7 @@ async function insertQuizToDatabase(
     await ctx.api.editMessageText(
       ctx.chat!.id,
       statusMsgId,
-      '❌ Invalid format! JSON me "title" aur "questions" array hona zaroori hai.'
+      '❌ Invalid Schema: JSON must specify "title" and a non-empty "questions" array.'
     );
     return;
   }
@@ -152,14 +152,14 @@ async function insertQuizToDatabase(
 
   // 3. Success Announcement
   const successText =
-    `🎉 *QUIZ SUCCESSFULLY IMPORTED!*\n` +
-    `━━━━━━━━━━━━━━━━━━━━━\n` +
+    `🎉 *EXAMINATION SUCCESSFULLY IMPORTED*\n` +
+    `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
     `📝 *Title:* ${quiz.title}\n` +
     `📂 *Category:* ${quiz.category}\n` +
     `❓ *Total Questions:* \`${questionsToInsert.length}\`\n` +
     `⏱️ *Time Limit:* \`${quiz.time_limit_seconds}s\` per question\n` +
     `⚠️ *Negative Marking:* \`-${quiz.negative_marks}\`\n\n` +
-    `Yeh quiz ab students ke liye /quizzes me live ho chuka hai! 🚀`;
+    `This examination module is now active and listed under /quizzes! 🚀`;
 
   await ctx.api.editMessageText(ctx.chat!.id, statusMsgId, successText, {
     parse_mode: 'Markdown',
@@ -168,13 +168,13 @@ async function insertQuizToDatabase(
 
 export async function handleImportHelp(ctx: Context) {
   const guide =
-    `📥 *HOW TO IMPORT QUIZ VIA BOT*\n` +
-    `━━━━━━━━━━━━━━━━━━━━━\n` +
-    `Aap do tareeqon se quiz import kar sakte hain:\n\n` +
-    `*Option 1: JSON File Send Karein*\n` +
-    `Apni \`.json\` file yahan chat me as a Document bhej dijiye.\n\n` +
-    `*Option 2: Direct JSON Text Paste Karein*\n` +
-    `Neeche diye gaye format me JSON text copy karke yahan chat me paste kar dijiye:\n\n` +
+    `📥 *EXAMINATION IMPORT PROTOCOL*\n` +
+    `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+    `Two ingestion methods are supported for examination papers:\n\n` +
+    `*Method 1: JSON File Upload*\n` +
+    `Upload your formatted \`.json\` file directly as a Document in this chat.\n\n` +
+    `*Method 2: Raw JSON Text Ingestion*\n` +
+    `Paste your JSON payload adhering to the canonical specification:\n\n` +
     `\`\`\`json\n` +
     `{\n` +
     `  "title": "Science Mock Test",\n` +

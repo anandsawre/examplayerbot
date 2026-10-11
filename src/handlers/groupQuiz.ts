@@ -10,12 +10,12 @@ export async function handleGroupQuizCommand(ctx: Context, supabase: SupabaseCli
   // If used in private chat
   if (chatType === 'private') {
     await ctx.reply(
-      `👥 *Group Quiz Feature*\n━━━━━━━━━━━━━━━━━━━━━\n` +
-      `Yeh feature Telegram Groups ke liye hai!\n\n` +
-      `1. Bot ko apne Telegram Group me add kijiye.\n` +
-      `2. Bot ko *Admin* permissions dijiye (Send Polls & Pin messages).\n` +
-      `3. Group me type kijiye: \`/groupquiz\`\n\n` +
-      `Aur pure group ke saath live countdown battle kheliye! 🎯`,
+      `👥 *GROUP LIVE BATTLE CONSOLE*\n━━━━━━━━━━━━━━━━━━━━━\n` +
+      `This operational feature is designed for authorized Community Groups.\n\n` +
+      `1. Add Examplayer Bot to your Telegram Community Group.\n` +
+      `2. Grant the bot *Administrator* permissions (Manage Polls & Pin messages).\n` +
+      `3. Execute in the group: \`/groupquiz\`\n\n` +
+      `Host live real-time competitive examination battles for your group members! 🎯`,
       { parse_mode: 'Markdown' }
     );
     return;
@@ -25,9 +25,9 @@ export async function handleGroupQuizCommand(ctx: Context, supabase: SupabaseCli
   const isAuth = await isGroupAuthorized(supabase, ctx.chat.id);
   if (!isAuth) {
     await ctx.reply(
-      `⚠️ *Group Not Authorized!*\n━━━━━━━━━━━━━━━━━━━━━\n` +
-      `Is group ko Examplayer Bot use karne ki permission nahi hai.\n` +
-      `Permission enable karne ke liye Bot Admin se sampark karein.`,
+      `⚠️ *Group Not Authorized*\n━━━━━━━━━━━━━━━━━━━━━\n` +
+      `This community group is not authorized to host examination battles.\n` +
+      `Please contact the platform administrator to activate authorization.`,
       { parse_mode: 'Markdown' }
     );
     return;
@@ -36,25 +36,25 @@ export async function handleGroupQuizCommand(ctx: Context, supabase: SupabaseCli
   // Verify that the caller is an Admin in the group
   const userIsAdmin = await isGroupAdmin(ctx);
   if (!userIsAdmin) {
-    await ctx.reply('⚠️ Sirf Group Admins hi group quiz launch kar sakte hain.');
+    await ctx.reply('⚠️ Access Denied: Group live examination battles can only be launched by Community Administrators.');
     return;
   }
 
   // Check if a quiz is already in progress
   if (activeGroupBattles.has(ctx.chat.id)) {
-    await ctx.reply('⚠️ Is group me pehle se ek quiz chal raha hai! Pehle use pura hone dein ya /stopquiz karein.');
+    await ctx.reply('⚠️ An active live examination battle is already in progress. Please await its conclusion or execute /stopquiz.');
     return;
   }
 
   const quizzes = await getActiveQuizzes(supabase);
   if (!quizzes || quizzes.length === 0) {
-    await ctx.reply('⚠️ Abhi koi test active nahi hai.');
+    await ctx.reply('⚠️ No active examinations found in the repository.');
     return;
   }
 
-  let text = `👥 *GROUP LIVE QUIZ LAUNCHER*\n`;
+  let text = `👥 *GROUP LIVE EXAMINATION BATTLE*\n`;
   text += `━━━━━━━━━━━━━━━━━━━━━\n`;
-  text += `Kripya choose kijiye ki is group me kaun sa mock test live chalana hai:\n`;
+  text += `Select an examination module to launch live for this community group:\n`;
 
   const keyboard = new InlineKeyboard();
   quizzes.forEach((quiz) => {
@@ -134,11 +134,11 @@ export async function handleLaunchGroupQuiz(
   if (!userIsAdmin) {
     if (ctx.callbackQuery) {
       await ctx.answerCallbackQuery({
-        text: '⚠️ Sirf Group Admin test launch kar sakta hai!',
+        text: '⚠️ Action restricted to Group Administrators.',
         show_alert: true,
       });
     } else {
-      await ctx.reply('⚠️ Sirf Group Admin test launch kar sakta hai.');
+      await ctx.reply('⚠️ Action restricted to Group Administrators.');
     }
     return;
   }
@@ -147,17 +147,17 @@ export async function handleLaunchGroupQuiz(
   if (activeGroupBattles.has(chatId)) {
     if (ctx.callbackQuery) {
       await ctx.answerCallbackQuery({
-        text: '⚠️ Is group me pehle se ek quiz chal raha hai! Pehle use pura hone dein ya /stopquiz karein.',
+        text: '⚠️ An active examination battle is already in progress in this group.',
         show_alert: true,
       });
     } else {
-      await ctx.reply('⚠️ Is group me pehle se ek quiz chal raha hai! Pehle use pura hone dein ya /stopquiz karein.');
+      await ctx.reply('⚠️ An active live examination battle is already in progress.');
     }
     return;
   }
 
   if (ctx.callbackQuery) {
-    await ctx.answerCallbackQuery({ text: 'Starting group quiz!' }).catch(() => {});
+    await ctx.answerCallbackQuery({ text: 'Launching group examination...' }).catch(() => {});
   }
 
   const botUsername = ctx.me?.username || 'Examplayer_bot';
@@ -200,12 +200,12 @@ export async function executeGroupQuizBattle(
 
   // 1. Send 5-second countdown warning
   const introMsg =
-    `🔔 *GROUP QUIZ STARTING IN 5 SECONDS!*\n` +
-    `━━━━━━━━━━━━━━━━━━━━━\n` +
-    `📝 *Test:* ${quiz.title}\n` +
+    `🔔 *GROUP EXAMINATION BATTLE COMMENCING IN 5 SECONDS*\n` +
+    `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+    `📝 *Examination:* ${quiz.title}\n` +
     `❓ *Total Questions:* \`${questions.length}\`\n` +
-    `⏱️ *Time per Question:* \`${timeLimit}s\` (Sabhi ke liye pura timer chalega!)\n\n` +
-    `⚡ Sabhi members screen par ready rahein! Confetti & Polls aane wale hain...`;
+    `⏱️ *Time Limit:* \`${timeLimit}s\` per question\n\n` +
+    `⚡ All participating candidates please prepare your screens. Polls loading...`;
 
   await api.sendMessage(chatId, introMsg, { parse_mode: 'Markdown' }).catch((err) => {
     console.error('Failed to send group intro msg:', err);
@@ -318,7 +318,7 @@ export async function executeGroupQuizBattle(
     });
 
     // Monospace Aligned Merit List Table
-    let table = `Rank Name        ✅  ❌  -Neg   Score\n`;
+    let table = `Rank Candidate   ✅  ❌  -Neg   Score\n`;
     table += `─────────────────────────────────────\n`;
     ranked.forEach((p, idx) => {
       const rankStr = `${idx + 1}.`.padEnd(5, ' ');
@@ -334,25 +334,25 @@ export async function executeGroupQuizBattle(
 
     meritListSection = `\n\n${podiumText}\n📊 *OFFICIAL BATTLE SCOREBOARD:*\n\`\`\`\n${table}\`\`\``;
   } else {
-    meritListSection = `\n\n_Is battle me kisi candidate ne questions attempt nahi kiye._`;
+    meritListSection = `\n\n_No candidate attempts were recorded during this session._`;
   }
 
   const finishKeyboard = new InlineKeyboard()
-    .text('📄 Download Solutions Booklet (PDF)', `pdf_scorecard:${quiz.id}`)
+    .text('📄 Download Official PDF Report & Solutions', `pdf_scorecard:${quiz.id}`)
     .row()
-    .url('👤 My Profile & Stats', `https://t.me/${botUsername}?start=profile`)
-    .url('📚 Solo Mock Test in DM', `https://t.me/${botUsername}?start=quiz_${quiz.id}`);
+    .url('👤 Candidate Profile & Analytics', `https://t.me/${botUsername}?start=profile`)
+    .url('📝 Attempt Solo in Direct Message', `https://t.me/${botUsername}?start=quiz_${quiz.id}`);
 
   const completionMessage =
     `🎓 *EXAMPLAYER LIVE BATTLE — OFFICIAL RESULT*\n` +
     `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
     `📚 *Exam:* ${escapeMarkdown(quiz.title)}\n` +
     `❓ *Questions:* \`${questions.length}\` | ⏱️ *Time Limit:* \`${timeLimit}s\`\n` +
-    `🎯 *Marking:* \`+${marksPerQ}\` / \`-${negMarksPerWrong}\` Negative Marking\n` +
+    `🎯 *Marking Scheme:* \`+${marksPerQ}\` / \`-${negMarksPerWrong}\` Negative Penalty\n` +
     `👥 *Total Participants:* \`${contestantsCount}\` Aspirants\n` +
     `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━` +
     meritListSection +
-    `\n\n✨ *Badhai ho sabhi participants ko!* Detailed solutions aur explanations ke liye neeche diye gaye PDF button par tap karein:`;
+    `\n\n✨ *Examination session concluded.* Select the button below to download the official PDF solutions booklet and comprehensive analysis:`;
 
   await api.sendMessage(chatId, completionMessage, {
     parse_mode: 'Markdown',
@@ -367,18 +367,18 @@ export async function executeGroupQuizBattle(
  */
 export async function handleStopGroupQuiz(ctx: Context, supabase: SupabaseClient) {
   if (!ctx.chat || ctx.chat.type === 'private') {
-    return ctx.reply('⚠️ Yeh command Telegram groups ke liye hai.');
+    return ctx.reply('⚠️ Command restricted to Telegram community groups.');
   }
 
   const chatId = ctx.chat.id;
   const battle = activeGroupBattles.get(chatId);
   if (!battle) {
-    return ctx.reply('ℹ️ Is group me abhi koi quiz nahi chal raha hai.');
+    return ctx.reply('ℹ️ No live examination battle is currently active in this group.');
   }
 
   const userIsAdmin = await isGroupAdmin(ctx);
   if (!userIsAdmin) {
-    return ctx.reply('⚠️ Sirf Group Admins hi chal rahe quiz ko rok sakte hain.');
+    return ctx.reply('⚠️ Access Denied: Only Group Administrators may abort an active examination battle.');
   }
 
   battle.isCancelled = true;
@@ -386,8 +386,8 @@ export async function handleStopGroupQuiz(ctx: Context, supabase: SupabaseClient
 
   const adminName = ctx.from?.first_name || 'Admin';
   await ctx.reply(
-    `🛑 *GROUP QUIZ STOPPED!*\n━━━━━━━━━━━━━━━━━━━━━\n` +
-    `Group Admin *${escapeMarkdown(adminName)}* dwara test ko rok diya gaya hai.`,
+    `🛑 *GROUP EXAMINATION BATTLE TERMINATED*\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+    `The active session was terminated by Administrator *${escapeMarkdown(adminName)}*.`,
     { parse_mode: 'Markdown' }
   );
 }

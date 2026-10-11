@@ -43,15 +43,15 @@ export async function sendJoinChannelPrompt(
   targetAction?: string
 ) {
   const text =
-    `📢 *OFFICIAL STUDY CHANNEL JOIN ZAROORI HAI!*\n` +
-    `━━━━━━━━━━━━━━━━━━━━━\n` +
-    `Examplayer Bot ke sabhi high-quality Mock Tests unlock karne ke liye pehle hamara Official Telegram Channel join kijiye.\n\n` +
-    `👉 *Channel join karne ke baad "Verify Membership" button dabaiye:*`;
+    `📢 *MANDATORY CHANNEL SUBSCRIPTION REQUIRED*\n` +
+    `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+    `Access to the examination repository requires verified membership in our official platform announcement channel.\n\n` +
+    `👉 *After joining, select "Verify Membership Status" below to proceed:*`;
 
   const keyboard = new InlineKeyboard()
-    .url('📢 Join Official Channel', channelUrl)
+    .url('📢 Join Official Broadcast Channel', channelUrl)
     .row()
-    .text('🔄 Verify Membership', targetAction ? `check_fsub:${targetAction}` : 'check_fsub:menu_quizzes');
+    .text('🔄 Verify Membership Status', targetAction ? `check_fsub:${targetAction}` : 'check_fsub:menu_quizzes');
 
   if (ctx.callbackQuery) {
     await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup: keyboard });

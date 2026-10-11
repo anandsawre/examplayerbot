@@ -33,23 +33,24 @@ export async function handleStart(ctx: Context, supabase: SupabaseClient, env?: 
   }
 
   const welcomeText =
-    `🎯 *Welcome to Examplayer Bot!*\n\n` +
-    `Hello *${from.first_name}*! Aapka competitive exam preparation bot ready hai.\n\n` +
-    `✨ *Key Features:*\n` +
-    `• ⏱️ Real exam simulation with timer\n` +
-    `• ⚠️ Negative marking calculation\n` +
-    `• 📄 Instant Downloadable PDF Scorecards & Solutions\n` +
-    `• 🏆 Live leaderboards & rank tracking\n` +
-    `• 👥 Group Live Battles (/groupquiz) & Scheduling (/schedule)\n` +
-    `• 📊 Monospace Performance Scorecard\n\n` +
-    `Neeche diye gaye buttons se shuru kijiye:`;
+    `🏛️ *EXAMPLAYER — ADVANCED EXAMINATION PLATFORM*\n` +
+    `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+    `Namaste *${from.first_name}*! \n` +
+    `Yeh competitive examinations (UPSC, SSC, State PSC, Railways, Banking) ke liye ek official AI-powered mock testing & live battle platform hai.\n\n` +
+    `🎯 *Platform Highlights:*\n` +
+    `• ⏱️ Real-Time Examination Timer & Speed Analytics\n` +
+    `• ⚠️ Precision Negative Marking & Accuracy Tracking\n` +
+    `• 📄 Downloadable PDF Solution Booklets & Detailed Explanations\n` +
+    `• 🏆 Dynamic Merit Lists & All-India Rank System\n` +
+    `• 👥 Automated Group Live Battles & Schedule Launcher (/schedule)\n\n` +
+    `Kripya shuru karne ke liye neeche vikalp chunein:`;
 
   const keyboard = new InlineKeyboard()
-    .text('📚 Browse Quizzes', 'menu_quizzes')
-    .text('🏆 Leaderboard', 'menu_global_lb')
+    .text('📚 All Mock Examinations', 'menu_quizzes')
+    .text('🏆 All-India Leaderboard', 'menu_global_lb')
     .row()
-    .text('👤 My Profile & Stats', 'menu_profile')
-    .text('ℹ️ Help & Rules', 'menu_help');
+    .text('👤 Candidate Profile & Analytics', 'menu_profile')
+    .text('ℹ️ User Manual & Commands', 'menu_help');
 
   await ctx.reply(welcomeText, {
     parse_mode: 'Markdown',
@@ -59,24 +60,25 @@ export async function handleStart(ctx: Context, supabase: SupabaseClient, env?: 
 
 export async function handleHelp(ctx: Context) {
   const text =
-    `📖 *Examplayer Bot Rules & Guide:*\n\n` +
-    `1. *Solo Tests:* /quizzes dabayein aur apna pasandeeda test chunein.\n` +
-    `2. *PDF Scorecards:* Test khatam hone par pure test ka detailed PDF solution booklet download karein!\n` +
-    `3. *Group Battles:* Group me /groupquiz run karke live battle shuru karein.\n` +
-    `4. *Scheduled Quizzes:* Group me /schedule command se kisi bhi time ke liye automated test schedule karein.\n` +
-    `5. *Scoring:* Correct answer par full marks milenge aur galat par penalty cut hogi.\n\n` +
-    `Commands:\n` +
-    `• /start - Main menu\n` +
-    `• /quizzes - All mock tests & PDF papers\n` +
-    `• /groupquiz - Start live battle in group\n` +
-    `• /schedule - Schedule automated quiz in group\n` +
-    `• /stopquiz - Stop group battle\n` +
-    `• /leaderboard - Top merit list rankings\n` +
-    `• /myprofile - Your stats, accuracy & streak\n` +
-    `• /broadcast - Admin Announcement Dispatcher\n` +
-    `• /import - JSON format guide`;
+    `📖 *EXAMPLAYER PLATFORM — USER GUIDE & COMMANDS*\n` +
+    `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+    `1. *Solo Examinations:* /quizzes enter karein aur apna vishay chunein. Timer aur negative marking ke saath test start hoga.\n` +
+    `2. *PDF Solution Booklets:* Har test attempt ke baad aap official PDF question paper with detailed explanation booklet download kar sakte hain.\n` +
+    `3. *Group Live Battles:* Apne Telegram Group me bot ko Admin banayein aur \`/groupquiz\` run karein.\n` +
+    `4. *Automated Scheduling:* Kisi specific samay par test auto-start karne ke liye group me \`/schedule\` ya \`/scheduletime 19:30\` use karein.\n` +
+    `5. *Evaluation Scheme:* Har correct response par full marks aur galat response par negative marking deduction apply hoga.\n\n` +
+    `📋 *System Command Reference:*\n` +
+    `• /start — Platform Dashboard\n` +
+    `• /quizzes — Browse Mock Examination Papers\n` +
+    `• /groupquiz — Launch Group Live Battle\n` +
+    `• /schedule — Automated Group Quiz Scheduler\n` +
+    `• /stopquiz — Terminate Active Group Battle\n` +
+    `• /leaderboard — All-India Merit List\n` +
+    `• /myprofile — Candidate Performance & Accuracy Stats\n` +
+    `• /broadcast — Admin Global Broadcast Controller\n` +
+    `• /import — Test Question JSON Importer Guide`;
 
-  const keyboard = new InlineKeyboard().text('🔙 Back to Main Menu', 'menu_start');
+  const keyboard = new InlineKeyboard().text('🔙 Back to Platform Dashboard', 'menu_start');
 
   if (ctx.callbackQuery) {
     await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup: keyboard });

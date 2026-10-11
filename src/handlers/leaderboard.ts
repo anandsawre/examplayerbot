@@ -15,15 +15,15 @@ export async function handleGlobalLeaderboard(ctx: Context, supabase: SupabaseCl
     botUsername = me.username;
   } catch {}
 
-  let text = `🏆 *GLOBAL EXAMPLAYER TOPPERS*\n`;
+  let text = `🏆 *ALL-INDIA MERIT STANDINGS*\n`;
   text += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-  text += `Platform ke all-time top students:\n\n`;
+  text += `Official cumulative rankings of registered candidates across all examinations:\n\n`;
 
   if (topUsers.length === 0) {
-    text += `_Abhi koi scores record nahi hue hain. Pehla test dekar top rank lijiye!_`;
+    text += `_No candidate attempts recorded yet. Attempt an examination to establish your rank._`;
   } else {
     // Aligned Monospace Table for Global Leaderboard
-    let table = `Rank Student             Total Pts\n`;
+    let table = `Rank Candidate            Total Pts\n`;
     table += `──────────────────────────────────\n`;
 
     topUsers.forEach((user, idx) => {
@@ -46,12 +46,12 @@ export async function handleGlobalLeaderboard(ctx: Context, supabase: SupabaseCl
 
   const keyboard = new InlineKeyboard();
   if (isGroup) {
-    keyboard.url('📚 Browse Quizzes in DM', `https://t.me/${botUsername}?start=quizzes`);
+    keyboard.url('📖 Examination Catalog in DM', `https://t.me/${botUsername}?start=quizzes`);
   } else {
     keyboard
-      .text('📚 Take a Quiz', 'menu_quizzes')
+      .text('📝 Attempt Solo Assessment', 'menu_quizzes')
       .row()
-      .text('🔙 Main Menu', 'menu_start');
+      .text('🏛️ Main Dashboard', 'menu_start');
   }
 
   if (ctx.callbackQuery) {
@@ -78,16 +78,16 @@ export async function handleQuizLeaderboard(
     botUsername = me.username;
   } catch {}
 
-  let text = `🏆 *OFFICIAL EXAM MERIT LIST*\n`;
+  let text = `🏆 *OFFICIAL EXAMINATION MERIT LIST*\n`;
   text += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-  text += `📚 *Test:* ${escapeMarkdown(quiz?.title || 'Quiz')}\n`;
-  text += `⚠️ *Marking Scheme:* +${quiz?.marks_per_question || 1} / -${negativeMarkPerWrong} per wrong\n\n`;
+  text += `📚 *Examination:* ${escapeMarkdown(quiz?.title || 'Quiz')}\n`;
+  text += `⚠️ *Marking Scheme:* +${quiz?.marks_per_question || 1} / -${negativeMarkPerWrong} per incorrect response\n\n`;
 
   if (attempts.length === 0) {
-    text += `_Abhi kisi ne is test ko attempt nahi kiya hai._\n_Pehle student bankar top rank haasil karein!_`;
+    text += `_No attempts recorded yet for this examination module._\n_Be the first candidate to attempt and lead the standings!_`;
   } else {
     // Generate ASCII/Monospace Aligned Table with Correct, Wrong, -Neg, Score
-    let table = `Rank Name        ✅  ❌  -Neg   Score\n`;
+    let table = `Rank Candidate   ✅  ❌  -Neg   Score\n`;
     table += `─────────────────────────────────────\n`;
 
     attempts.forEach((att, idx) => {
@@ -110,7 +110,7 @@ export async function handleQuizLeaderboard(
     text += `\`\`\`\n${table}\`\`\`\n`;
 
     // Detailed highlights for Top 3 Toppers
-    text += `🎖️ *Toppers Performance Breakdown:*\n`;
+    text += `🎖️ *Top Performers Breakdown:*\n`;
     attempts.slice(0, 3).forEach((att, idx) => {
       const name = att.username ? `@${att.username}` : att.first_name;
       const timeStr = formatTime(att.time_taken_seconds || 0);
@@ -122,16 +122,16 @@ export async function handleQuizLeaderboard(
   const keyboard = new InlineKeyboard();
   if (isGroup) {
     keyboard
-      .url('🚀 Take Solo Test in DM', `https://t.me/${botUsername}?start=quiz_${quizId}`)
+      .url('📝 Attempt Solo in Direct Message', `https://t.me/${botUsername}?start=quiz_${quizId}`)
       .row()
-      .text('🌍 Global Leaderboard', 'menu_global_lb')
-      .url('📚 Browse All Tests in DM', `https://t.me/${botUsername}?start=quizzes`);
+      .text('🌍 Cumulative Merit Standings', 'menu_global_lb')
+      .url('📖 Examination Catalog in DM', `https://t.me/${botUsername}?start=quizzes`);
   } else {
     keyboard
-      .text('🚀 Attempt This Test', `start_quiz:${quizId}`)
+      .text('🚀 Attempt This Examination', `start_quiz:${quizId}`)
       .row()
-      .text('🌍 Global Leaderboard', 'menu_global_lb')
-      .text('🔙 Back to Quizzes', 'menu_quizzes');
+      .text('🌍 Cumulative Merit Standings', 'menu_global_lb')
+      .text('🔙 Return to Catalog', 'menu_quizzes');
   }
 
   if (ctx.callbackQuery) {

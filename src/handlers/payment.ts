@@ -11,24 +11,25 @@ export async function showPaymentPrompt(ctx: Context, supabase: SupabaseClient, 
   const upiId = await getSetting(supabase, 'upi_id', env.UPI_ID || 'your-upi-id@okhdfcbank');
 
   const text =
-    `👑 *EXAMPLAYER PREMIUM PASS (₹${price})*\n` +
-    `━━━━━━━━━━━━━━━━━━━━━\n` +
-    `🔒 Yeh test sirf *Premium Pass* students ke liye hai.\n\n` +
-    `✨ *Premium Pass Benefits:*\n` +
-    `• 50+ Full-Length Mock Tests Unlocked\n` +
-    `• Negative Marking & Step-by-Step Solutions\n` +
-    `• All-India State Rank & Leaderboards\n` +
-    `• Lifetime Validity\n\n` +
-    `📲 *Pay via UPI (GPay / PhonePe / Paytm):*\n` +
+    `👑 *EXAMPLAYER PREMIUM SCHOLAR PASS (₹${price})*\n` +
+    `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+    `🔒 Yeh full-length test series *Premium Scholar Pass* holders ke liye arakshit hai.\n\n` +
+    `✨ *Scholar Pass Inclusions:*\n` +
+    `• 50+ Full-Length Mock Examination Papers Unlocked\n` +
+    `• Question-by-Question Detailed Solution Booklets & Explanations\n` +
+    `• Negative Marking Calculation & All-India Rank Evaluation\n` +
+    `• Downloadable Official PDF Papers for Revision\n` +
+    `• Lifetime Validity & Continuous Test Updates\n\n` +
+    `📲 *Direct UPI Transfer (GPay / PhonePe / Paytm / BHIM):*\n` +
     `UPI ID: \`${upiId}\`\n` +
     `Amount: \`₹${price}\`\n\n` +
-    `👉 Payment karne ke baad apna *Payment Screenshot* yahan chat me Photo ke roop me bhej dijiye! 📸`;
+    `👉 Payment transfer karne ke baad apna *Payment Proof / Screenshot* is chat me send kar dijiye. 📸`;
 
   const keyboard = new InlineKeyboard()
-    .text('📸 Send Screenshot', 'pay_send_ss')
-    .text('🎟️ Redeem Code', 'menu_redeem_prompt')
+    .text('📸 Submit Payment Proof', 'pay_send_ss')
+    .text('🎟️ Redeem Access Code', 'menu_redeem_prompt')
     .row()
-    .text('🔙 Back to Quizzes', 'menu_quizzes');
+    .text('🔙 Back to Examinations', 'menu_quizzes');
 
   if (ctx.callbackQuery) {
     await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup: keyboard });
@@ -52,7 +53,7 @@ export async function handlePaymentPhotoUpload(
 
   const user = await getUser(supabase, userId);
   if (user?.is_premium) {
-    await ctx.reply('ℹ️ Aapka Premium Pass pehle se active hai! Aap sabhi tests bina kisi lock ke de sakte hain.');
+    await ctx.reply('ℹ️ Aapka Premium Scholar Pass pehle se active hai. Sabhi mock examination papers unlocked hain.');
     return;
   }
 
@@ -61,9 +62,8 @@ export async function handlePaymentPhotoUpload(
 
   // Reply to Student
   await ctx.reply(
-    `✅ *Screenshot Receive Ho Gaya!*\n━━━━━━━━━━━━━━━━━━━━━\n` +
-    `Admin verification ke baad 2 minute me aapka Premium Pass activate ho jayega. ⏳\n` +
-    `Activate hote hi aapko yahan message mil jayega!`,
+    `✅ *Payment Proof Submitted Successfully*\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+    `Aapka transaction screenshot verification queue me register ho gaya hai. Support Admin dwara verify hote hi aapka Scholar Pass activate kar diya jayega. ⏳`,
     { parse_mode: 'Markdown' }
   );
 

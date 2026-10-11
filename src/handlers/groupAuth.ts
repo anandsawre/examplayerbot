@@ -20,9 +20,9 @@ export async function handleBotAddedToGroup(
   const isAuth = await isGroupAuthorized(supabase, chat.id);
   if (isAuth) {
     await ctx.reply(
-      `👋 *Hello Everyone!*\n` +
-      `Main *Examplayer Bot* hoon. Yeh group pehle se authorized hai.\n` +
-      `Test shuru karne ke liye Admin \`/groupquiz\` run kar sakte hain! 🎯`,
+      `🏛️ *EXAMPLAYER EXAMINATION BOT*\n━━━━━━━━━━━━━━━━━━━━━\n` +
+      `This community group is officially authorized.\n` +
+      `Group Administrators may execute \`/groupquiz\` to initiate a live assessment battle! 🎯`,
       { parse_mode: 'Markdown' }
     );
     return;
@@ -30,9 +30,9 @@ export async function handleBotAddedToGroup(
 
   // Group is not authorized -> Notify Group
   await ctx.reply(
-    `👋 *Hello Everyone!*\n` +
-    `Main *Examplayer Bot* hoon. Is group ko use karne ke liye pehle Admin Authorization zaroori hai.\n` +
-    `⏳ Bot Admin ko approval request bhej di gayi hai...`,
+    `🏛️ *EXAMPLAYER EXAMINATION BOT*\n━━━━━━━━━━━━━━━━━━━━━\n` +
+    `Welcome! Group authorization is required before hosting examination battles.\n` +
+    `⏳ An administrative authorization request has been dispatched to the platform administrator.`,
     { parse_mode: 'Markdown' }
   );
 
@@ -43,15 +43,15 @@ export async function handleBotAddedToGroup(
     const addedByUsername = ctx.from?.username ? `@${ctx.from.username}` : '';
 
     const text =
-      `🔔 *NAYE GROUP NE BOT KO ADD KIYA HAI!*\n` +
+      `🔔 *NEW COMMUNITY ACCESS REQUEST*\n` +
       `━━━━━━━━━━━━━━━━━━━━━\n` +
-      `👥 *Group Title:* ${chat.title}\n` +
+      `👥 *Community Title:* ${chat.title}\n` +
       `🆔 *Group ID:* \`${chat.id}\`\n` +
       `👤 *Added By:* ${addedByName} ${addedByUsername}\n\n` +
-      `Kya aap is group ko permission dena chahte hain?`;
+      `Authorize this community group to host live examination battles?`;
 
     const keyboard = new InlineKeyboard()
-      .text('✅ Approve Group', `grp_appr:${chat.id}:${encodeURIComponent(chat.title || 'Group')}`)
+      .text('✅ Authorize Group', `grp_appr:${chat.id}:${encodeURIComponent(chat.title || 'Group')}`)
       .text('❌ Reject & Leave', `grp_rejc:${chat.id}`);
 
     try {
@@ -79,10 +79,10 @@ export async function handleGroupApprovalCallback(
     await authorizeGroup(supabase, groupId, groupTitle, ctx.from?.id);
 
     await ctx.editMessageText(
-      `✅ *Group Approved!*\n━━━━━━━━━━━━━━━━━━━━━\n` +
+      `✅ *Group Authorization Approved*\n━━━━━━━━━━━━━━━━━━━━━\n` +
       `👥 Group: *${groupTitle}*\n` +
       `🆔 ID: \`${groupId}\`\n\n` +
-      `Yeh group ab authorized hai. Yahan tests chalenge! 🚀`,
+      `Group status set to Active. Examinations enabled! 🚀`,
       { parse_mode: 'Markdown' }
     );
 
@@ -90,10 +90,10 @@ export async function handleGroupApprovalCallback(
     try {
       await ctx.api.sendMessage(
         groupId,
-        `🎉 *CONGRATULATIONS!*\n` +
+        `🎉 *COMMUNITY ACCESS AUTHORIZED!*\n` +
         `━━━━━━━━━━━━━━━━━━━━━\n` +
-        `Is group ko *Examplayer Bot* use karne ki permission mil gayi hai!\n` +
-        `Admin ab \`/groupquiz\` run karke live battle shuru kar sakte hain. 🎯`,
+        `This group has been granted full access to the *Examplayer Examination Platform*.\n` +
+        `Administrators may now launch live assessments using \`/groupquiz\` or schedule sessions via \`/schedule\`. 🎯`,
         { parse_mode: 'Markdown' }
       );
     } catch {}
@@ -101,8 +101,8 @@ export async function handleGroupApprovalCallback(
     await revokeGroup(supabase, groupId);
 
     await ctx.editMessageText(
-      `❌ *Group Rejected & Removed!*\n━━━━━━━━━━━━━━━━━━━━━\n` +
-      `Group \`${groupId}\` ko reject kar diya gaya hai aur bot leave kar gaya hai.`,
+      `❌ *Group Access Rejected*\n━━━━━━━━━━━━━━━━━━━━━\n` +
+      `Authorization declined for Group \`${groupId}\`. Bot has departed the chat.`,
       { parse_mode: 'Markdown' }
     );
 
@@ -110,7 +110,7 @@ export async function handleGroupApprovalCallback(
     try {
       await ctx.api.sendMessage(
         groupId,
-        '⚠️ *Sorry, this group is not authorized to use Examplayer Bot.* Goodbye!'
+        '⚠️ *Notice: This group is not authorized to use Examplayer Bot.* Goodbye.'
       );
       await ctx.api.leaveChat(groupId);
     } catch {}
@@ -124,7 +124,7 @@ export async function handleAuthCommand(
   env: Env
 ) {
   if (!isAdmin(ctx, env)) {
-    await ctx.reply('⚠️ Access Denied! Sirf Bot Admin hi kisi group ko authorize kar sakta hai.');
+    await ctx.reply('⚠️ Access Denied: Group authorization is restricted to Platform Administrators.');
     return;
   }
 
@@ -141,7 +141,7 @@ export async function handleAuthCommand(
   } else if (parts.length >= 2) {
     targetGroupId = parseInt(parts[1], 10);
     if (isNaN(targetGroupId)) {
-      await ctx.reply('⚠️ Invalid Group ID! Format: `/auth <group_id> [Optional Group Title]`', { parse_mode: 'Markdown' });
+      await ctx.reply('⚠️ Invalid syntax. Format: `/auth <group_id> [Optional Group Title]`', { parse_mode: 'Markdown' });
       return;
     }
     if (parts.length >= 3) {
@@ -149,9 +149,9 @@ export async function handleAuthCommand(
     }
   } else {
     await ctx.reply(
-      `ℹ️ *Group Authorize Karne Ke 2 Tarike:*\n━━━━━━━━━━━━━━━━━━━━━\n` +
-      `1. Group ke andar jakar seedha type karein: \`/auth\`\n` +
-      `2. Ya yahan private chat me type karein: \`/auth <group_id> [Group Title]\`\n\n` +
+      `ℹ️ *Group Authorization Syntax:*\n━━━━━━━━━━━━━━━━━━━━━\n` +
+      `1. Within the target group, execute directly: \`/auth\`\n` +
+      `2. Or in this chat, submit: \`/auth <group_id> [Group Title]\`\n\n` +
       `Example:\n\`/auth -100123456789 Railway Batch\``,
       { parse_mode: 'Markdown' }
     );
@@ -161,10 +161,10 @@ export async function handleAuthCommand(
   await authorizeGroup(supabase, targetGroupId, targetGroupTitle, ctx.from?.id);
 
   await ctx.reply(
-    `✅ *GROUP AUTHORIZED!*\n━━━━━━━━━━━━━━━━━━━━━\n` +
+    `✅ *COMMUNITY GROUP AUTHORIZED*\n━━━━━━━━━━━━━━━━━━━━━\n` +
     `👥 Group: *${targetGroupTitle}*\n` +
     `🆔 ID: \`${targetGroupId}\`\n\n` +
-    `Ab is group me live quizzes chalenge! Admin wahan \`/groupquiz\` run kar sakte hain. 🚀`,
+    `Group is now authorized to run live examination battles via \`/groupquiz\`. 🚀`,
     { parse_mode: 'Markdown' }
   );
 
@@ -173,9 +173,9 @@ export async function handleAuthCommand(
     try {
       await ctx.api.sendMessage(
         targetGroupId,
-        `🎉 *CONGRATULATIONS!*\n━━━━━━━━━━━━━━━━━━━━━\n` +
-        `Is group ko *Examplayer Bot* use karne ki permission de di gayi hai!\n` +
-        `Admin ab \`/groupquiz\` run karke live battle test shuru kar sakte hain. 🎯`,
+        `🎉 *COMMUNITY ACCESS AUTHORIZED!*\n━━━━━━━━━━━━━━━━━━━━━\n` +
+        `This group has been authorized to access the *Examplayer Examination Platform*.\n` +
+        `Administrators may launch live assessments using \`/groupquiz\`. 🎯`,
         { parse_mode: 'Markdown' }
       );
     } catch {}
@@ -189,7 +189,7 @@ export async function handleUnauthCommand(
   env: Env
 ) {
   if (!isAdmin(ctx, env)) {
-    await ctx.reply('⚠️ Access Denied!');
+    await ctx.reply('⚠️ Access Denied: Administrator privileges required.');
     return;
   }
 
@@ -204,19 +204,19 @@ export async function handleUnauthCommand(
   } else if (parts.length >= 2) {
     targetGroupId = parseInt(parts[1], 10);
     if (isNaN(targetGroupId)) {
-      await ctx.reply('⚠️ Invalid Group ID! Format: `/unauth <group_id>`', { parse_mode: 'Markdown' });
+      await ctx.reply('⚠️ Invalid Group ID. Syntax: `/unauth <group_id>`', { parse_mode: 'Markdown' });
       return;
     }
   } else {
-    await ctx.reply('⚠️ Format: `/unauth` (group ke andar) ya `/unauth <group_id>` (yahan chat me)');
+    await ctx.reply('⚠️ Syntax: `/unauth` (inside group) or `/unauth <group_id>` (direct chat)');
     return;
   }
 
   await revokeGroup(supabase, targetGroupId);
 
   await ctx.reply(
-    `🚫 *GROUP PERMISSION REVOKED!*\n━━━━━━━━━━━━━━━━━━━━━\n` +
-    `Group \`${targetGroupId}\` ki permission hata di gayi hai.`,
+    `🚫 *AUTHORIZATION REVOKED*\n━━━━━━━━━━━━━━━━━━━━━\n` +
+    `Group authorization for \`${targetGroupId}\` has been revoked.`,
     { parse_mode: 'Markdown' }
   );
 }
@@ -228,18 +228,18 @@ export async function handleListGroupsCommand(
   env: Env
 ) {
   if (!isAdmin(ctx, env)) {
-    await ctx.reply('⚠️ Access Denied! Sirf Bot Admin hi groups list dekh sakta hai.');
+    await ctx.reply('⚠️ Access Denied: Group directory is restricted to Platform Administrators.');
     return;
   }
 
   const groups = await getAuthorizedGroups(supabase);
 
   if (groups.length === 0) {
-    await ctx.reply('ℹ️ Abhi koi bhi group authorized nahi hai.');
+    await ctx.reply('ℹ️ No community groups currently authorized.');
     return;
   }
 
-  let text = `📋 *AUTHORIZED GROUPS LIST*\n━━━━━━━━━━━━━━━━━━━━━\n\n`;
+  let text = `📋 *AUTHORIZED COMMUNITY GROUPS*\n━━━━━━━━━━━━━━━━━━━━━\n\n`;
   const keyboard = new InlineKeyboard();
 
   groups.forEach((g) => {
@@ -250,7 +250,7 @@ export async function handleListGroupsCommand(
     if (g.is_active) {
       keyboard.text(`🔴 Revoke ${g.group_title.slice(0, 15)}`, `grp_rev:${g.group_id}`).row();
     } else {
-      keyboard.text(`🟢 Activate ${g.group_title.slice(0, 15)}`, `grp_act:${g.group_id}:${encodeURIComponent(g.group_title)}`).row();
+      keyboard.text(`🟢 Authorize ${g.group_title.slice(0, 15)}`, `grp_act:${g.group_id}:${encodeURIComponent(g.group_title)}`).row();
     }
   });
 

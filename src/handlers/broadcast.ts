@@ -26,7 +26,7 @@ export async function handleBroadcastCommand(
   env: Env
 ) {
   if (!isAdmin(ctx, env)) {
-    return ctx.reply('⚠️ Yeh command sirf Bot Admin (@Anandsawre) ke liye arakshit hai.');
+    return ctx.reply('⚠️ Access Denied: Broadcast console restricted to Platform Administrators.');
   }
   const userId = ctx.from!.id;
 
@@ -56,12 +56,13 @@ export async function handleBroadcastCommand(
 
     if (!messageContent) {
       return ctx.reply(
-        `📢 *ADMIN GLOBAL BROADCAST TOOL*\n━━━━━━━━━━━━━━━━━━━━━\n` +
-        `Broadcast message bhejne ke 2 aasan tareeqe hain:\n\n` +
-        `1️⃣ *Direct Message:* Type kijiye:\n` +
-        `\`/broadcast Priya students, kal subah 10 baje naya mock test live hoga!\`\n\n` +
-        `2️⃣ *Photo / Post Broadcast:* Kisi bhi Photo, Poster ya Formatted message ko send karein, fir usko *Reply* karke type karein \`/broadcast\`!\n\n` +
-        `Broadcast shuru karne se pehle bot aapse confirmation aur target audience puchega.`,
+        `📢 *ADMINISTRATIVE BROADCAST CONSOLE*\n━━━━━━━━━━━━━━━━━━━━━\n` +
+        `Two broadcast dispatch methodologies are supported:\n\n` +
+        `1️⃣ *Inline Transmission:*\n` +
+        `\`/broadcast Attention Candidates: New National Mock Examination is now live!\`\n\n` +
+        `2️⃣ *Media / Document Dispatch:*\n` +
+        `Upload any announcement image, poster, or document, then *Reply* to that message with \`/broadcast\`.\n\n` +
+        `An audience selector dialog will be presented before transmission begins.`,
         { parse_mode: 'Markdown' }
       );
     }
@@ -103,21 +104,21 @@ export async function handleBroadcastCommand(
   }
 
   const confirmKeyboard = new InlineKeyboard()
-    .text(`👤 All Students (${totalUsers})`, `bcast_send:users:${broadcastId}`)
-    .text(`🏛️ All Groups (${totalGroups})`, `bcast_send:groups:${broadcastId}`)
+    .text(`👤 Registered Candidates (${totalUsers})`, `bcast_send:users:${broadcastId}`)
+    .text(`🏛️ Authorized Groups (${totalGroups})`, `bcast_send:groups:${broadcastId}`)
     .row()
-    .text(`🌐 Everyone (Users + Groups)`, `bcast_send:all:${broadcastId}`)
+    .text(`🌐 All Channels (Users + Groups)`, `bcast_send:all:${broadcastId}`)
     .row()
-    .text(`❌ Cancel Broadcast`, `bcast_cancel:${broadcastId}`);
+    .text(`❌ Abort Transmission`, `bcast_cancel:${broadcastId}`);
 
   await ctx.reply(
     `📢 *BROADCAST DISPATCH CONTROLLER*\n━━━━━━━━━━━━━━━━━━━━━\n` +
-    `🎯 *Potential Reach:*\n` +
-    `  • 👤 Registered Students: \`${totalUsers}\`\n` +
-    `  • 🏛️ Authorized Groups: \`${totalGroups}\`\n\n` +
-    `📝 *Content Preview:*\n━━━━━━━━━━━━━━━━━━━━━\n` +
+    `🎯 *Audience Reach:*\n` +
+    `  • 👤 Registered Candidates: \`${totalUsers}\`\n` +
+    `  • 🏛️ Authorized Communities: \`${totalGroups}\`\n\n` +
+    `📝 *Payload Preview:*\n━━━━━━━━━━━━━━━━━━━━━\n` +
     `${previewContent}\n━━━━━━━━━━━━━━━━━━━━━\n\n` +
-    `Kripya select kijiye ki yeh message kinhe dispatch karna hai:`,
+    `Select the intended distribution audience to initialize transmission:`,
     {
       parse_mode: 'Markdown',
       reply_markup: confirmKeyboard,
@@ -144,25 +145,25 @@ export async function handleBroadcastCallback(
 
   if (action === 'cancel') {
     pendingBroadcasts.delete(broadcastId);
-    await ctx.answerCallbackQuery({ text: 'Broadcast cancel kar diya gaya.' });
-    return ctx.editMessageText('❌ *Broadcast Cancelled.* Koi bhi message send nahi kiya gaya.', {
+    await ctx.answerCallbackQuery({ text: 'Transmission aborted.' });
+    return ctx.editMessageText('❌ *Broadcast Aborted.* No outbound messages were dispatched.', {
       parse_mode: 'Markdown',
     });
   }
 
   if (!broadcast) {
     return ctx.answerCallbackQuery({
-      text: 'Yeh broadcast session expire ho chuka hai. Kripya fir se /broadcast karein.',
+      text: 'Broadcast session expired. Please reinitiate via /broadcast.',
       show_alert: true,
     });
   }
 
-  await ctx.answerCallbackQuery({ text: '🚀 Broadcast shuru ho gaya!' });
+  await ctx.answerCallbackQuery({ text: '🚀 Transmission in progress...' });
   pendingBroadcasts.delete(broadcastId);
 
   const statusMsg = await ctx.editMessageText(
     `🚀 *Broadcasting In Progress...*\n━━━━━━━━━━━━━━━━━━━━━\n` +
-    `⏳ Dispatch shuru ho gaya hai, kripya intezar karein...`,
+    `⏳ Dispatch sequence active. Processing batch queue...`,
     { parse_mode: 'Markdown' }
   );
 
@@ -263,18 +264,18 @@ async function dispatchBroadcastInBackground(
     await ctx.api.editMessageText(
       broadcast.fromChatId,
       statusMessageId,
-      `✅ *BROADCAST DISPATCH COMPLETED!*\n━━━━━━━━━━━━━━━━━━━━━\n` +
-      `🎯 *Audience:* ${targetType.toUpperCase()}\n` +
-      `👥 *Total Targeted:* \`${total}\`\n` +
+      `✅ *BROADCAST DISPATCH COMPLETED*\n━━━━━━━━━━━━━━━━━━━━━\n` +
+      `🎯 *Audience Sector:* ${targetType.toUpperCase()}\n` +
+      `👥 *Recipients Targeted:* \`${total}\`\n` +
       `✅ *Successfully Delivered:* \`${delivered}\`\n` +
-      `🚫 *Blocked / Deactivated:* \`${blocked}\`\n` +
-      `⚠️ *Failed:* \`${failed}\`\n` +
-      `⏱️ *Time Taken:* \`${durationSec} seconds\``,
+      `🚫 *Unreachable / Blocked:* \`${blocked}\`\n` +
+      `⚠️ *Transmission Errors:* \`${failed}\`\n` +
+      `⏱️ *Elapsed Duration:* \`${durationSec} seconds\``,
       { parse_mode: 'Markdown' }
     );
   } catch {
     await ctx.reply(
-      `✅ *Broadcast Complete!*\nDelivered: ${delivered}/${total} in ${durationSec}s.`,
+      `✅ *Broadcast Complete*\nDelivered: ${delivered}/${total} in ${durationSec}s.`,
       { parse_mode: 'Markdown' }
     );
   }

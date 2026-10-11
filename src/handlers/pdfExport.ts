@@ -27,11 +27,11 @@ export async function handleDownloadPdfScorecard(
 
   if (ctx.callbackQuery) {
     await ctx.answerCallbackQuery({
-      text: '📄 Generating your official PDF document... Kripya 2 second wait karein!',
+      text: '📄 Compiling official examination report and solutions... Please wait.',
     });
   }
 
-  const waitMsg = await ctx.reply('⏳ *Generating your PDF Document...*\n_Ham aapka high-resolution Scorecard & Solutions PDF taiyar kar rahe hain..._', {
+  const waitMsg = await ctx.reply('⏳ *Generating Official Examination Booklet...*\n_Compiling your high-resolution Scorecard & Solutions PDF document..._', {
     parse_mode: 'Markdown',
   });
 
@@ -41,7 +41,7 @@ export async function handleDownloadPdfScorecard(
       await ctx.api.editMessageText(
         ctx.chat!.id,
         waitMsg.message_id,
-        '❌ Quiz nahi mila.'
+        '❌ Examination module not found.'
       );
       return;
     }
@@ -51,7 +51,7 @@ export async function handleDownloadPdfScorecard(
       await ctx.api.editMessageText(
         ctx.chat!.id,
         waitMsg.message_id,
-        '❌ Is quiz me questions uplabdh nahi hain.'
+        '❌ No questions recorded for this examination module.'
       );
       return;
     }
@@ -92,13 +92,13 @@ export async function handleDownloadPdfScorecard(
       new InputFile(pdfBuffer, filename),
       {
         caption:
-          `📄 *Official Examplayer PDF Booklet*\n` +
-          `━━━━━━━━━━━━━━━━━━━━━\n` +
-          `📚 *Test:* ${quiz.title}\n` +
+          `📄 *Official Examination Document*\n` +
+          `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+          `📚 *Examination:* ${quiz.title}\n` +
           `👤 *Candidate:* ${studentInfo.name}\n` +
-          (result ? `🎯 *Your Score:* ${result.finalScore} / ${result.maxScore} (${result.accuracy}% Accuracy)\n` : '') +
+          (result ? `🎯 *Final Score:* ${result.finalScore} / ${result.maxScore} (${result.accuracy}% Accuracy)\n` : '') +
           `❓ *Total Questions:* ${questions.length}\n\n` +
-          `✨ Is PDF me sabhi questions ke correct answers aur detailed explanations shaamil hain. Revision ke liye save karein!`,
+          `✨ This document contains complete verified answer keys, candidate responses, and detailed question-by-question explanations for revision.`,
         parse_mode: 'Markdown',
       }
     );
@@ -111,7 +111,7 @@ export async function handleDownloadPdfScorecard(
       await ctx.api.editMessageText(
         ctx.chat!.id,
         waitMsg.message_id,
-        '⚠️ PDF generate karne me takleef hui. Kripya thodi der baad prayas karein.'
+        '⚠️ An error occurred during PDF generation. Please retry in a few moments.'
       );
     } catch {}
   }

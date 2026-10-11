@@ -48,11 +48,11 @@ export function calculateQuizResult(
   const endTime = Date.now();
   const timeTakenSeconds = Math.max(1, Math.round((endTime - startTime) / 1000));
 
-  let remark = '📚 Needs Improvement';
-  if (percentage >= 90) remark = '🏆 Outstanding! Topper Level';
-  else if (percentage >= 75) remark = '🌟 Excellent Performance!';
-  else if (percentage >= 60) remark = '👍 Good Job! Passed';
-  else if (percentage >= 40) remark = '📈 Average! Keep Practicing';
+  let remark = '📚 Needs Revision (Below Cutoff)';
+  if (percentage >= 90) remark = '🏆 OUTSTANDING (Distinction / Top 1%)';
+  else if (percentage >= 75) remark = '🌟 EXCELLENT (Grade A - Merit Rank)';
+  else if (percentage >= 60) remark = '👍 GOOD (Grade B - Qualified)';
+  else if (percentage >= 40) remark = '📈 SATISFACTORY (Grade C - Passed)';
 
   return {
     totalQuestions,

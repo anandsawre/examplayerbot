@@ -146,12 +146,12 @@ export async function handleScheduleCommand(ctx: Context, supabase: SupabaseClie
 
   if (ctx.chat.type === 'private') {
     return ctx.reply(
-      `⏰ *Group Quiz Scheduler*\n━━━━━━━━━━━━━━━━━━━━━\n` +
-      `Yeh feature Telegram Groups ke liye hai!\n\n` +
-      `Apne group me automatic live quiz schedule karne ke liye:\n` +
-      `1. Bot ko group me Admin banayein.\n` +
-      `2. Group me type kijiye: \`/schedule\`\n\n` +
-      `Aap delay (e.g. 15 min) ya exact custom time (e.g. 07:00 PM) par quiz auto-start karwa sakte hain! 🎯`,
+      `⏰ *EXAMINATION SCHEDULER*\n━━━━━━━━━━━━━━━━━━━━━\n` +
+      `This operational feature is designed specifically for authorized Community Groups.\n\n` +
+      `*Setup Instructions:*\n` +
+      `1. Add Examplayer Bot to your community group with Administrator privileges.\n` +
+      `2. In the group, execute: \`/schedule\`\n\n` +
+      `You may configure express launch delays (e.g. 15 mins) or target specific Indian Standard Time (IST) examination slots! 🎯`,
       { parse_mode: 'Markdown' }
     );
   }
@@ -161,18 +161,18 @@ export async function handleScheduleCommand(ctx: Context, supabase: SupabaseClie
   // Authorization check
   const isAuth = await isGroupAuthorized(supabase, chatId);
   if (!isAuth) {
-    return ctx.reply('⚠️ Yeh group authorized nahi hai. Quiz schedule karne ke liye Bot Admin se sampark karein.');
+    return ctx.reply('⚠️ Community group not authorized. Please contact the platform administrator to activate group privileges.');
   }
 
   // Admin permission check
   const userIsAdmin = await isGroupAdmin(ctx);
   if (!userIsAdmin) {
-    return ctx.reply('⚠️ Sirf Group Admins hi quiz schedule kar sakte hain.');
+    return ctx.reply('⚠️ Access Denied: Group quiz scheduling is restricted to Community Administrators.');
   }
 
   // Check if a quiz is currently running
   if (activeGroupBattles.has(chatId)) {
-    return ctx.reply('⚠️ Is group me pehle se ek quiz chal raha hai! Pehle use pura hone dein.');
+    return ctx.reply('⚠️ An active live examination battle is already in progress. Please await its conclusion.');
   }
 
   // Check if already scheduled
@@ -184,19 +184,19 @@ export async function handleScheduleCommand(ctx: Context, supabase: SupabaseClie
     const dateFormatted = formatISTDate(existing.targetTime);
 
     return ctx.reply(
-      `⏰ *Quiz Pehle Se Scheduled Hai!*\n━━━━━━━━━━━━━━━━━━━━━\n` +
-      `📝 *Test:* ${existing.quizTitle}\n` +
-      `📅 *Date:* ${dateFormatted}\n` +
-      `🕒 *Start Time:* ${timeFormatted} (IST)\n` +
-      `⏳ *Remaining:* ~${remainingMins} minutes\n\n` +
-      `Cancel karne ke liye type kijiye: \`/cancel_schedule\``,
+      `⏰ *ACTIVE SCHEDULE DETECTED*\n━━━━━━━━━━━━━━━━━━━━━\n` +
+      `📝 *Examination:* ${existing.quizTitle}\n` +
+      `📅 *Scheduled Date:* ${dateFormatted}\n` +
+      `🕒 *Target Time:* ${timeFormatted} (IST)\n` +
+      `⏳ *Time Remaining:* ~${remainingMins} minutes\n\n` +
+      `To abort this scheduled session, execute: \`/cancel_schedule\``,
       { parse_mode: 'Markdown' }
     );
   }
 
   const quizzes = await getActiveQuizzes(supabase);
   if (!quizzes || quizzes.length === 0) {
-    return ctx.reply('⚠️ Abhi koi test active nahi hai.');
+    return ctx.reply('⚠️ No active examinations found in the repository.');
   }
 
   const keyboard = new InlineKeyboard();
@@ -205,8 +205,8 @@ export async function handleScheduleCommand(ctx: Context, supabase: SupabaseClie
   });
 
   await ctx.reply(
-    `⏰ *SCHEDULE GROUP QUIZ*\n━━━━━━━━━━━━━━━━━━━━━\n` +
-    `Kripya select kijiye ki kaun sa test group me schedule karna hai:`,
+    `⏰ *SCHEDULE GROUP EXAMINATION*\n━━━━━━━━━━━━━━━━━━━━━\n` +
+    `Select the examination module to schedule for this community group:`,
     {
       parse_mode: 'Markdown',
       reply_markup: keyboard,
@@ -225,39 +225,39 @@ export async function handleSchedulePickQuiz(
   const userIsAdmin = await isGroupAdmin(ctx);
   if (!userIsAdmin) {
     return ctx.answerCallbackQuery({
-      text: '⚠️ Sirf Group Admin hi schedule set kar sakta hai!',
+      text: '⚠️ Action restricted to Group Administrators.',
       show_alert: true,
     });
   }
 
   const quiz = await getQuizById(supabase, quizId);
   if (!quiz) {
-    return ctx.answerCallbackQuery({ text: 'Quiz nahi mila!', show_alert: true });
+    return ctx.answerCallbackQuery({ text: 'Examination not found.', show_alert: true });
   }
 
   await ctx.answerCallbackQuery();
 
   const keyboard = new InlineKeyboard()
-    .text('⏳ 2 Mins (Quick Demo)', `sch_set:${quiz.id}:2`)
-    .text('⏳ 5 Mins', `sch_set:${quiz.id}:5`)
+    .text('⏱️ 2 Mins (Express)', `sch_set:${quiz.id}:2`)
+    .text('⏱️ 5 Mins', `sch_set:${quiz.id}:5`)
     .row()
-    .text('⏳ 15 Mins', `sch_set:${quiz.id}:15`)
-    .text('⏳ 30 Mins', `sch_set:${quiz.id}:30`)
+    .text('⏱️ 15 Mins', `sch_set:${quiz.id}:15`)
+    .text('⏱️ 30 Mins', `sch_set:${quiz.id}:30`)
     .row()
-    .text('⏳ 1 Hour', `sch_set:${quiz.id}:60`)
-    .text('⏳ 2 Hours', `sch_set:${quiz.id}:120`)
+    .text('⏱️ 1 Hour', `sch_set:${quiz.id}:60`)
+    .text('⏱️ 2 Hours', `sch_set:${quiz.id}:120`)
     .row()
-    .text('🕒 Tonight 08:00 PM', `sch_preset:${quiz.id}:20:00`)
-    .text('🕒 Tonight 09:00 PM', `sch_preset:${quiz.id}:21:00`)
+    .text('🕒 Today 08:00 PM IST', `sch_preset:${quiz.id}:20:00`)
+    .text('🕒 Today 09:00 PM IST', `sch_preset:${quiz.id}:21:00`)
     .row()
-    .text('✏️ Custom Date / Time (Enter manually)', `sch_custom:${quiz.id}`)
+    .text('📅 Custom Date & Time Slot', `sch_custom:${quiz.id}`)
     .row()
-    .text('❌ Cancel', 'sch_cancel');
+    .text('❌ Abort Scheduler', 'sch_cancel');
 
   await ctx.editMessageText(
-    `⏰ *Select Start Time for Quiz:*\n━━━━━━━━━━━━━━━━━━━━━\n` +
+    `⏰ *Select Examination Slot:*\n━━━━━━━━━━━━━━━━━━━━━\n` +
     `📝 *Test:* ${quiz.title}\n\n` +
-    `Yeh quiz group me kab automatically shuru hona chahiye? Preset chunein ya custom time enter karein:`,
+    `Select an automated launch preset or specify a custom Indian Standard Time (IST) slot:`,
     {
       parse_mode: 'Markdown',
       reply_markup: keyboard,
@@ -278,12 +278,12 @@ export async function handleScheduleCustomPrompt(
 
   const userIsAdmin = await isGroupAdmin(ctx);
   if (!userIsAdmin) {
-    return ctx.answerCallbackQuery({ text: '⚠️ Sirf Group Admin hi time set kar sakte hain!', show_alert: true });
+    return ctx.answerCallbackQuery({ text: '⚠️ Action restricted to Group Administrators.', show_alert: true });
   }
 
   const quiz = await getQuizById(supabase, quizId);
   if (!quiz) {
-    return ctx.answerCallbackQuery({ text: 'Quiz nahi mila!', show_alert: true });
+    return ctx.answerCallbackQuery({ text: 'Examination not found.', show_alert: true });
   }
 
   await ctx.answerCallbackQuery();
@@ -291,21 +291,21 @@ export async function handleScheduleCustomPrompt(
   // Save pending quiz for this group
   pendingCustomScheduleQuiz.set(chatId, { quizId, adminId: ctx.from!.id });
 
-  const cancelKeyboard = new InlineKeyboard().text('❌ Cancel', 'sch_cancel');
+  const cancelKeyboard = new InlineKeyboard().text('❌ Abort', 'sch_cancel');
 
   await ctx.editMessageText(
     `🕒 *ENTER CUSTOM DATE & TIME (IST)*\n━━━━━━━━━━━━━━━━━━━━━\n` +
     `📝 *Test:* ${quiz.title}\n\n` +
-    `Aap kisi bhi convenient format me time set kar sakte hain:\n\n` +
-    `1️⃣ *Aaj ka Time (HH:MM):*\n` +
-    `Type: \`/scheduletime 18:30\` _(Shaam 6:30 baje)_\n` +
-    `Type: \`/scheduletime 7:30 PM\` _(Shaam 7:30 baje)_\n` +
-    `Type: \`/scheduletime 21:00\` _(Raat 9:00 baje)_\n\n` +
+    `You can schedule via any standard Indian Standard Time format:\n\n` +
+    `1️⃣ *Today's Slot (HH:MM / 12-hour):*\n` +
+    `• Command: \`/scheduletime 18:30\` _(06:30 PM IST)_\n` +
+    `• Command: \`/scheduletime 7:30 PM\` _(07:30 PM IST)_\n` +
+    `• Command: \`/scheduletime 21:00\` _(09:00 PM IST)_\n\n` +
     `2️⃣ *Specific Date & Time (DD/MM HH:MM):*\n` +
-    `Type: \`/scheduletime 12/10 10:00\` _(12 Oct subah 10:00 baje)_\n\n` +
-    `3️⃣ *Minutes baad:*\n` +
-    `Type: \`/scheduletime 45\` _(45 minute baad)_\n\n` +
-    `Kripya is chat me command type karke send karein! ⬇️`,
+    `• Command: \`/scheduletime 12/10 10:00\` _(12 Oct at 10:00 AM IST)_\n\n` +
+    `3️⃣ *Relative Minutes Delay:*\n` +
+    `• Command: \`/scheduletime 45\` _(45 minutes delay)_\n\n` +
+    `Submit your desired command in this group chat to confirm scheduling.`,
     {
       parse_mode: 'Markdown',
       reply_markup: cancelKeyboard,
@@ -349,19 +349,19 @@ export async function handleScheduleSetTime(
  */
 export async function handleCustomTimeCommand(ctx: Context, supabase: SupabaseClient) {
   if (!ctx.chat || ctx.chat.type === 'private') {
-    return ctx.reply('⚠️ Yeh command Telegram groups ke liye hai.');
+    return ctx.reply('⚠️ Command restricted to Telegram community groups.');
   }
 
   const chatId = ctx.chat.id;
 
   const isAuth = await isGroupAuthorized(supabase, chatId);
   if (!isAuth) {
-    return ctx.reply('⚠️ Yeh group authorized nahi hai.');
+    return ctx.reply('⚠️ Community group not authorized.');
   }
 
   const userIsAdmin = await isGroupAdmin(ctx);
   if (!userIsAdmin) {
-    return ctx.reply('⚠️ Sirf Group Admins hi schedule set kar sakte hain.');
+    return ctx.reply('⚠️ Access Denied: Group scheduling is restricted to Group Administrators.');
   }
 
   const text = ctx.message?.text || '';
@@ -371,13 +371,13 @@ export async function handleCustomTimeCommand(ctx: Context, supabase: SupabaseCl
 
   if (!rawInput) {
     return ctx.reply(
-      `🕒 *Custom Schedule Format:*\n\n` +
-      `Type kijiye: \`/scheduletime <time>\`\n\n` +
-      `Examples:\n` +
-      `• \`/scheduletime 18:30\` (Shaam 6:30 baje)\n` +
-      `• \`/scheduletime 7:00 PM\` (Shaam 7:00 baje)\n` +
-      `• \`/scheduletime 12/10 10:00\` (12 Oct subah 10 baje)\n` +
-      `• \`/scheduletime 45\` (45 minute baad)`,
+      `🕒 *Custom Schedule Command Syntax:*\n━━━━━━━━━━━━━━━━━━━━━\n` +
+      `Execute: \`/scheduletime <time_expression>\`\n\n` +
+      `*Accepted Formats:*\n` +
+      `• \`/scheduletime 18:30\` (24-Hour IST format)\n` +
+      `• \`/scheduletime 7:00 PM\` (12-Hour IST format)\n` +
+      `• \`/scheduletime 12/10 10:00\` (Date + Time)\n` +
+      `• \`/scheduletime 45\` (Relative minutes delay)`,
       { parse_mode: 'Markdown' }
     );
   }
@@ -389,7 +389,7 @@ export async function handleCustomTimeCommand(ctx: Context, supabase: SupabaseCl
   if (!quizId) {
     const quizzes = await getActiveQuizzes(supabase);
     if (!quizzes || quizzes.length === 0) {
-      return ctx.reply('⚠️ Abhi koi test active nahi hai.');
+      return ctx.reply('⚠️ No active examinations found in the repository.');
     }
     quizId = quizzes[0].id;
   }
@@ -397,23 +397,23 @@ export async function handleCustomTimeCommand(ctx: Context, supabase: SupabaseCl
   const parsed = parseIndianDateTime(rawInput);
   if (!parsed) {
     return ctx.reply(
-      `⚠️ *Invalid Time Format!*\n━━━━━━━━━━━━━━━━━━━━━\n` +
-      `Ham aapka time recognize nahi kar sake: "${rawInput}"\n\n` +
-      `Kripya inme se kisi format me likhein:\n` +
-      `• \`/scheduletime 18:30\` (24-hour)\n` +
-      `• \`/scheduletime 6:30 PM\` (12-hour)\n` +
-      `• \`/scheduletime 12/10 10:00\` (Date + Time)\n` +
-      `• \`/scheduletime 45\` (Minutes)`,
+      `⚠️ *Unrecognized Time Expression*\n━━━━━━━━━━━━━━━━━━━━━\n` +
+      `Could not parse target time: "${rawInput}"\n\n` +
+      `Please provide input adhering to standard formats:\n` +
+      `• \`/scheduletime 18:30\` (24-Hour IST)\n` +
+      `• \`/scheduletime 6:30 PM\` (12-Hour IST)\n` +
+      `• \`/scheduletime 12/10 10:00\` (DD/MM HH:MM)\n` +
+      `• \`/scheduletime 45\` (Relative minutes delay)`,
       { parse_mode: 'Markdown' }
     );
   }
 
   if (parsed.delayMs < 30 * 1000) {
-    return ctx.reply('⚠️ Schedule time vartaman samay se kam se kam 1 minute aage hona chahiye.');
+    return ctx.reply('⚠️ Scheduled time must be at least 1 minute into the future.');
   }
 
   if (parsed.delayMs > 7 * 24 * 60 * 60 * 1000) {
-    return ctx.reply('⚠️ Test ko maximum 7 din tak ke liye hi schedule kiya ja sakta hai.');
+    return ctx.reply('⚠️ Examinations may be scheduled up to a maximum of 7 days in advance.');
   }
 
   // Clear pending
@@ -461,9 +461,9 @@ async function setupGroupSchedule(
       try {
         await ctx.api.sendMessage(
           chatId,
-          `🚨 *1 MINUTE REMINDER!* 🚨\n━━━━━━━━━━━━━━━━━━━━━\n` +
-          `Group quiz *${quiz.title}* theek 60 seconds me live shuru hoga!\n` +
-          `Sabhi participants screen par ready rahein! 🎯`,
+          `🚨 *1-MINUTE EXAMINATION NOTICE* 🚨\n━━━━━━━━━━━━━━━━━━━━━\n` +
+          `Live assessment battle *${quiz.title}* will commence in exactly 60 seconds!\n` +
+          `All participating candidates please prepare your screens. 🎯`,
           { parse_mode: 'Markdown' }
         );
       } catch (err) {
@@ -479,12 +479,12 @@ async function setupGroupSchedule(
     // Verify group still authorized
     const isAuth = await isGroupAuthorized(supabase, chatId);
     if (!isAuth) {
-      await ctx.api.sendMessage(chatId, '⚠️ Group authorization expire ho chuki hai. Scheduled quiz start nahi ho paya.');
+      await ctx.api.sendMessage(chatId, '⚠️ Group authorization has expired. Scheduled examination could not be initiated.');
       return;
     }
 
     if (activeGroupBattles.has(chatId)) {
-      await ctx.api.sendMessage(chatId, '⚠️ Dusra quiz pehle se chal raha hone ke karan scheduled quiz start nahi ho saka.');
+      await ctx.api.sendMessage(chatId, '⚠️ An active assessment is currently running in this group. Scheduled launch skipped.');
       return;
     }
 
@@ -505,16 +505,16 @@ async function setupGroupSchedule(
   });
 
   const remainingMins = Math.max(1, Math.round(delayMs / 60000));
-  const cancelKeyboard = new InlineKeyboard().text('🛑 Cancel Schedule', 'sch_cancel');
+  const cancelKeyboard = new InlineKeyboard().text('🛑 Cancel Scheduled Session', 'sch_cancel');
 
   const announcement =
-    `⏰ *QUIZ SCHEDULED SUCCESSFULLY!*\n━━━━━━━━━━━━━━━━━━━━━\n` +
+    `⏰ *EXAMINATION SCHEDULED SUCCESSFULLY*\n━━━━━━━━━━━━━━━━━━━━━\n` +
     `📝 *Test:* ${quiz.title}\n` +
-    `📅 *Date:* ${dateFormatted}\n` +
-    `🕒 *Auto Start Time:* ${timeFormatted} (IST)\n` +
-    `⏳ *Starting in:* ~${remainingMins} Minutes\n` +
+    `📅 *Scheduled Date:* ${dateFormatted}\n` +
+    `🕒 *Auto-Launch Time:* ${timeFormatted} (IST)\n` +
+    `⏳ *Countdown:* ~${remainingMins} Minutes\n` +
     `👤 *Scheduled By:* ${adminName}\n\n` +
-    `⚡ Test shuru hone se 1 minute pehle reminder aayega. Admin chahein to neeche diye gaye button ya \`/cancel_schedule\` se kabhi bhi cancel kar sakte hain.`;
+    `⚡ A 1-minute alert will be dispatched prior to commencement. Group Administrators may cancel at any time via the button below or \`/cancel_schedule\`.`;
 
   if (ctx.callbackQuery) {
     await ctx.answerCallbackQuery({ text: `Scheduled for ${timeFormatted} IST!` }).catch(() => {});
@@ -556,28 +556,28 @@ export function cancelGroupSchedule(chatId: number): boolean {
  */
 export async function handleCancelScheduleCommand(ctx: Context) {
   if (!ctx.chat || ctx.chat.type === 'private') {
-    return ctx.reply('⚠️ Yeh command Telegram groups ke liye hai.');
+    return ctx.reply('⚠️ Command restricted to Telegram community groups.');
   }
 
   const chatId = ctx.chat.id;
   const userIsAdmin = await isGroupAdmin(ctx);
   if (!userIsAdmin) {
-    return ctx.reply('⚠️ Sirf Group Admins hi schedule cancel kar sakte hain.');
+    return ctx.reply('⚠️ Access Denied: Only Group Administrators can cancel scheduled sessions.');
   }
 
   const wasCancelled = cancelGroupSchedule(chatId);
   if (ctx.callbackQuery) {
-    await ctx.answerCallbackQuery({ text: 'Schedule cancelled!' }).catch(() => {});
+    await ctx.answerCallbackQuery({ text: 'Scheduled session cancelled.' }).catch(() => {});
   }
 
   if (wasCancelled) {
     await ctx.reply(
-      `🛑 *SCHEDULED QUIZ CANCELLED!*\n━━━━━━━━━━━━━━━━━━━━━\n` +
-      `Admin dwara aane wala scheduled quiz cancel kar diya gaya hai.`,
+      `🛑 *SCHEDULED SESSION CANCELLED*\n━━━━━━━━━━━━━━━━━━━━━\n` +
+      `The scheduled examination battle has been cancelled by an administrator.`,
       { parse_mode: 'Markdown' }
     );
   } else {
-    await ctx.reply('ℹ️ Is group me koi quiz scheduled nahi hai.');
+    await ctx.reply('ℹ️ No active scheduled examination session exists for this group.');
   }
 }
 
@@ -586,14 +586,14 @@ export async function handleCancelScheduleCommand(ctx: Context) {
  */
 export async function handleScheduledStatusCommand(ctx: Context) {
   if (!ctx.chat || ctx.chat.type === 'private') {
-    return ctx.reply('⚠️ Yeh command Telegram groups ke liye hai.');
+    return ctx.reply('⚠️ Command restricted to Telegram community groups.');
   }
 
   const chatId = ctx.chat.id;
   const existing = scheduledGroupQuizzes.get(chatId);
 
   if (!existing) {
-    return ctx.reply('ℹ️ Is group me abhi koi quiz scheduled nahi hai. Schedule karne ke liye `/schedule` type karein.', {
+    return ctx.reply('ℹ️ No examination currently scheduled. Administrators may initiate scheduling via `/schedule`.', {
       parse_mode: 'Markdown',
     });
   }
@@ -603,15 +603,15 @@ export async function handleScheduledStatusCommand(ctx: Context) {
   const timeFormatted = formatISTTime(existing.targetTime);
   const dateFormatted = formatISTDate(existing.targetTime);
 
-  const cancelKeyboard = new InlineKeyboard().text('🛑 Cancel Schedule', 'sch_cancel');
+  const cancelKeyboard = new InlineKeyboard().text('🛑 Cancel Scheduled Session', 'sch_cancel');
 
   await ctx.reply(
-    `⏰ *CURRENT SCHEDULED QUIZ:*\n━━━━━━━━━━━━━━━━━━━━━\n` +
+    `⏰ *SCHEDULED EXAMINATION STATUS*\n━━━━━━━━━━━━━━━━━━━━━\n` +
     `📝 *Test:* ${existing.quizTitle}\n` +
     `📅 *Date:* ${dateFormatted}\n` +
-    `🕒 *Start Time:* ${timeFormatted} (IST)\n` +
-    `⏳ *Remaining:* ~${remainingMins} Minutes\n` +
-    `👤 *Scheduled By:* ${existing.scheduledBy}`,
+    `🕒 *Target Time:* ${timeFormatted} (IST)\n` +
+    `⏳ *Time Remaining:* ~${remainingMins} Minutes\n` +
+    `👤 *Configured By:* ${existing.scheduledBy}`,
     {
       parse_mode: 'Markdown',
       reply_markup: cancelKeyboard,

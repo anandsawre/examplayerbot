@@ -54,30 +54,30 @@ export function renderScorecardMessage(
   const timeFormatted = formatTime(result.timeTakenSeconds);
 
   let text = `🎓 *EXAMPLAYER OFFICIAL SCORECARD*\n`;
-  text += `━━━━━━━━━━━━━━━━━━━━━\n`;
-  text += `👤 *Student:* ${escapeMarkdown(userName)}\n`;
-  text += `📚 *Test:* ${escapeMarkdown(quiz.title)}\n`;
-  text += `━━━━━━━━━━━━━━━━━━━━━\n\n`;
+  text += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+  text += `👤 *Candidate:* ${escapeMarkdown(userName)}\n`;
+  text += `📚 *Examination:* ${escapeMarkdown(quiz.title)}\n`;
+  text += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
 
-  text += `🎯 *Total Score:* \`${result.finalScore} / ${result.maxScore}\` (${result.percentage}%)\n`;
-  text += `📊 *Accuracy:* \`${result.accuracy}%\`\n`;
-  text += `⏱️ *Time Taken:* \`${timeFormatted}\`\n\n`;
+  text += `🎯 *Total Marks Scored:* \`${result.finalScore} / ${result.maxScore}\` (${result.percentage}%)\n`;
+  text += `📊 *Examination Accuracy:* \`${result.accuracy}%\`\n`;
+  text += `⏱️ *Total Time Consumed:* \`${timeFormatted}\`\n\n`;
 
-  text += `*Performance Breakdown:*\n`;
-  text += `  • ✅ Correct: \`${result.correctCount}\`\n`;
-  text += `  • ❌ Incorrect: \`${result.wrongCount}\` (Penalty: -${result.wrongCount * Number(quiz.negative_marks)})\n`;
-  text += `  • ⏭️ Skipped: \`${result.skippedCount}\`\n\n`;
+  text += `*Sectional Performance Breakdown:*\n`;
+  text += `  • ✅ Correct Responses: \`${result.correctCount}\`\n`;
+  text += `  • ❌ Incorrect Responses: \`${result.wrongCount}\` (Penalty: -${result.wrongCount * Number(quiz.negative_marks)})\n`;
+  text += `  • ⏭️ Unattempted / Skipped: \`${result.skippedCount}\`\n\n`;
 
-  text += `🎖️ *Verdict:* ${result.remark}\n`;
+  text += `🎖️ *Evaluation Status:* ${result.remark}\n`;
 
   const keyboard = new InlineKeyboard()
-    .url('🔄 Retake Solo Test', `https://t.me/${botUsername}?start=quiz_${quiz.id}`)
-    .text('🏆 Leaderboard', `lb:${quiz.id}`)
+    .url('🔄 Retake Examination', `https://t.me/${botUsername}?start=quiz_${quiz.id}`)
+    .text('🏆 Merit List & Rankings', `lb:${quiz.id}`)
     .row()
-    .text('📄 Download PDF Scorecard & Solutions', `pdf_scorecard:${quiz.id}`)
+    .text('📄 Download Official PDF Report & Solutions', `pdf_scorecard:${quiz.id}`)
     .row()
-    .url('📋 All Quizzes', `https://t.me/${botUsername}?start=quizzes`)
-    .url('👤 My Profile', `https://t.me/${botUsername}?start=profile`);
+    .url('📋 All Examinations', `https://t.me/${botUsername}?start=quizzes`)
+    .url('👤 Candidate Profile', `https://t.me/${botUsername}?start=profile`);
 
   return { text, keyboard };
 }

@@ -11,7 +11,7 @@ export async function handleSettingsCommand(
   env: Env
 ) {
   if (!isAdmin(ctx, env)) {
-    await ctx.reply('⚠️ Sirf Bot Admin hi settings access kar sakta hai.');
+    await ctx.reply('⚠️ Access Denied: Administrative console restricted to Platform Administrators.');
     return;
   }
 
@@ -19,28 +19,30 @@ export async function handleSettingsCommand(
   const price = await getSetting(supabase, 'premium_price', env.PREMIUM_PRICE || '99');
   const channel = await getSetting(supabase, 'required_channel', env.REQUIRED_CHANNEL || '');
 
-  const channelText = channel ? channel : '❌ Disabled (Koi channel join zaroori nahi)';
+  const channelText = channel ? channel : '❌ Disabled (No subscription required)';
 
   const text =
-    `⚙️ *EXAMPLAYER BOT ADMIN DASHBOARD*\n` +
-    `━━━━━━━━━━━━━━━━━━━━━\n\n` +
-    `💳 *Current UPI ID:* \`${upiId}\`\n` +
-    `💰 *Test Series Price:* \`₹${price}\`\n` +
-    `📢 *Required Channel:* \`${channelText}\`\n\n` +
-    `━━━━━━━━━━━━━━━━━━━━━\n` +
-    `🛠️ *Settings Badalane Ke Liye Commands:*\n\n` +
-    `• \`/setupi <new_upi>\`\n` +
-    `  Example: \`/setupi rahul@okhdfcbank\`\n\n` +
+    `⚙️ *ADMINISTRATIVE CONFIGURATION DASHBOARD*\n` +
+    `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+    `💳 *Active UPI VPA:* \`${upiId}\`\n` +
+    `💰 *Scholar Pass Tariff:* \`₹${price}\`\n` +
+    `📢 *Mandatory Channel:* \`${channelText}\`\n\n` +
+    `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+    `🛠️ *Administrative Console Commands:*\n\n` +
+    `• \`/setupi <new_vpa>\`\n` +
+    `  Configure settlement UPI VPA address.\n\n` +
     `• \`/setprice <amount>\`\n` +
-    `  Example: \`/setprice 149\`\n\n` +
+    `  Update Scholar Pass registration fee.\n\n` +
     `• \`/setchannel <@channel>\`\n` +
-    `  Example: \`/setchannel @MyExamNotes\`\n\n` +
+    `  Enforce mandatory broadcast channel subscription.\n\n` +
     `• \`/unsetchannel\`\n` +
-    `  (Channel requirement band karne ke liye)\n\n` +
+    `  Deactivate mandatory channel requirement.\n\n` +
     `• \`/unlock <user_id>\`\n` +
-    `  (Kisi student ko manual access dene ke liye)\n\n` +
+    `  Manually grant Premium Scholar Pass to a candidate.\n\n` +
     `• \`/groups\`\n` +
-    `  (Authorized Telegram groups manage karne ke liye)`;
+    `  Manage authorized community groups.\n\n` +
+    `• \`/broadcast\`\n` +
+    `  Dispatch platform-wide announcements.`;
 
   await ctx.reply(text, { parse_mode: 'Markdown' });
 }
@@ -55,7 +57,7 @@ export async function handleSetUpi(
 
   const parts = ctx.message?.text?.trim().split(' ') || [];
   if (parts.length < 2) {
-    await ctx.reply('⚠️ Format: `/setupi yourname@upi`\nExample: `/setupi rahul@okhdfcbank`', {
+    await ctx.reply('⚠️ Syntax: `/setupi <upi_vpa>`\nExample: `/setupi examplayer@okhdfcbank`', {
       parse_mode: 'Markdown',
     });
     return;
@@ -65,7 +67,7 @@ export async function handleSetUpi(
   await setSetting(supabase, 'upi_id', newUpi);
 
   await ctx.reply(
-    `✅ *UPI ID Successfully Updated!*\n━━━━━━━━━━━━━━━━━━━━━\nNaya UPI ID: \`${newUpi}\`\nAb students ko yahi UPI dikhega.`,
+    `✅ *UPI VPA Address Updated*\n━━━━━━━━━━━━━━━━━━━━━\nSettlement VPA: \`${newUpi}\`\nThis address will be displayed on student payment invoices.`,
     { parse_mode: 'Markdown' }
   );
 }
@@ -80,7 +82,7 @@ export async function handleSetPrice(
 
   const parts = ctx.message?.text?.trim().split(' ') || [];
   if (parts.length < 2) {
-    await ctx.reply('⚠️ Format: `/setprice <amount>`\nExample: `/setprice 149`', {
+    await ctx.reply('⚠️ Syntax: `/setprice <amount>`\nExample: `/setprice 149`', {
       parse_mode: 'Markdown',
     });
     return;
@@ -88,14 +90,14 @@ export async function handleSetPrice(
 
   const newPrice = parts[1].trim();
   if (isNaN(Number(newPrice))) {
-    await ctx.reply('❌ Please valid number daaliye (jaise 99, 149, 199).');
+    await ctx.reply('❌ Please enter a valid numerical amount (e.g. 99, 149, 199).');
     return;
   }
 
   await setSetting(supabase, 'premium_price', newPrice);
 
   await ctx.reply(
-    `✅ *Test Series Price Successfully Updated!*\n━━━━━━━━━━━━━━━━━━━━━\nNaya Price: \`₹${newPrice}\``,
+    `✅ *Scholar Pass Tariff Updated*\n━━━━━━━━━━━━━━━━━━━━━\nRegistration Fee: \`₹${newPrice}\``,
     { parse_mode: 'Markdown' }
   );
 }
@@ -111,7 +113,7 @@ export async function handleSetChannel(
   const parts = ctx.message?.text?.trim().split(' ') || [];
   if (parts.length < 2) {
     await ctx.reply(
-      '⚠️ Format: `/setchannel @ChannelUsername`\nExample: `/setchannel @TopperNotes`',
+      '⚠️ Syntax: `/setchannel @ChannelUsername`\nExample: `/setchannel @ExamplayerAnnouncements`',
       { parse_mode: 'Markdown' }
     );
     return;
@@ -123,7 +125,7 @@ export async function handleSetChannel(
   await setSetting(supabase, 'required_channel', channel);
 
   await ctx.reply(
-    `✅ *Required Channel Successfully Updated!*\n━━━━━━━━━━━━━━━━━━━━━\nChannel: \`${channel}\`\nAb naye students ko test dene se pehle is channel ko join karna hoga. 📢`,
+    `✅ *Mandatory Channel Updated*\n━━━━━━━━━━━━━━━━━━━━━\nChannel: \`${channel}\`\nNew candidates will be prompted to join before accessing tests. 📢`,
     { parse_mode: 'Markdown' }
   );
 }
@@ -139,7 +141,7 @@ export async function handleUnsetChannel(
   await setSetting(supabase, 'required_channel', '');
 
   await ctx.reply(
-    `✅ *Channel Requirement Removed!*\n━━━━━━━━━━━━━━━━━━━━━\nAb students bina kisi channel join kiye direct tests de sakenge.`,
+    `✅ *Channel Subscription Requirement Disabled*\n━━━━━━━━━━━━━━━━━━━━━\nCandidates may now access examinations directly without mandatory channel membership.`,
     { parse_mode: 'Markdown' }
   );
 }

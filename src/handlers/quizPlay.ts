@@ -76,18 +76,18 @@ export async function handleStartQuiz(
     const botUsername = ctx.me.username;
     const soloUrl = `https://t.me/${botUsername}?start=quiz_${quizId}`;
     const keyboard = new InlineKeyboard()
-      .text('👥 Launch Group Battle Here', `launch_grp:${quizId}`)
+      .text('⚔️ Initiate Group Examination Battle', `launch_grp:${quizId}`)
       .row()
-      .url('🎯 Play Solo Test in Bot DM', soloUrl);
+      .url('📝 Attempt Solo in Direct Message', soloUrl);
 
     if (ctx.callbackQuery) {
       await ctx.answerCallbackQuery();
     }
     await ctx.reply(
-      `⚠️ *Solo Mock Test Private Chat ke liye hai!*\n━━━━━━━━━━━━━━━━━━━━━\n` +
-      `Group me agar personal test chalega toh ek student ke answer dete hi sabhi ka timer cancel ho jayega.\n\n` +
-      `• *Pure group ke saath khelne ke liye:* "👥 Launch Group Battle Here" dabayein (is-me sabhi ke liye pura timer chalega).\n` +
-      `• *Apna individual test dene ke liye:* "🎯 Play Solo Test in Bot DM" dabayein.`,
+      `⚠️ *Solo Examination Mode Restricted to Direct Chat*\n━━━━━━━━━━━━━━━━━━━━━\n` +
+      `Individual assessments must be taken privately to ensure individual timing and score accuracy.\n\n` +
+      `• *Host for all group members:* Select "⚔️ Initiate Group Examination Battle" below.\n` +
+      `• *Take your personal test:* Select "📝 Attempt Solo in Direct Message".`,
       { parse_mode: 'Markdown', reply_markup: keyboard }
     );
     return;
@@ -102,7 +102,7 @@ export async function handleStartQuiz(
   const quiz = await getQuizById(supabase, quizId);
   if (!quiz) {
     if (ctx.callbackQuery) {
-      await ctx.answerCallbackQuery({ text: 'Quiz not found!', show_alert: true });
+      await ctx.answerCallbackQuery({ text: 'Examination not found.', show_alert: true });
     }
     return;
   }
@@ -119,7 +119,7 @@ export async function handleStartQuiz(
   if (!questions || questions.length === 0) {
     if (ctx.callbackQuery) {
       await ctx.answerCallbackQuery({
-        text: 'Is quiz me abhi questions add nahi kiye gaye hain.',
+        text: 'No questions currently uploaded for this examination module.',
         show_alert: true,
       });
     }
@@ -162,21 +162,21 @@ export async function handleStartQuiz(
   });
 
   const introText =
-    `🎯 *MOCK TEST SHURU HO RAHA HAI!*\n` +
-    `━━━━━━━━━━━━━━━━━━━━━\n` +
-    `📚 *Test:* ${escapeMarkdown(quiz.title)}\n` +
+    `🎯 *EXAMINATION SESSION COMMENCING*\n` +
+    `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+    `📚 *Examination:* ${escapeMarkdown(quiz.title)}\n` +
     `❓ *Total Questions:* \`${shuffledQuestions.length}\`\n` +
-    `⏱️ *Timer:* \`${timeLimit}s\` per question (Circular Countdown)\n` +
+    `⏱️ *Time Limit:* \`${timeLimit}s\` per question\n` +
     `⚠️ *Marking Scheme:* +${quiz.marks_per_question} / -${quiz.negative_marks}\n\n` +
-    `⚡ *Instructions:*\n` +
-    `• Har question Telegram Quiz Poll ke roop me aayega.\n` +
-    `• Screen par *Live Circular Countdown Timer* chalega.\n` +
-    `• Option tap karte hi instant feedback & confetti 🎉 dikhega!\n` +
-    `• Agar test rokna ho toh kisi bhi waqt \`/quit\` type karein.\n\n` +
-    `_First question 2 second me aa raha hai..._`;
+    `⚡ *Examination Guidelines:*\n` +
+    `• Questions are rendered via Telegram Interactive Quiz Polls.\n` +
+    `• An active circular countdown timer is enforced for each item.\n` +
+    `• Instant response feedback and answer key explanations are provided.\n` +
+    `• To abort your examination session at any point, submit \`/quit\`.\n\n` +
+    `_Question 1 is loading..._`;
 
   if (ctx.callbackQuery) {
-    await ctx.answerCallbackQuery({ text: 'Starting Quiz!' });
+    await ctx.answerCallbackQuery({ text: 'Beginning examination session...' });
     try {
       await ctx.editMessageText(introText, { parse_mode: 'Markdown' });
     } catch {
@@ -282,7 +282,7 @@ export async function sendNextPollQuestion(
 
   const pollQuestionText =
     cleanQuestionText.length > 270
-      ? `<b>Q</b>${qNum}. Sahi option chunein:`
+      ? `<b>Q</b>${qNum}. Select the correct option:`
       : `<b>Q</b>${qNum}. ${escapeHtml(cleanQuestionText.slice(0, 260))}`;
 
   const rawOptions = Array.isArray(q.options) ? q.options : [];
@@ -340,7 +340,7 @@ export async function sendNextPollQuestion(
 
         await api.sendMessage(
           curSession.chatId,
-          `⏰ *Time Out! (Question ${qNum})*\n_Samay samapt! Agla question aa raha hai..._`,
+          `⏰ *Time Expired! (Question ${qNum})*\n_Allocated duration elapsed. Proceeding to next question..._`,
           { parse_mode: 'Markdown' }
         );
 
@@ -476,7 +476,7 @@ export async function handlePollClosed(
   // Notify student that time is up for this question
   await ctx.api.sendMessage(
     meta.userId,
-    `⏰ *Time Up! (Question ${meta.qIndex + 1})*\n_Samay samapt ho gaya. Agla question aa raha hai..._`,
+    `⏰ *Time Expired! (Question ${meta.qIndex + 1})*\n_Allocated duration elapsed. Proceeding to next question..._`,
     { parse_mode: 'Markdown' }
   );
 
@@ -605,7 +605,7 @@ async function finishSoloPollQuiz(
  */
 export async function handleQuitQuiz(ctx: Context, supabase: SupabaseClient) {
   if (ctx.chat && ctx.chat.type !== 'private') {
-    return ctx.reply('⚠️ Solo test cancel karne ke liye bot ke personal chat me /quit type karein. Group quiz ko sirf Group Admin /stopquiz se rok sakte hain.');
+    return ctx.reply('⚠️ Solo examination sessions can only be aborted via direct message (/quit). Group battles must be terminated by a Group Administrator via /stopquiz.');
   }
 
   const userId = ctx.from?.id;
@@ -620,10 +620,10 @@ export async function handleQuitQuiz(ctx: Context, supabase: SupabaseClient) {
   await deleteActiveSession(supabase, userId);
 
   if (ctx.callbackQuery) {
-    await ctx.answerCallbackQuery({ text: 'Test cancel kar diya gaya.' });
-    await ctx.editMessageText('❌ Test cancel kar diya gaya hai.\nNaya test lene ke liye /quizzes type karein.');
+    await ctx.answerCallbackQuery({ text: 'Examination session terminated.' });
+    await ctx.editMessageText('❌ *Examination Session Terminated.*\nTo browse available tests, submit /quizzes.', { parse_mode: 'Markdown' });
   } else {
-    await ctx.reply('❌ *Test Cancel Kar Diya Gaya Hai.*\n\nNaya test shuru karne ke liye /quizzes open karein.', {
+    await ctx.reply('❌ *Examination Session Terminated.*\n\nTo begin a new assessment, browse /quizzes.', {
       parse_mode: 'Markdown',
     });
   }
@@ -640,7 +640,7 @@ export async function handleAnswerCallback(
 ) {
   if (ctx.callbackQuery) {
     await ctx.answerCallbackQuery({
-      text: 'Yeh test Telegram Quiz Poll format me hai, kripya screen par poll option par tap karein! 🎯',
+      text: '⚠️ This examination operates via interactive poll. Please cast your vote on the poll directly.',
       show_alert: true,
     });
   }
@@ -663,7 +663,7 @@ export async function handleSkipQuestion(
   if (!session || session.quizId !== quizId) {
     if (ctx.callbackQuery) {
       await ctx.answerCallbackQuery({
-        text: 'Active test session nahi mila.',
+        text: 'No active examination session found.',
       });
     }
     return;
@@ -674,8 +674,8 @@ export async function handleSkipQuestion(
     if (ctx.callbackQuery) {
       await ctx.answerCallbackQuery({
         text: session.currentIndex > targetIndex
-          ? 'Aapne is question ka answer pehle hi de diya hai!'
-          : 'Kripya vartaman question par dhyan dein.',
+          ? 'This question has already been submitted.'
+          : 'Please answer the active question on screen.',
       });
     }
     return;
@@ -684,7 +684,7 @@ export async function handleSkipQuestion(
   // Acknowledge callback immediately
   if (ctx.callbackQuery) {
     await ctx.answerCallbackQuery({
-      text: `⏭️ Question ${targetIndex + 1} skip kar diya gaya!`,
+      text: `⏭️ Question ${targetIndex + 1} skipped.`,
     });
   }
 
@@ -717,7 +717,7 @@ export async function handleSkipQuestion(
   // Edit companion message so buttons are no longer clickable
   try {
     await ctx.editMessageText(
-      `⏭️ *Question ${targetIndex + 1} Skipped!* ⏩ _Agla question aa raha hai..._`,
+      `⏭️ *Question ${targetIndex + 1} Skipped.* _Loading subsequent question..._`,
       { parse_mode: 'Markdown' }
     );
   } catch {

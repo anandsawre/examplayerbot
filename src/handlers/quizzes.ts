@@ -30,9 +30,9 @@ export async function handleQuizzesList(ctx: Context, supabase: SupabaseClient) 
     return;
   }
 
-  let text = `📚 *AVAILABLE MOCK TESTS*\n`;
-  text += `━━━━━━━━━━━━━━━━━━━━━\n`;
-  text += `Kripya apna manpasand mock test choose karein:\n\n`;
+  let text = `📚 *OFFICIAL MOCK EXAMINATIONS CATALOG*\n`;
+  text += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+  text += `Kripya attempt karne ke liye examination paper select karein:\n\n`;
 
   const keyboard = new InlineKeyboard();
 
@@ -41,7 +41,7 @@ export async function handleQuizzesList(ctx: Context, supabase: SupabaseClient) 
     keyboard.text(`${badge} ${quiz.title}`, `view_quiz:${quiz.id}`).row();
   });
 
-  keyboard.text('🔙 Main Menu', 'menu_start');
+  keyboard.text('🔙 Platform Dashboard', 'menu_start');
 
   if (ctx.callbackQuery) {
     await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup: keyboard });
@@ -61,67 +61,71 @@ export async function handleViewQuiz(
 
   if (!quiz) {
     if (ctx.callbackQuery) {
-      await ctx.answerCallbackQuery({ text: 'Quiz nahi mila!', show_alert: true });
+      await ctx.answerCallbackQuery({ text: 'Examination record not found!', show_alert: true });
     }
     return;
   }
 
-  let text = `📋 *TEST OVERVIEW*\n`;
-  text += `━━━━━━━━━━━━━━━━━━━━━\n`;
-  text += `🏷️ *Title:* ${escapeMarkdown(quiz.title)}\n`;
-  text += `📂 *Category:* ${escapeMarkdown(quiz.category)}\n`;
-  text += `👑 *Access:* ${quiz.is_premium ? '🔒 *Premium Pass Required*' : '🟢 *Free for All Students*'}\n`;
+  const marksPerQ = Number(quiz.marks_per_question) || 2;
+  const negMarks = Number(quiz.negative_marks) || 0.5;
+  const maxMarks = Number(quiz.total_questions || 0) * marksPerQ;
+
+  let text = `📋 *EXAMINATION OVERVIEW & SCHEME*\n`;
+  text += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+  text += `🏷️ *Paper Title:* ${escapeMarkdown(quiz.title)}\n`;
+  text += `📂 *Subject / Category:* ${escapeMarkdown(quiz.category)}\n`;
+  text += `👑 *Access Tier:* ${quiz.is_premium ? '🔒 *Premium Scholar Pass Required*' : '🟢 *Open Access (Free)*'}\n`;
   if (quiz.description) text += `ℹ️ *Description:* ${escapeMarkdown(quiz.description)}\n`;
-  text += `━━━━━━━━━━━━━━━━━━━━━\n\n`;
+  text += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
 
-  text += `📊 *Pattern Details:*\n`;
+  text += `📊 *Examination Pattern:*\n`;
   text += `  • Total Questions: \`${quiz.total_questions}\`\n`;
-  text += `  • Marks per Question: \`+${quiz.marks_per_question}\`\n`;
-  text += `  • Negative Marking: \`-${quiz.negative_marks}\`\n`;
-  text += `  • Time per Question: \`${quiz.time_limit_seconds}s\`\n\n`;
+  text += `  • Total Marks: \`${maxMarks}\` (\`+${marksPerQ}\` per correct response)\n`;
+  text += `  • Negative Penalty: \`-${negMarks}\` per incorrect response\n`;
+  text += `  • Time Allowance: \`${quiz.time_limit_seconds}s\` per question\n\n`;
 
-  text += `Ready hain? "Start Test" dabate hi first question open ho jayega!`;
+  text += `⚡ *Instructions:* Test start hone ke baad timer continuously chalega. Kripya dhyan se attempt karein.`;
 
   const botUsername = ctx.me.username;
-  const shareUrl = `https://t.me/share/url?url=https://t.me/${botUsername}?start=quiz_${quiz.id}&text=Join%20${encodeURIComponent(quiz.title)}%20Mock%20Test%20on%20Examplayer%20Bot!`;
+  const shareUrl = `https://t.me/share/url?url=https://t.me/${botUsername}?start=quiz_${quiz.id}&text=Attempt%20${encodeURIComponent(quiz.title)}%20Mock%20Examination%20on%20Examplayer!`;
 
   const isGroup = ctx.chat?.type === 'group' || ctx.chat?.type === 'supergroup';
   const keyboard = new InlineKeyboard();
 
   if (isGroup) {
     keyboard
-      .text('👥 Launch Group Battle Here', `launch_grp:${quiz.id}`)
+      .text('👥 Launch Group Live Battle', `launch_grp:${quiz.id}`)
       .row()
-      .url('🎯 Play Solo in Bot DM', `https://t.me/${botUsername}?start=quiz_${quiz.id}`)
+      .url('🎯 Attempt Solo Test in DM', `https://t.me/${botUsername}?start=quiz_${quiz.id}`)
       .row();
   } else {
     keyboard
-      .text('🚀 Start Test Now', `start_quiz:${quiz.id}`)
+      .text('🚀 Begin Examination Now', `start_quiz:${quiz.id}`)
       .row();
   }
 
   keyboard
-    .url('📢 Share to Channel / Group', shareUrl)
-    .text('🏆 Leaderboard', `lb:${quiz.id}`)
+    .url('📢 Share to Channels / Groups', shareUrl)
+    .text('🏆 Merit List & Rankings', `lb:${quiz.id}`)
     .row()
-    .text('📄 Solution Booklet (PDF)', `pdf_scorecard:${quiz.id}`)
+    .text('📄 Download Question Paper & Solutions (PDF)', `pdf_scorecard:${quiz.id}`)
     .row();
 
   // Admin Controls (Toggle Premium, Edit Quiz, Delete Quiz) - ONLY in Private Chat
   if (!isGroup && isAdmin(ctx, env)) {
-    const toggleLabel = quiz.is_premium ? '🔓 Make Free' : '🔒 Make Premium';
+    const toggleLabel = quiz.is_premium ? '🔓 Set as Free Access' : '🔒 Set as Premium Access';
     keyboard
       .text(toggleLabel, `toggle_prem:${quiz.id}`)
-      .text('✏️ Edit Test', `edit_quiz:${quiz.id}`)
+      .text('✏️ Edit Examination Scheme', `edit_quiz:${quiz.id}`)
       .row()
-      .text('🗑️ Delete Test', `ask_del_quiz:${quiz.id}`)
+      .text('🗑️ Delete Examination', `ask_del_quiz:${quiz.id}`)
       .row();
   }
 
   if (!isGroup) {
-    keyboard.text('🔙 All Tests', 'menu_quizzes');
+    keyboard.text('🔙 All Examination Papers', 'menu_quizzes');
   } else {
-    keyboard.url('📚 Browse All Tests in Bot DM', `https://t.me/${botUsername}?start=quizzes`);
+    keyboard.url('📚 Browse All Papers in Bot DM', `https://t.me/${botUsername}?start=quizzes`);
   }
 
   if (ctx.callbackQuery) {
@@ -182,15 +186,15 @@ export async function handleAskDeleteQuiz(
   if (!quiz) return;
 
   const text =
-    `⚠️ *DANGER ZONE: DELETE QUIZ*\n` +
-    `━━━━━━━━━━━━━━━━━━━━━\n` +
-    `Kya aap sach me *"${escapeMarkdown(quiz.title)}"* ko delete karna chahte hain?\n\n` +
-    `🚨 *Dhyan dein:* Is test ke sabhi questions aur student attempts permanently delete ho jayenge! Yeh action undo nahi kiya ja sakta.`;
+    `⚠️ *CONFIRM EXAMINATION DELETION*\n` +
+    `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+    `Are you sure you wish to delete *"${escapeMarkdown(quiz.title)}"*?\n\n` +
+    `🚨 *Warning:* All questions, question options, and recorded candidate attempts for this paper will be permanently expunged. This action cannot be reversed.`;
 
   const keyboard = new InlineKeyboard()
-    .text('🚨 Haan, Permanently Delete Karein', `confirm_del_quiz:${quiz.id}`)
+    .text('🚨 Confirm Permanent Deletion', `confirm_del_quiz:${quiz.id}`)
     .row()
-    .text('❌ Cancel (Wapas Jayein)', `view_quiz:${quiz.id}`);
+    .text('🔙 Cancel & Return', `view_quiz:${quiz.id}`);
 
   if (ctx.callbackQuery) {
     await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup: keyboard });
@@ -214,11 +218,11 @@ export async function handleConfirmDeleteQuiz(
 
   const success = await deleteQuiz(supabase, quizId);
   if (!success) {
-    await ctx.answerCallbackQuery({ text: '❌ Delete karne me error aayi.', show_alert: true });
+    await ctx.answerCallbackQuery({ text: '❌ Failed to delete examination.', show_alert: true });
     return;
   }
 
-  await ctx.answerCallbackQuery({ text: `🗑️ "${quizTitle}" delete ho gaya!`, show_alert: true });
+  await ctx.answerCallbackQuery({ text: `🗑️ "${quizTitle}" deleted successfully.`, show_alert: true });
   return handleQuizzesList(ctx, supabase);
 }
 
@@ -239,24 +243,24 @@ export async function handleEditQuizPanel(
   if (!quiz) return;
 
   const text =
-    `⚙️ *QUIZ SETTINGS EDITOR*\n` +
-    `━━━━━━━━━━━━━━━━━━━━━\n` +
+    `⚙️ *EXAMINATION CONFIGURATION EDITOR*\n` +
+    `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
     `📝 *Title:* ${escapeMarkdown(quiz.title)}\n` +
     `📂 *Category:* ${escapeMarkdown(quiz.category)}\n` +
     `⏱️ *Time Limit:* \`${quiz.time_limit_seconds}s\` per question\n` +
-    `🎯 *Marks Scheme:* \`+${quiz.marks_per_question}\` / \`-${quiz.negative_marks}\`\n` +
-    `👑 *Access:* ${quiz.is_premium ? '🔒 Premium' : '🟢 Free'}\n` +
-    `🆔 *Quiz ID:* \`${quiz.id}\`\n\n` +
-    `Neeche button select karke setting change karein:`;
+    `🎯 *Marking Scheme:* \`+${quiz.marks_per_question}\` / \`-${quiz.negative_marks}\`\n` +
+    `👑 *Access Tier:* ${quiz.is_premium ? '🔒 Premium Pass' : '🟢 Open Access'}\n` +
+    `🆔 *Paper ID:* \`${quiz.id}\`\n\n` +
+    `Select a property below to modify configuration:`;
 
   const keyboard = new InlineKeyboard()
-    .text('⏱️ Change Timer', `ed_timer_opt:${quiz.id}`)
-    .text('🎯 Change Marks', `ed_marks_opt:${quiz.id}`)
+    .text('⏱️ Configure Timer', `ed_timer_opt:${quiz.id}`)
+    .text('🎯 Configure Marking', `ed_marks_opt:${quiz.id}`)
     .row()
-    .text('🏷️ Rename Title', `ed_title_prompt:${quiz.id}`)
-    .text('📂 Change Category', `ed_cat_prompt:${quiz.id}`)
+    .text('🏷️ Rename Examination Title', `ed_title_prompt:${quiz.id}`)
+    .text('📂 Change Subject Category', `ed_cat_prompt:${quiz.id}`)
     .row()
-    .text('🔙 Back to Test', `view_quiz:${quiz.id}`);
+    .text('🔙 Return to Examination', `view_quiz:${quiz.id}`);
 
   if (ctx.callbackQuery) {
     await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup: keyboard });
@@ -272,7 +276,7 @@ export async function handleEditTimerOptions(
 ) {
   if (!isAdmin(ctx, env)) return;
 
-  const text = `⏱️ *Naya Question Timer Select Karein:*\n\nHar question ke liye kitna time dena hai?`;
+  const text = `⏱️ *Select Question Time Limit:*\n\nSelect the time allocation permitted per question:`;
   const keyboard = new InlineKeyboard()
     .text('15s', `set_q_time:${quizId}:15`)
     .text('20s', `set_q_time:${quizId}:20`)
@@ -298,7 +302,7 @@ export async function handleSetQuizTimer(
   if (!isAdmin(ctx, env)) return;
 
   await updateQuiz(supabase, quizId, { time_limit_seconds: seconds });
-  await ctx.answerCallbackQuery({ text: `⏱️ Timer ${seconds}s set ho gaya!` });
+  await ctx.answerCallbackQuery({ text: `⏱️ Time limit set to ${seconds}s.` });
   return handleEditQuizPanel(ctx, supabase, env, quizId);
 }
 
@@ -311,8 +315,8 @@ export async function handleEditMarksOptions(
   if (!isAdmin(ctx, env)) return;
 
   const text =
-    `🎯 *Marking Scheme Select Karein:*\n\n` +
-    `Har correct question ke marks aur negative penalty chunein:`;
+    `🎯 *Select Marking Scheme:*\n\n` +
+    `Configure marks awarded for correct answers and negative penalty:`;
 
   const keyboard = new InlineKeyboard()
     .text('+1 Marks (0 Penalty)', `set_q_marks:${quizId}:1:0`)
@@ -341,7 +345,7 @@ export async function handleSetQuizMarks(
   if (!isAdmin(ctx, env)) return;
 
   await updateQuiz(supabase, quizId, { marks_per_question: marks, negative_marks: neg });
-  await ctx.answerCallbackQuery({ text: `🎯 Marking +${marks} / -${neg} set ho gayi!` });
+  await ctx.answerCallbackQuery({ text: `🎯 Marking scheme updated to +${marks} / -${neg}.` });
   return handleEditQuizPanel(ctx, supabase, env, quizId);
 }
 
@@ -355,13 +359,13 @@ export async function handleEditTitlePrompt(
   const quiz = await getQuizById(supabase, quizId);
 
   const text =
-    `🏷️ *RENAME QUIZ TITLE*\n` +
-    `━━━━━━━━━━━━━━━━━━━━━\n` +
+    `🏷️ *RENAME EXAMINATION TITLE*\n` +
+    `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
     `Current Title: *${escapeMarkdown(quiz?.title || '')}*\n\n` +
-    `Naya title set karne ke liye type kijiye:\n` +
-    `\`/edittitle ${quizId} Aapka Naya Test Title\``;
+    `To update the title, execute:\n` +
+    `\`/edittitle ${quizId} New Examination Title\``;
 
-  const keyboard = new InlineKeyboard().text('🔙 Back to Editor', `edit_quiz:${quizId}`);
+  const keyboard = new InlineKeyboard().text('🔙 Return to Editor', `edit_quiz:${quizId}`);
   await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup: keyboard });
   await ctx.answerCallbackQuery();
 }
@@ -376,13 +380,13 @@ export async function handleEditCategoryPrompt(
   const quiz = await getQuizById(supabase, quizId);
 
   const text =
-    `📂 *CHANGE QUIZ CATEGORY*\n` +
-    `━━━━━━━━━━━━━━━━━━━━━\n` +
+    `📂 *CHANGE SUBJECT CATEGORY*\n` +
+    `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
     `Current Category: *${escapeMarkdown(quiz?.category || '')}*\n\n` +
-    `Nayi category set karne ke liye type kijiye:\n` +
-    `\`/editcat ${quizId} Nayi Category Name\``;
+    `To update the subject category, execute:\n` +
+    `\`/editcat ${quizId} New Category Name\``;
 
-  const keyboard = new InlineKeyboard().text('🔙 Back to Editor', `edit_quiz:${quizId}`);
+  const keyboard = new InlineKeyboard().text('🔙 Return to Editor', `edit_quiz:${quizId}`);
   await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup: keyboard });
   await ctx.answerCallbackQuery();
 }
@@ -395,7 +399,7 @@ export async function handleEditTitleCommand(ctx: Context, supabase: SupabaseCli
   const text = ctx.message?.text || '';
   const parts = text.split(' ');
   if (parts.length < 3) {
-    await ctx.reply('⚠️ Format: `/edittitle <quiz_id> <Naya Title>`', { parse_mode: 'Markdown' });
+    await ctx.reply('⚠️ Syntax: `/edittitle <quiz_id> <New Title>`', { parse_mode: 'Markdown' });
     return;
   }
 
@@ -404,11 +408,11 @@ export async function handleEditTitleCommand(ctx: Context, supabase: SupabaseCli
 
   const success = await updateQuiz(supabase, quizId, { title: newTitle });
   if (!success) {
-    await ctx.reply('❌ Title update karne me error aayi. Check karein ki Quiz ID sahi hai ya nahi.');
+    await ctx.reply('❌ Failed to update title. Please verify the Examination ID.');
     return;
   }
 
-  await ctx.reply(`✅ *Title Updated!* Naya title: *${escapeMarkdown(newTitle)}*`, { parse_mode: 'Markdown' });
+  await ctx.reply(`✅ *Title Updated Successfully*\nNew Title: *${escapeMarkdown(newTitle)}*`, { parse_mode: 'Markdown' });
 }
 
 export async function handleEditCategoryCommand(ctx: Context, supabase: SupabaseClient, env: Env) {
@@ -417,7 +421,7 @@ export async function handleEditCategoryCommand(ctx: Context, supabase: Supabase
   const text = ctx.message?.text || '';
   const parts = text.split(' ');
   if (parts.length < 3) {
-    await ctx.reply('⚠️ Format: `/editcat <quiz_id> <Nayi Category>`', { parse_mode: 'Markdown' });
+    await ctx.reply('⚠️ Syntax: `/editcat <quiz_id> <New Category>`', { parse_mode: 'Markdown' });
     return;
   }
 
@@ -426,11 +430,11 @@ export async function handleEditCategoryCommand(ctx: Context, supabase: Supabase
 
   const success = await updateQuiz(supabase, quizId, { category: newCat });
   if (!success) {
-    await ctx.reply('❌ Category update karne me error aayi. Check karein ki Quiz ID sahi hai ya nahi.');
+    await ctx.reply('❌ Failed to update category. Please verify the Examination ID.');
     return;
   }
 
-  await ctx.reply(`✅ *Category Updated!* Nayi Category: *${escapeMarkdown(newCat)}*`, { parse_mode: 'Markdown' });
+  await ctx.reply(`✅ *Category Updated Successfully*\nNew Category: *${escapeMarkdown(newCat)}*`, { parse_mode: 'Markdown' });
 }
 
 export async function handleDeleteQuizCommand(ctx: Context, supabase: SupabaseClient, env: Env) {
@@ -439,16 +443,16 @@ export async function handleDeleteQuizCommand(ctx: Context, supabase: SupabaseCl
   const text = ctx.message?.text || '';
   const parts = text.split(' ');
   if (parts.length < 2) {
-    await ctx.reply('⚠️ Format: `/delquiz <quiz_id>`', { parse_mode: 'Markdown' });
+    await ctx.reply('⚠️ Syntax: `/delquiz <quiz_id>`', { parse_mode: 'Markdown' });
     return;
   }
 
   const quizId = parts[1].trim();
   const success = await deleteQuiz(supabase, quizId);
   if (!success) {
-    await ctx.reply('❌ Delete karne me error aayi. Quiz ID verify karein.');
+    await ctx.reply('❌ Failed to delete examination. Verify the Examination ID.');
     return;
   }
 
-  await ctx.reply(`✅ Quiz \`${quizId}\` successfully delete ho gaya hai!`, { parse_mode: 'Markdown' });
+  await ctx.reply(`✅ Examination \`${quizId}\` has been permanently deleted.`, { parse_mode: 'Markdown' });
 }

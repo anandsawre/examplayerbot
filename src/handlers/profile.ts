@@ -8,25 +8,26 @@ export async function handleProfile(ctx: Context, supabase: SupabaseClient) {
 
   const user = await getUser(supabase, userId);
 
-  let text = `👤 *STUDENT PROFILE & STATS*\n`;
-  text += `━━━━━━━━━━━━━━━━━━━━━\n`;
-  text += `📛 *Name:* ${ctx.from.first_name || 'Student'}\n`;
-  if (ctx.from.username) text += `🔖 *Username:* @${ctx.from.username}\n`;
-  text += `🆔 *User ID:* \`${userId}\`\n`;
-  text += `━━━━━━━━━━━━━━━━━━━━━\n\n`;
+  let text = `👤 *CANDIDATE ACADEMIC PROFILE & ANALYTICS*\n`;
+  text += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+  text += `📛 *Candidate:* ${ctx.from.first_name || 'Aspirant'}${ctx.from.last_name ? ' ' + ctx.from.last_name : ''}\n`;
+  if (ctx.from.username) text += `🔖 *Telegram Handle:* @${ctx.from.username}\n`;
+  text += `🆔 *Candidate Roll ID:* \`${userId}\`\n`;
+  text += `👑 *Access Tier:* ${user?.is_premium ? '🌟 *Premium Scholar Pass Active*' : '⚪ *Standard Aspirant*'}\n`;
+  text += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
 
-  text += `📊 *Exam Performance:*\n`;
-  text += `  • 🏆 *Total Points:* \`${user?.total_score || 0}\`\n`;
-  text += `  • 📝 *Tests Completed:* \`${user?.tests_completed || 0}\`\n`;
-  text += `  • 🔥 *Study Streak:* \`${user?.streak_days || 1} Days\`\n\n`;
+  text += `📊 *Cumulative Performance Analytics:*\n`;
+  text += `  • 🏆 *Total Marks Earned:* \`${user?.total_score || 0} pts\`\n`;
+  text += `  • 📝 *Completed Examinations:* \`${user?.tests_completed || 0} Mock Tests\`\n`;
+  text += `  • 🔥 *Continuous Practice Streak:* \`${user?.streak_days || 1} Days Active\`\n\n`;
 
-  text += `_Daily practice karte rahein aur topper leaderboard me rank banayein!_`;
+  text += `💡 _Consistent daily testing improves recall speed and eliminates negative marking mistakes._`;
 
   const keyboard = new InlineKeyboard()
-    .text('📚 Take a Test', 'menu_quizzes')
-    .text('🏆 Leaderboard', 'menu_global_lb')
+    .text('📚 Attempt Mock Examination', 'menu_quizzes')
+    .text('🏆 All-India Rankings', 'menu_global_lb')
     .row()
-    .text('🔙 Main Menu', 'menu_start');
+    .text('🔙 Platform Dashboard', 'menu_start');
 
   if (ctx.callbackQuery) {
     await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup: keyboard });

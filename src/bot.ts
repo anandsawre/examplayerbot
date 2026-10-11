@@ -127,7 +127,7 @@ export function createBot(env: Env): Bot {
     const text = ctx.message?.text || '';
     const qId = text.split(' ')[1];
     if (qId) return handleDownloadPdfScorecard(ctx, supabase, qId);
-    return ctx.reply('ℹ️ PDF download karne ke liye format: `/pdf <quiz_id>` ya kisi test ke niche "Download PDF" button par tap karein.', { parse_mode: 'Markdown' });
+    return ctx.reply('ℹ️ *Scorecard Export Format:* `/pdf <quiz_id>` or select the *"Download Official PDF"* button beneath your completed examination scorecard.', { parse_mode: 'Markdown' });
   });
 
   // ================= EVENTS =================
@@ -158,7 +158,7 @@ export function createBot(env: Env): Bot {
   bot.callbackQuery('menu_start', async (ctx) => {
     if (ctx.chat?.type !== 'private') {
       return ctx.answerCallbackQuery({
-        text: 'Main menu sirf bot ke private chat me available hai.',
+        text: '⚠️ Navigation Dashboard is accessible exclusively via private direct message.',
         show_alert: true,
       });
     }
@@ -170,7 +170,7 @@ export function createBot(env: Env): Bot {
   bot.callbackQuery('menu_profile', async (ctx) => {
     if (ctx.chat?.type !== 'private') {
       return ctx.answerCallbackQuery({
-        text: 'Apna personal profile dekhne ke liye bot ke private chat me jayein!',
+        text: '⚠️ Candidate Profile is accessible exclusively via private direct message.',
         show_alert: true,
       });
     }
@@ -181,8 +181,8 @@ export function createBot(env: Env): Bot {
   bot.callbackQuery('pay_send_ss', async (ctx) => {
     await ctx.answerCallbackQuery();
     await ctx.reply(
-      '📸 *Payment Screenshot Bhejiye:*\n\n' +
-      'Apne PhonePe/GPay/Paytm se payment karne ke baad uska screenshot is chat me Photo (Image) ke roop me send kar dijiye.',
+      '📸 *Submit Proof of Transaction:*\n━━━━━━━━━━━━━━━━━━━━━\n' +
+      'Following your payment via PhonePe, Google Pay, or Paytm, upload your transaction receipt image directly in this chat for administrative verification.',
       { parse_mode: 'Markdown' }
     );
   });
@@ -190,9 +190,10 @@ export function createBot(env: Env): Bot {
   bot.callbackQuery('menu_redeem_prompt', async (ctx) => {
     await ctx.answerCallbackQuery();
     await ctx.reply(
-      '🎟️ *Coupon Code Redeem Karein:*\n\n' +
-      'Code apply karne ke liye type kijiye: `/redeem <YOUR_CODE>`\n\n' +
-      'Example: `/redeem TOPPER2026`',
+      '🎟️ *Redeem Access Voucher:*\n━━━━━━━━━━━━━━━━━━━━━\n' +
+      'To redeem an authorized access pass or coupon voucher, submit:\n' +
+      '`/redeem <CODE>`\n\n' +
+      'Example: `/redeem SCHOLAR2026`',
       { parse_mode: 'Markdown' }
     );
   });
@@ -273,7 +274,7 @@ export function createBot(env: Env): Bot {
         const qId = data.replace('start_quiz:', '');
         const botUsername = ctx.me.username;
         return ctx.answerCallbackQuery({
-          text: 'Solo test bot ke private chat me kheliye!',
+          text: '⚠️ Solo examinations must be taken individually in direct message.',
           show_alert: true,
         });
       }
@@ -332,7 +333,7 @@ export function createBot(env: Env): Bot {
       const groupId = parseInt(parts[1], 10);
       const { revokeGroup } = await import('./db/queries');
       await revokeGroup(supabase, groupId);
-      await ctx.answerCallbackQuery({ text: 'Group revoked!' });
+      await ctx.answerCallbackQuery({ text: 'Group authorization revoked.' });
       return handleListGroupsCommand(ctx, supabase, env);
     }
     if (data.startsWith('grp_act:')) {
@@ -341,7 +342,7 @@ export function createBot(env: Env): Bot {
       const title = decodeURIComponent(parts[2] || 'Group');
       const { authorizeGroup } = await import('./db/queries');
       await authorizeGroup(supabase, groupId, title, ctx.from?.id);
-      await ctx.answerCallbackQuery({ text: 'Group activated!' });
+      await ctx.answerCallbackQuery({ text: 'Group authorization approved.' });
       return handleListGroupsCommand(ctx, supabase, env);
     }
 
@@ -409,7 +410,7 @@ export function createBot(env: Env): Bot {
         return handleQuizzesList(ctx, supabase);
       } else {
         await ctx.answerCallbackQuery({
-          text: '❌ Aapne abhi channel join nahi kiya hai! Pehle join karein.',
+          text: '❌ Mandatory channel membership not verified. Please subscribe and try again.',
           show_alert: true,
         });
       }
