@@ -101,7 +101,11 @@ export function createBot(env: Env): Bot {
     throw new Error('BOT_TOKEN is required to initialize Telegram Bot!');
   }
 
-  const bot = new Bot(env.BOT_TOKEN);
+  const bot = new Bot(env.BOT_TOKEN, {
+    client: {
+      timeoutSeconds: 60,
+    },
+  });
   const supabase = getSupabase(env);
 
   // Global Error Handler

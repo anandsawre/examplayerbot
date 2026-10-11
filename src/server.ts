@@ -1,6 +1,9 @@
 import http from 'node:http';
 import dns from 'node:dns';
-dns.setDefaultResultOrder('ipv4first');
+
+try {
+  dns.setDefaultResultOrder('ipv4first');
+} catch {}
 
 import 'dotenv/config';
 import { webhookCallback } from 'grammy';
@@ -25,134 +28,145 @@ async function main() {
 
   const port = parseInt(process.env.PORT || '3000', 10);
   const bot = createBot(config);
-
-  const botInfo = await bot.api.getMe();
-  console.log(`🤖 Logged in as Telegram Bot: @${botInfo.username} (ID: ${botInfo.id})`);
-
-  // Register command hints and menu button with Telegram API
-  await registerBotCommands(bot.api);
+  let botUsername = 'Examplayer_bot';
 
   // Detect whether to run in Webhook mode or Long Polling mode
   // Render provides RENDER_EXTERNAL_URL (e.g. https://examplayer-bot.onrender.com)
   const externalUrl = process.env.RENDER_EXTERNAL_URL || process.env.WEBHOOK_URL;
+  const isWebhookMode = Boolean(externalUrl);
+  const webhookPath = '/webhook';
+  const handleWebhook = webhookCallback(bot, 'http');
 
-  if (externalUrl) {
-    const cleanUrl = externalUrl.replace(/\/$/, '');
-    const webhookPath = '/webhook';
-    const fullWebhookUrl = `${cleanUrl}${webhookPath}`;
+  // 1. START HTTP SERVER IMMEDIATELY so Render health check always passes on boot!
+  const server = http.createServer((req, res) => {
+    const urlPath = (req.url || '').split('?')[0].replace(/\/$/, '');
 
-    const registerWebhook = async () => {
-      try {
-        console.log(`🌐 Setting Telegram Webhook to: ${fullWebhookUrl}`);
-        await bot.api.setWebhook(fullWebhookUrl, {
-          drop_pending_updates: false,
-          allowed_updates: ['message', 'callback_query', 'poll_answer', 'poll', 'chat_member', 'my_chat_member'],
-        });
-        console.log(`✅ Webhook registered successfully!`);
-      } catch (err) {
-        console.error('Error setting Telegram webhook:', err);
-      }
-    };
-
-    await registerWebhook();
-
-    // Auto-healing: Check every 2 minutes. If webhook was deleted by local runner, auto-restore it!
-    setInterval(async () => {
-      try {
-        const info = await bot.api.getWebhookInfo();
-        if (info.url !== fullWebhookUrl) {
-          console.log(`⚠️ Telegram webhook link was missing or modified ("${info.url}"). Auto-healing back to: ${fullWebhookUrl}`);
-          await registerWebhook();
-        }
-      } catch (e) {
-        console.error('Periodic webhook verification error:', e);
-      }
-    }, 120_000);
-
-    const handleWebhook = webhookCallback(bot, 'http');
-
-    const server = http.createServer((req, res) => {
-      const urlPath = (req.url || '').split('?')[0].replace(/\/$/, '');
-
-      // Health check endpoint for Render & Uptime monitoring
-      if (req.method === 'GET' && (urlPath === '' || urlPath === '/health')) {
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(
-          JSON.stringify({
-            status: 'ok',
-            service: 'Examplayer Bot',
-            bot: `@${botInfo.username}`,
-            mode: 'webhook',
-            uptimeSeconds: Math.floor(process.uptime()),
-          })
-        );
-        return;
-      }
-
-      // Webhook payload from Telegram
-      if (req.method === 'POST' && urlPath === webhookPath) {
-        handleWebhook(req, res);
-        return;
-      }
-
-      res.writeHead(404, { 'Content-Type': 'text/plain' });
-      res.end('Not Found');
-    });
-
-    server.listen(port, '0.0.0.0', () => {
-      console.log(`🎯 HTTP Webhook server running on port ${port}`);
-    });
-
-    // Graceful shutdown
-    process.on('SIGTERM', () => {
-      console.log('SIGTERM received. Shutting down gracefully...');
-      server.close(() => process.exit(0));
-    });
-  } else {
-    // Fallback: Long Polling mode + HTTP Health Check server (satisfies Render port binding)
-    console.log(`🔄 Long Polling mode enabled with HTTP Health Check on port ${port}...`);
-
-    try {
-      await bot.api.deleteWebhook({ drop_pending_updates: true });
-      console.log(`🗑️ Removed existing webhook to enable Long Polling.`);
-    } catch (e) {
-      console.error('Warning deleting webhook:', e);
-    }
-
-    const server = http.createServer((req, res) => {
+    // Health check endpoint for Render & Uptime monitoring
+    if (req.method === 'GET' && (urlPath === '' || urlPath === '/health')) {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(
         JSON.stringify({
           status: 'ok',
           service: 'Examplayer Bot',
-          bot: `@${botInfo.username}`,
-          mode: 'polling',
+          bot: `@${botUsername}`,
+          mode: isWebhookMode ? 'webhook' : 'polling',
           uptimeSeconds: Math.floor(process.uptime()),
         })
       );
-    });
+      return;
+    }
 
-    server.listen(port, '0.0.0.0', () => {
-      console.log(`🎯 HTTP Health-check server running on port ${port}`);
-    });
+    // Webhook payload from Telegram
+    if (req.method === 'POST' && urlPath === webhookPath) {
+      handleWebhook(req, res);
+      return;
+    }
 
-    // Start grammY long polling
-    bot.start({
-      onStart: () => {
-        console.log(`✅ Bot long-polling started! Ready to receive messages.`);
-      },
-    });
+    res.writeHead(404, { 'Content-Type': 'text/plain' });
+    res.end('Not Found');
+  });
 
-    // Graceful shutdown
-    process.on('SIGTERM', () => {
-      console.log('SIGTERM received. Shutting down gracefully...');
-      bot.stop();
-      server.close(() => process.exit(0));
-    });
+  server.listen(port, '0.0.0.0', () => {
+    console.log(`🎯 HTTP Webhook server running on port ${port} (Health check active)`);
+  });
+
+  // 2. CONNECT TO TELEGRAM IN BACKGROUND WITH AUTOMATIC RETRY (Resilient against cold network timeouts)
+  async function connectTelegram() {
+    let connected = false;
+    let attempts = 0;
+    const maxAttempts = 10;
+    let delay = 2000;
+
+    while (!connected && attempts < maxAttempts) {
+      attempts++;
+      try {
+        console.log(`📡 Connecting to Telegram API (Attempt ${attempts}/${maxAttempts})...`);
+        const botInfo = await bot.api.getMe();
+        botUsername = botInfo.username;
+        console.log(`🤖 Logged in as Telegram Bot: @${botInfo.username} (ID: ${botInfo.id})`);
+        connected = true;
+
+        // Register command hints and menu button with Telegram API
+        try {
+          await registerBotCommands(bot.api);
+          console.log('✅ Bot command hints registered successfully.');
+        } catch (cmdErr: any) {
+          console.warn('⚠️ Warning registering bot commands:', cmdErr?.message);
+        }
+
+        // Webhook registration
+        if (externalUrl) {
+          const cleanUrl = externalUrl.replace(/\/$/, '');
+          const fullWebhookUrl = `${cleanUrl}${webhookPath}`;
+
+          const registerWebhook = async () => {
+            try {
+              console.log(`🌐 Setting Telegram Webhook to: ${fullWebhookUrl}`);
+              await bot.api.setWebhook(fullWebhookUrl, {
+                drop_pending_updates: false,
+                allowed_updates: ['message', 'callback_query', 'poll_answer', 'poll', 'chat_member', 'my_chat_member'],
+              });
+              console.log(`✅ Webhook registered successfully!`);
+            } catch (err: any) {
+              console.error('Error setting Telegram webhook:', err?.message || err);
+            }
+          };
+
+          await registerWebhook();
+
+          // Auto-healing: Check every 2 minutes
+          setInterval(async () => {
+            try {
+              const info = await bot.api.getWebhookInfo();
+              if (info.url !== fullWebhookUrl) {
+                console.log(`⚠️ Telegram webhook was modified ("${info.url}"). Auto-healing to: ${fullWebhookUrl}`);
+                await registerWebhook();
+              }
+            } catch (e: any) {
+              console.error('Periodic webhook verification warning:', e?.message || e);
+            }
+          }, 120_000);
+        } else {
+          // Fallback: Long Polling
+          console.log('🔄 Long Polling fallback mode enabled...');
+          try {
+            await bot.api.deleteWebhook({ drop_pending_updates: false });
+          } catch {}
+          bot.start({
+            onStart: () => console.log('✅ Bot long-polling started! Ready to receive messages.'),
+          });
+        }
+      } catch (err: any) {
+        console.warn(`⚠️ Telegram connection attempt ${attempts} timed out or failed (${err?.message || err?.code}). Retrying in ${delay / 1000}s...`);
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        delay = Math.min(delay * 1.5, 10000);
+      }
+    }
+
+    if (!connected) {
+      console.error('❌ Could not connect to Telegram API during boot. Background reconnect will continue.');
+      const interval = setInterval(async () => {
+        try {
+          const info = await bot.api.getMe();
+          botUsername = info.username;
+          console.log(`🤖 Background connection succeeded: @${info.username}!`);
+          clearInterval(interval);
+          connectTelegram();
+        } catch {}
+      }, 10000);
+    }
   }
+
+  // Start Telegram connection asynchronously (non-blocking)
+  connectTelegram();
+
+  // Graceful shutdown
+  process.on('SIGTERM', () => {
+    console.log('SIGTERM received. Shutting down gracefully...');
+    server.close(() => process.exit(0));
+  });
 }
 
 main().catch((err) => {
-  console.error('❌ Fatal error running bot server:', err);
-  process.exit(1);
+  console.error('❌ Fatal error in server startup:', err);
 });
