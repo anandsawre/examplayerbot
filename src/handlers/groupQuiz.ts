@@ -67,7 +67,9 @@ export async function handleGroupQuizCommand(ctx: Context, supabase: SupabaseCli
 export interface GroupParticipant {
   userId: number;
   name: string;
+  username?: string;
   correctCount: number;
+  wrongCount: number;
 }
 
 export interface GroupQuizBattle {
@@ -102,17 +104,20 @@ export function handleGroupPollAnswer(pollAnswer: any) {
 
   const userId = pollAnswer.user.id;
   const name = pollAnswer.user.first_name || 'Participant';
+  const username = pollAnswer.user.username;
   const selectedOption = Array.isArray(pollAnswer.option_ids) ? pollAnswer.option_ids[0] : -1;
   const isCorrect = selectedOption === battle.currentCorrectIndex;
 
   let participant = battle.participants.get(userId);
   if (!participant) {
-    participant = { userId, name, correctCount: 0 };
+    participant = { userId, name, username, correctCount: 0, wrongCount: 0 };
     battle.participants.set(userId, participant);
   }
 
   if (isCorrect) {
     participant.correctCount++;
+  } else if (selectedOption !== -1) {
+    participant.wrongCount++;
   }
 }
 
@@ -274,35 +279,85 @@ export async function executeGroupQuizBattle(
     return;
   }
 
-  // 3. Quiz Completion Announcement with Group Battle Leaderboard Podium!
+  // 3. Quiz Completion Announcement with Professional Merit List
   const finalBattle = activeGroupBattles.get(chatId);
   activeGroupBattles.delete(chatId);
 
-  let leaderboardText = '';
-  if (finalBattle && finalBattle.participants.size > 0) {
-    const ranked = Array.from(finalBattle.participants.values())
-      .sort((a, b) => b.correctCount - a.correctCount)
-      .slice(0, 10);
+  const marksPerQ = Number(quiz.marks_per_question) || 2;
+  const negMarksPerWrong = Number(quiz.negative_marks) || 0.5;
 
-    const medals = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
-    leaderboardText = `\n\n🏆 *GROUP LIVE BATTLE TOPPERS:*\n━━━━━━━━━━━━━━━━━━━━━\n`;
-    ranked.forEach((p, idx) => {
-      leaderboardText += `${medals[idx] || '🎖️'} *${escapeMarkdown(p.name)}* — \`${p.correctCount}/${questions.length}\` Sahi\n`;
+  let meritListSection = '';
+  const contestantsCount = finalBattle ? finalBattle.participants.size : 0;
+
+  if (finalBattle && contestantsCount > 0) {
+    // Calculate accurate test scores with positive marks and negative penalty
+    const participantsList = Array.from(finalBattle.participants.values()).map((p) => {
+      const positive = p.correctCount * marksPerQ;
+      const negative = p.wrongCount * negMarksPerWrong;
+      const score = Math.max(0, Math.round((positive - negative) * 100) / 100);
+      const totalAnswered = p.correctCount + p.wrongCount;
+      const accuracy = totalAnswered > 0 ? Math.round((p.correctCount / totalAnswered) * 100) : 0;
+      return {
+        ...p,
+        score,
+        accuracy,
+        negPenalty: Math.round(negative * 100) / 100,
+      };
     });
+
+    // Rank participants: highest score first, then highest correct answers
+    const ranked = participantsList
+      .sort((a, b) => b.score - a.score || b.correctCount - a.correctCount)
+      .slice(0, 15);
+
+    // Top 3 Podium Highlights
+    const medals = ['🥇', '🥈', '🥉', '🎖️', '🎖️'];
+    let podiumText = `🏆 *TOP BATTLE PERFORMERS:*\n`;
+    ranked.slice(0, 3).forEach((p, idx) => {
+      podiumText += `${medals[idx]} *${escapeMarkdown(p.name)}* — \`${p.score} pts\` (✅ ${p.correctCount}/${questions.length} | 🎯 ${p.accuracy}% Acc)\n`;
+    });
+
+    // Monospace Aligned Merit List Table
+    let table = `Rank Name        ✅  ❌  -Neg   Score\n`;
+    table += `─────────────────────────────────────\n`;
+    ranked.forEach((p, idx) => {
+      const rankStr = `${idx + 1}.`.padEnd(5, ' ');
+      const rawName = p.name || 'Candidate';
+      const nameStr = rawName.length > 10 ? rawName.slice(0, 9) + '…' : rawName;
+      const paddedName = nameStr.padEnd(11, ' ');
+      const correctStr = String(p.correctCount).padStart(3, ' ');
+      const wrongStr = String(p.wrongCount).padStart(3, ' ');
+      const negStr = (p.negPenalty > 0 ? `-${p.negPenalty}` : ' 0.0').padStart(6, ' ');
+      const scoreStr = String(p.score).padStart(7, ' ');
+      table += `${rankStr}${paddedName}${correctStr} ${wrongStr} ${negStr} ${scoreStr}\n`;
+    });
+
+    meritListSection = `\n\n${podiumText}\n📊 *OFFICIAL BATTLE SCOREBOARD:*\n\`\`\`\n${table}\`\`\``;
+  } else {
+    meritListSection = `\n\n_Is battle me kisi candidate ne questions attempt nahi kiye._`;
   }
 
   const finishKeyboard = new InlineKeyboard()
-    .url('👤 Check My Profile & Score', `https://t.me/${botUsername}?start=profile`)
-    .url('📚 Take Solo Test in DM', `https://t.me/${botUsername}?start=quiz_${quiz.id}`);
+    .text('📄 Download Solutions Booklet (PDF)', `pdf_scorecard:${quiz.id}`)
+    .row()
+    .url('👤 My Profile & Stats', `https://t.me/${botUsername}?start=profile`)
+    .url('📚 Solo Mock Test in DM', `https://t.me/${botUsername}?start=quiz_${quiz.id}`);
 
-  await api.sendMessage(
-    chatId,
-    `🏁 *GROUP QUIZ COMPLETE!*\n` +
-    `━━━━━━━━━━━━━━━━━━━━━\n` +
-    `🎉 *${quiz.title}* khatam ho chuka hai!${leaderboardText}\n\n` +
-    `Sabhi participants ko badhai! Apna detailed scorecard dekhne ke liye neeche button par tap karein:`,
-    { parse_mode: 'Markdown', reply_markup: finishKeyboard }
-  ).catch((err) => {
+  const completionMessage =
+    `🎓 *EXAMPLAYER LIVE BATTLE — OFFICIAL RESULT*\n` +
+    `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+    `📚 *Exam:* ${escapeMarkdown(quiz.title)}\n` +
+    `❓ *Questions:* \`${questions.length}\` | ⏱️ *Time Limit:* \`${timeLimit}s\`\n` +
+    `🎯 *Marking:* \`+${marksPerQ}\` / \`-${negMarksPerWrong}\` Negative Marking\n` +
+    `👥 *Total Participants:* \`${contestantsCount}\` Aspirants\n` +
+    `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━` +
+    meritListSection +
+    `\n\n✨ *Badhai ho sabhi participants ko!* Detailed solutions aur explanations ke liye neeche diye gaye PDF button par tap karein:`;
+
+  await api.sendMessage(chatId, completionMessage, {
+    parse_mode: 'Markdown',
+    reply_markup: finishKeyboard,
+  }).catch((err) => {
     console.error('Failed to send group completion message:', err);
   });
 }
