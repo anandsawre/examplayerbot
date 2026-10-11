@@ -22,7 +22,7 @@ import {
 import { handleStartQuiz, handleAnswerCallback, handleQuitQuiz, handleSoloPollAnswer, handlePollClosed, handleSkipQuestion } from './handlers/quizPlay';
 import { handleGlobalLeaderboard, handleQuizLeaderboard } from './handlers/leaderboard';
 import { handleProfile } from './handlers/profile';
-import { handleDocumentImport, handleImportHelp, handleTextImport } from './handlers/adminImport';
+import { handleDocumentImport, handleImportHelp, handleTextImport, handlePromptFolderImport } from './handlers/adminImport';
 import {
   handleGroupQuizCommand,
   handleLaunchGroupQuiz,
@@ -535,6 +535,13 @@ export function createBot(env: Env): Bot {
     if (data.startsWith('move_q_do:')) {
       const parts = data.split(':');
       return handleExecuteMoveQuiz(ctx, supabase, env, parts[1], parts[2]);
+    }
+    if (data.startsWith('fldr_imp:')) {
+      const folderId = data.replace('fldr_imp:', '');
+      return handlePromptFolderImport(ctx, supabase, env, folderId);
+    }
+    if (data === 'import_help') {
+      return handleImportHelp(ctx);
     }
   });
 

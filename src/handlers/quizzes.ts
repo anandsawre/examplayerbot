@@ -63,8 +63,10 @@ export async function handleQuizzesList(
     if (adminMode) {
       keyboard
         .text('➕ New Subfolder', `fldr_new:${folderId}`)
-        .text('✏️ Rename Folder', `fldr_ren:${folderId}`)
-        .text('🗑️ Delete Folder', `fldr_del:${folderId}`)
+        .text('✏️ Rename', `fldr_ren:${folderId}`)
+        .text('🗑️ Delete', `fldr_del:${folderId}`)
+        .row()
+        .text('📥 Import Quiz to this Folder', `fldr_imp:${folderId}`)
         .row();
     }
 
@@ -126,7 +128,10 @@ export async function handleQuizzesList(
     });
 
     if (adminMode) {
-      keyboard.text('📁 Create Examination Folder', 'fldr_new:root').row();
+      keyboard
+        .text('📁 Create Examination Folder', 'fldr_new:root')
+        .text('📥 Import Quiz', 'fldr_imp:root')
+        .row();
     }
     keyboard.text('🔙 Platform Dashboard', 'menu_start');
 
@@ -166,7 +171,10 @@ export async function handleQuizzesList(
   }
 
   if (adminMode) {
-    keyboard.text('➕ Create New Folder', 'fldr_new:root').row();
+    keyboard
+      .text('➕ Create New Folder', 'fldr_new:root')
+      .text('📥 Import Quiz (Root)', 'fldr_imp:root')
+      .row();
   }
   keyboard.text('🔙 Platform Dashboard', 'menu_start');
 

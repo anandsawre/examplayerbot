@@ -1,7 +1,92 @@
-import { Context } from 'grammy';
+import { Context, InlineKeyboard } from 'grammy';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { Env } from '../config';
 import { isAdmin } from '../utils/admin';
+import { getFolderById, memoryQuizFolderMap } from '../db/queries';
+
+function escapeMarkdown(text: string): string {
+  if (!text) return '';
+  return text
+    .replace(/_/g, '\\_')
+    .replace(/\*/g, '\\*')
+    .replace(/\[/g, '\\[')
+    .replace(/\]/g, '\\]')
+    .replace(/`/g, '\\`');
+}
+
+export interface AdminImportSession {
+  folderId: string | null;
+  folderName: string;
+}
+
+// In-memory session tracking for active folder import target
+export const adminImportSessions: Map<number, AdminImportSession> = new Map();
+
+/**
+ * Triggered when admin clicks "📥 Import Quiz Here" from within any folder or root
+ */
+export async function handlePromptFolderImport(
+  ctx: Context,
+  supabase: SupabaseClient,
+  env: Env,
+  folderIdStr: string
+) {
+  if (!isAdmin(ctx, env)) {
+    return ctx.answerCallbackQuery({ text: '⚠️ Administrator access required.', show_alert: true }).catch(() => {});
+  }
+
+  const userId = ctx.from?.id;
+  const isSubfolder = folderIdStr && folderIdStr !== 'root';
+  let targetFolderId: string | null = null;
+  let targetFolderName = 'Directory Root';
+
+  if (isSubfolder) {
+    const folder = await getFolderById(supabase, folderIdStr);
+    if (folder) {
+      targetFolderId = folder.id;
+      targetFolderName = folder.name;
+    }
+  }
+
+  if (userId) {
+    adminImportSessions.set(userId, {
+      folderId: targetFolderId,
+      folderName: targetFolderName,
+    });
+  }
+
+  const text =
+    `📥 *IMPORT QUIZ INTO: "${escapeMarkdown(targetFolderName)}"*\n` +
+    `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+    `📍 Target Folder: *${escapeMarkdown(targetFolderName)}*\n\n` +
+    `Is folder ke andar direct quiz import karne ke liye:\n` +
+    `1️⃣ Apni formatted \`.json\` file is chat me upload karein, YA\n` +
+    `2️⃣ Direct JSON text payload is chat me paste kar dein!\n\n` +
+    `Yeh quiz create hote hi seedhe *"${escapeMarkdown(targetFolderName)}"* folder me save ho jayega.`;
+
+  const keyboard = new InlineKeyboard();
+  keyboard.text('ℹ️ View JSON Format / Template', 'import_help').row();
+  if (isSubfolder) {
+    keyboard.text('❌ Cancel', `fldr:${folderIdStr}`);
+  } else {
+    keyboard.text('❌ Cancel', 'menu_quizzes');
+  }
+
+  if (ctx.callbackQuery) {
+    try {
+      await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup: keyboard });
+    } catch {
+      await ctx.editMessageText(text.replace(/[*_`\[\]]/g, ''), { reply_markup: keyboard });
+    }
+    ctx.answerCallbackQuery().catch(() => {});
+  } else {
+    try {
+      await ctx.reply(text, { parse_mode: 'Markdown', reply_markup: keyboard });
+    } catch {
+      await ctx.reply(text.replace(/[*_`\[\]]/g, ''), { reply_markup: keyboard });
+    }
+  }
+}
 
 export async function handleDocumentImport(
   ctx: Context,
@@ -111,7 +196,22 @@ async function insertQuizToDatabase(
     return;
   }
 
-  // 1. Insert Quiz
+  const userId = ctx.from?.id;
+  const session = userId ? adminImportSessions.get(userId) : undefined;
+  if (userId) {
+    adminImportSessions.delete(userId);
+  }
+
+  // Determine folder_id: from session if set, or from payload if specified, or null
+  const targetFolderId: string | null = session?.folderId || quizData.folder_id || null;
+  let targetFolderName: string = session?.folderName || '';
+
+  if (targetFolderId && !targetFolderName) {
+    const f = await getFolderById(supabase, targetFolderId);
+    if (f) targetFolderName = f.name;
+  }
+
+  // 1. Insert Quiz with folder_id
   const { data: quiz, error: quizError } = await supabase
     .from('quizzes')
     .insert({
@@ -124,12 +224,18 @@ async function insertQuizToDatabase(
       time_limit_seconds: Number(quizData.time_limit_seconds) || 30,
       is_active: true,
       is_premium: Boolean(quizData.is_premium),
+      folder_id: targetFolderId,
     })
     .select()
     .single();
 
   if (quizError || !quiz) {
     throw new Error(quizError?.message || 'Database me quiz save nahi hua.');
+  }
+
+  // Sync with memory map
+  if (targetFolderId) {
+    memoryQuizFolderMap.set(quiz.id, targetFolderId);
   }
 
   // 2. Insert Questions
@@ -151,19 +257,39 @@ async function insertQuizToDatabase(
   }
 
   // 3. Success Announcement
+  const locationLine = targetFolderId && targetFolderName
+    ? `📁 *Folder:* ${escapeMarkdown(targetFolderName)}\n`
+    : `📁 *Location:* Directory Root\n`;
+
   const successText =
     `🎉 *EXAMINATION SUCCESSFULLY IMPORTED*\n` +
     `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-    `📝 *Title:* ${quiz.title}\n` +
-    `📂 *Category:* ${quiz.category}\n` +
+    `📝 *Title:* ${escapeMarkdown(quiz.title)}\n` +
+    `📂 *Category:* ${escapeMarkdown(quiz.category)}\n` +
+    locationLine +
     `❓ *Total Questions:* \`${questionsToInsert.length}\`\n` +
     `⏱️ *Time Limit:* \`${quiz.time_limit_seconds}s\` per question\n` +
     `⚠️ *Negative Marking:* \`-${quiz.negative_marks}\`\n\n` +
-    `This examination module is now active and listed under /quizzes! 🚀`;
+    `This examination paper is now active and ready for candidates! 🚀`;
 
-  await ctx.api.editMessageText(ctx.chat!.id, statusMsgId, successText, {
-    parse_mode: 'Markdown',
-  });
+  const keyboard = new InlineKeyboard();
+  if (targetFolderId) {
+    keyboard.text(`📂 Open Folder: ${targetFolderName}`, `fldr:${targetFolderId}`).row();
+  } else {
+    keyboard.text('📂 Browse All Examinations', 'menu_quizzes').row();
+  }
+  keyboard.text('👁️ View Examination Scheme', `view_quiz:${quiz.id}`).row();
+
+  try {
+    await ctx.api.editMessageText(ctx.chat!.id, statusMsgId, successText, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard,
+    });
+  } catch {
+    await ctx.api.editMessageText(ctx.chat!.id, statusMsgId, successText.replace(/[*_`\[\]]/g, ''), {
+      reply_markup: keyboard,
+    });
+  }
 }
 
 export async function handleImportHelp(ctx: Context) {
@@ -193,5 +319,16 @@ export async function handleImportHelp(ctx: Context) {
     `}\n` +
     `\`\`\``;
 
-  await ctx.reply(guide, { parse_mode: 'Markdown' });
+  const keyboard = new InlineKeyboard().text('🔙 Back to Examinations', 'menu_quizzes');
+
+  if (ctx.callbackQuery) {
+    try {
+      await ctx.editMessageText(guide, { parse_mode: 'Markdown', reply_markup: keyboard });
+    } catch {
+      await ctx.reply(guide, { parse_mode: 'Markdown', reply_markup: keyboard });
+    }
+    ctx.answerCallbackQuery().catch(() => {});
+  } else {
+    await ctx.reply(guide, { parse_mode: 'Markdown', reply_markup: keyboard });
+  }
 }
