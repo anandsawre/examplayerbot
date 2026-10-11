@@ -92,6 +92,7 @@ import {
   handleConfirmDeleteFolder,
   handleMoveQuizPicker,
   handleExecuteMoveQuiz,
+  handleFolderTextInput,
 } from './handlers/folders';
 
 
@@ -211,7 +212,11 @@ export function createBot(env: Env): Bot {
 
   // Admin Import (File or Text JSON)
   bot.on('message:document', (ctx) => handleDocumentImport(ctx, supabase, env));
-  bot.on('message:text', (ctx) => handleTextImport(ctx, supabase, env));
+  bot.on('message:text', async (ctx) => {
+    const handledFolder = await handleFolderTextInput(ctx, supabase, env);
+    if (handledFolder) return;
+    return handleTextImport(ctx, supabase, env);
+  });
 
   // ================= STATIC CALLBACK QUERIES =================
   bot.callbackQuery('menu_start', async (ctx) => {

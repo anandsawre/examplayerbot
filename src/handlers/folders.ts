@@ -26,8 +26,20 @@ function escapeMarkdown(text: string): string {
     .replace(/`/g, '\\`');
 }
 
+export interface FolderInputSession {
+  type: 'create' | 'rename';
+  parentId?: string | null;
+  parentName?: string;
+  folderId?: string;
+  folderName?: string;
+}
+
+// In-memory session tracking for active admin prompts (No UUID needed!)
+export const folderInputSessions: Map<number, FolderInputSession> = new Map();
+
 /**
- * Prompt to create a new folder or subfolder
+ * Prompt to create a new folder or subfolder.
+ * Admin can simply type the name directly in chat — NO UUID required!
  */
 export async function handleCreateFolderPrompt(
   ctx: Context,
@@ -39,6 +51,7 @@ export async function handleCreateFolderPrompt(
     return ctx.answerCallbackQuery({ text: '⚠️ Platform Administrator access required.', show_alert: true });
   }
 
+  const userId = ctx.from?.id;
   const isSubfolder = parentIdStr && parentIdStr !== 'root';
   let parentName = 'Directory Root';
   if (isSubfolder) {
@@ -46,20 +59,27 @@ export async function handleCreateFolderPrompt(
     if (parent) parentName = parent.name;
   }
 
+  if (userId) {
+    folderInputSessions.set(userId, {
+      type: 'create',
+      parentId: isSubfolder ? parentIdStr : null,
+      parentName,
+    });
+  }
+
   const text =
-    `📁 *CREATE ${isSubfolder ? 'SUBFOLDER' : 'EXAMINATION FOLDER'}*\n` +
+    `✍️ *CREATE ${isSubfolder ? 'SUBFOLDER' : 'FOLDER'}*\n` +
     `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
     `📍 Target Location: *${escapeMarkdown(parentName)}*\n\n` +
-    `Naya folder banane ke liye chat me yeh command bhejein:\n` +
-    (isSubfolder
-      ? `\`/newfolder ${parentIdStr} Folder Ka Naam\``
-      : `\`/newfolder Folder Ka Naam\`\n\n_Example: \`/newfolder UPSC Civil Services\`_`);
+    `Bas chat me naye folder ka naam likhkar bhej dijiye:\n` +
+    `_Example: \`Prelims 2026\` ya \`Indian Polity\`_\n\n` +
+    `*(Aapko koi bhi lambi ID copy karne ki jarurat nahi hai!)*`;
 
   const keyboard = new InlineKeyboard();
   if (isSubfolder) {
-    keyboard.text('🔙 Back to Folder', `fldr:${parentIdStr}`);
+    keyboard.text('❌ Cancel', `fldr:${parentIdStr}`);
   } else {
-    keyboard.text('🔙 Back to Directory', 'menu_quizzes');
+    keyboard.text('❌ Cancel', 'menu_quizzes');
   }
 
   if (ctx.callbackQuery) {
@@ -71,7 +91,75 @@ export async function handleCreateFolderPrompt(
 }
 
 /**
- * Command: /newfolder [parentId] <FolderName>
+ * Intercepts plain text message when an admin is creating or renaming a folder.
+ */
+export async function handleFolderTextInput(
+  ctx: Context,
+  supabase: SupabaseClient,
+  env: Env
+): Promise<boolean> {
+  const userId = ctx.from?.id;
+  if (!userId) return false;
+
+  const session = folderInputSessions.get(userId);
+  if (!session) return false;
+
+  const text = ctx.message?.text?.trim();
+  if (!text) return false;
+
+  // If user enters a command, cancel the active session and let the command run
+  if (text.startsWith('/')) {
+    folderInputSessions.delete(userId);
+    return false;
+  }
+
+  folderInputSessions.delete(userId);
+
+  if (session.type === 'create') {
+    const folder = await createFolder(supabase, text, session.parentId || null);
+    if (!folder) {
+      await ctx.reply('❌ Folder create karne me samasya aayi. Kripya punah prayas karein.');
+      return true;
+    }
+
+    const notifyText =
+      `✅ *FOLDER SUCCESSFULLY CREATED!*\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+      `📁 *Name:* ${escapeMarkdown(folder.name)}\n` +
+      `📍 *Location:* ${escapeMarkdown(session.parentName || 'Directory Root')}\n\n` +
+      `Aap is folder ke andar tests rakh sakte hain ya subfolders bana sakte hain!`;
+
+    const keyboard = new InlineKeyboard().text('📂 Open Folder', `fldr:${folder.id}`).row();
+    if (session.parentId) {
+      keyboard.text('🔙 Back to Parent', `fldr:${session.parentId}`);
+    } else {
+      keyboard.text('🔙 Directory Root', 'menu_quizzes');
+    }
+
+    await ctx.reply(notifyText, { parse_mode: 'Markdown', reply_markup: keyboard });
+    return true;
+  }
+
+  if (session.type === 'rename' && session.folderId) {
+    const success = await updateFolder(supabase, session.folderId, text);
+    if (!success) {
+      await ctx.reply('❌ Folder rename karne me samasya aayi.');
+      return true;
+    }
+
+    const keyboard = new InlineKeyboard().text('📂 Open Folder', `fldr:${session.folderId}`);
+    await ctx.reply(
+      `✅ *Folder Ka Naam Badal Diya Gaya!*\nNew Name: *${escapeMarkdown(text)}*`,
+      { parse_mode: 'Markdown', reply_markup: keyboard }
+    );
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Command: /newfolder [ParentName/Subfolder] or [FolderName]
  */
 export async function handleCreateFolderCommand(
   ctx: Context,
@@ -81,31 +169,51 @@ export async function handleCreateFolderCommand(
   if (!isAdmin(ctx, env)) return;
 
   const raw = ctx.message?.text || '';
-  const parts = raw.trim().split(/\s+/);
-  if (parts.length < 2) {
+  const match = raw.replace(/^\/newfolder\s*/i, '').trim();
+  if (!match) {
     return ctx.reply(
-      `⚠️ *Command Format:*\n` +
-      `• Root Folder: \`/newfolder <Folder Name>\`\n` +
-      `• Subfolder: \`/newfolder <parent_id> <Subfolder Name>\``,
+      `📁 *Naya Folder Banane Ke Tareeqe:*\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+      `1️⃣ *Sabse Aasaan:* /quizzes me jaakar *[➕ New Subfolder]* button dabayein aur direct naam likhkar bhej dein (No ID needed).\n\n` +
+      `2️⃣ *Command (Root Folder):* \`/newfolder UPSC Civil Services\`\n` +
+      `3️⃣ *Command (Subfolder Name Se):* \`/newfolder UPSC / Prelims\`\n` +
+      `4️⃣ *Command (ID Se):* \`/newfolder <folder_id> Prelims\``,
       { parse_mode: 'Markdown' }
     );
   }
 
   let parentId: string | null = null;
-  let name = '';
+  let name = match;
 
-  // Check if first arg is an existing folder ID
-  const potentialParentId = parts[1];
-  const existingParent = await getFolderById(supabase, potentialParentId);
-  if (existingParent) {
-    parentId = existingParent.id;
-    name = parts.slice(2).join(' ').trim();
+  // Check if syntax has '/' or '>' e.g. "UPSC / Prelims"
+  if (match.includes('/') || match.includes('>')) {
+    const sep = match.includes('/') ? '/' : '>';
+    const parts = match.split(sep).map((p) => p.trim());
+    const parentQuery = parts[0];
+    name = parts.slice(1).join(sep).trim();
+
+    const all = await getAllFolders(supabase);
+    const found = all.find(
+      (f) => f.name.toLowerCase() === parentQuery.toLowerCase() || f.id === parentQuery
+    );
+    if (found) {
+      parentId = found.id;
+    } else {
+      return ctx.reply(`⚠️ Parent folder *"${escapeMarkdown(parentQuery)}"* nahi mila. Kripya folder ka sahi naam check karein.`, {
+        parse_mode: 'Markdown',
+      });
+    }
   } else {
-    name = parts.slice(1).join(' ').trim();
-  }
-
-  if (!name) {
-    return ctx.reply('⚠️ Kripya folder ka naam provide karein.');
+    // Check if first token is an existing folder ID
+    const parts = match.split(/\s+/);
+    if (parts.length >= 2) {
+      const potentialId = parts[0];
+      const existing = await getFolderById(supabase, potentialId);
+      if (existing) {
+        parentId = existing.id;
+        name = parts.slice(1).join(' ').trim();
+      }
+    }
   }
 
   const folder = await createFolder(supabase, name, parentId);
@@ -117,8 +225,7 @@ export async function handleCreateFolderCommand(
     `✅ *FOLDER SUCCESSFULLY CREATED!*\n` +
     `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
     `📁 *Name:* ${escapeMarkdown(folder.name)}\n` +
-    `🆔 *Folder ID:* \`${folder.id}\`\n` +
-    (parentId ? `📍 *Parent:* \`${parentId}\`\n\n` : `📍 *Location:* Directory Root\n\n`) +
+    (parentId ? `📍 *Inside Parent Folder*\n\n` : `📍 *Location:* Directory Root\n\n`) +
     `You can now move examination papers into this folder!`;
 
   const keyboard = new InlineKeyboard().text('📂 Open Folder in Directory', `fldr:${folder.id}`);
@@ -126,7 +233,7 @@ export async function handleCreateFolderCommand(
 }
 
 /**
- * Prompt to rename an existing folder
+ * Prompt to rename an existing folder (No UUID needed!).
  */
 export async function handleRenameFolderPrompt(
   ctx: Context,
@@ -138,20 +245,27 @@ export async function handleRenameFolderPrompt(
     return ctx.answerCallbackQuery({ text: '⚠️ Administrator access required.', show_alert: true });
   }
 
+  const userId = ctx.from?.id;
   const folder = await getFolderById(supabase, folderId);
   if (!folder) {
     return ctx.answerCallbackQuery({ text: 'Folder not found.', show_alert: true });
   }
 
-  const text =
-    `✏️ *RENAME EXAMINATION FOLDER*\n` +
-    `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-    `Current Folder Name: *${escapeMarkdown(folder.name)}*\n` +
-    `Folder ID: \`${folder.id}\`\n\n` +
-    `Folder ka naam badalne ke liye chat me yeh command enter karein:\n` +
-    `\`/renamefolder ${folder.id} Naya Folder Name\``;
+  if (userId) {
+    folderInputSessions.set(userId, {
+      type: 'rename',
+      folderId,
+      folderName: folder.name,
+    });
+  }
 
-  const keyboard = new InlineKeyboard().text('🔙 Back to Folder', `fldr:${folder.id}`);
+  const text =
+    `✏️ *RENAME FOLDER: "${escapeMarkdown(folder.name)}"\n` +
+    `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+    `Kripya is folder ka naya naam chat me likhkar bhej dijiye (e.g. \`IAS Prelims 2026\`):\n\n` +
+    `*(Kisi bhi ID ko copy karne ki jarurat nahi hai!)*`;
+
+  const keyboard = new InlineKeyboard().text('❌ Cancel', `fldr:${folderId}`);
 
   if (ctx.callbackQuery) {
     await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup: keyboard });
@@ -162,7 +276,7 @@ export async function handleRenameFolderPrompt(
 }
 
 /**
- * Command: /renamefolder <folder_id> <New Name>
+ * Command: /renamefolder <Folder/ID> <New Name>
  */
 export async function handleRenameFolderCommand(
   ctx: Context,
@@ -172,17 +286,40 @@ export async function handleRenameFolderCommand(
   if (!isAdmin(ctx, env)) return;
 
   const raw = ctx.message?.text || '';
-  const parts = raw.trim().split(/\s+/);
-  if (parts.length < 3) {
-    return ctx.reply('⚠️ *Syntax:* `/renamefolder <folder_id> <New Name>`', { parse_mode: 'Markdown' });
-  }
+  const match = raw.replace(/^\/renamefolder\s*/i, '').trim();
 
-  const folderId = parts[1];
-  const newName = parts.slice(2).join(' ').trim();
+  let folderId = '';
+  let newName = '';
+
+  if (match.includes('/') || match.includes('>')) {
+    const sep = match.includes('/') ? '/' : '>';
+    const parts = match.split(sep).map((p) => p.trim());
+    const oldQuery = parts[0];
+    newName = parts.slice(1).join(sep).trim();
+
+    const all = await getAllFolders(supabase);
+    const found = all.find(
+      (f) => f.name.toLowerCase() === oldQuery.toLowerCase() || f.id === oldQuery
+    );
+    if (found) {
+      folderId = found.id;
+    } else {
+      return ctx.reply(`⚠️ Folder *"${escapeMarkdown(oldQuery)}"* nahi mila.`);
+    }
+  } else {
+    const parts = match.split(/\s+/);
+    if (parts.length < 2) {
+      return ctx.reply('⚠️ *Syntax:* `/renamefolder OldName / NewName` ya `/renamefolder <id> NewName`', {
+        parse_mode: 'Markdown',
+      });
+    }
+    folderId = parts[0];
+    newName = parts.slice(1).join(' ').trim();
+  }
 
   const success = await updateFolder(supabase, folderId, newName);
   if (!success) {
-    return ctx.reply('❌ Failed to rename folder. Verify Folder ID.');
+    return ctx.reply('❌ Failed to rename folder. Verify Folder Name/ID.');
   }
 
   const keyboard = new InlineKeyboard().text('📂 Open Folder', `fldr:${folderId}`);
@@ -253,7 +390,7 @@ export async function handleConfirmDeleteFolder(
 }
 
 /**
- * Command: /delfolder <folder_id>
+ * Command: /delfolder <folder_name_or_id>
  */
 export async function handleDeleteFolderCommand(
   ctx: Context,
@@ -263,18 +400,22 @@ export async function handleDeleteFolderCommand(
   if (!isAdmin(ctx, env)) return;
 
   const raw = ctx.message?.text || '';
-  const parts = raw.trim().split(/\s+/);
-  if (parts.length < 2) {
-    return ctx.reply('⚠️ *Syntax:* `/delfolder <folder_id>`', { parse_mode: 'Markdown' });
+  const query = raw.replace(/^\/delfolder\s*/i, '').trim();
+  if (!query) {
+    return ctx.reply('⚠️ *Syntax:* `/delfolder <Folder Name ya ID>`', { parse_mode: 'Markdown' });
   }
 
-  const folderId = parts[1].trim();
-  const folder = await getFolderById(supabase, folderId);
+  let folder = await getFolderById(supabase, query);
   if (!folder) {
-    return ctx.reply('❌ Folder not found.');
+    const all = await getAllFolders(supabase);
+    folder = all.find((f) => f.name.toLowerCase() === query.toLowerCase()) || null;
   }
 
-  await deleteFolder(supabase, folderId);
+  if (!folder) {
+    return ctx.reply('❌ Folder nahi mila.');
+  }
+
+  await deleteFolder(supabase, folder.id);
   return ctx.reply(`✅ Folder *"${escapeMarkdown(folder.name)}"* deleted. Contained tests moved to root.`, {
     parse_mode: 'Markdown',
   });
