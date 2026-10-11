@@ -1,4 +1,6 @@
 import PDFDocument from 'pdfkit';
+import path from 'node:path';
+import fs from 'node:fs';
 import { Quiz, Question } from '../types';
 import { ScoreResult, formatTime } from './scoring';
 
@@ -18,6 +20,7 @@ const OPTION_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F'];
 
 /**
  * Generates a high-quality PDF Scorecard & Detailed Solutions Booklet as a Buffer.
+ * Fully supports Hindi / Devanagari and English Unicode text using Noto Sans Devanagari.
  */
 export async function generateScorecardPdf(
   quiz: Quiz,
@@ -39,6 +42,21 @@ export async function generateScorecardPdf(
         },
       });
 
+      // Register Unicode Fonts for perfect Devanagari / Hindi & English rendering
+      const fontDir = path.join(process.cwd(), 'assets', 'fonts');
+      const fontRegPath = path.join(fontDir, 'NotoSansDevanagari-Regular.ttf');
+      const fontBoldPath = path.join(fontDir, 'NotoSansDevanagari-Bold.ttf');
+
+      let regularFont = 'Helvetica';
+      let boldFont = 'Helvetica-Bold';
+
+      if (fs.existsSync(fontRegPath) && fs.existsSync(fontBoldPath)) {
+        doc.registerFont('AppFont', fontRegPath);
+        doc.registerFont('AppFontBold', fontBoldPath);
+        regularFont = 'AppFont';
+        boldFont = 'AppFontBold';
+      }
+
       const buffers: Buffer[] = [];
       doc.on('data', (chunk) => buffers.push(chunk));
       doc.on('end', () => resolve(Buffer.concat(buffers)));
@@ -52,12 +70,12 @@ export async function generateScorecardPdf(
       doc.rect(36, 36, contentWidth, 54).fill('#1E3A8A'); // Dark Blue
 
       doc.fillColor('#FFFFFF')
-        .fontSize(18)
-        .font('Helvetica-Bold')
+        .fontSize(17)
+        .font(boldFont)
         .text('EXAMPLAYER EXAMINATION PLATFORM', 46, 46, { width: contentWidth - 20, align: 'center' });
 
-      doc.fontSize(10)
-        .font('Helvetica')
+      doc.fontSize(9.5)
+        .font(regularFont)
         .fillColor('#93C5FD') // Light blue
         .text('Official Examination Scorecard & Detailed Solution Booklet', 46, 68, { width: contentWidth - 20, align: 'center' });
 
@@ -66,31 +84,31 @@ export async function generateScorecardPdf(
       // ================= 2. CANDIDATE & TEST INFO BOX =================
       const infoBoxY = doc.y;
       doc.rect(36, infoBoxY, contentWidth, 68)
-        .fillAndStroke('#F8FAFC', '#E2E8F0');
+        .fillAndStroke('#F8FAFC', '#CBD5E1');
 
-      doc.fillColor('#1E293B').font('Helvetica-Bold').fontSize(9);
+      doc.fillColor('#1E293B').font(boldFont).fontSize(9);
 
       // Left Column: Candidate Info
       doc.text('CANDIDATE DETAILS', 48, infoBoxY + 8);
-      doc.font('Helvetica').fontSize(9).fillColor('#334155');
+      doc.font(regularFont).fontSize(9).fillColor('#334155');
       doc.text(`Name: `, 48, infoBoxY + 22, { continued: true })
-        .font('Helvetica-Bold').text(student.name);
-      doc.font('Helvetica').text(`Telegram ID: `, 48, infoBoxY + 36, { continued: true })
-        .font('Helvetica-Bold').text(String(student.id));
-      doc.font('Helvetica').text(`Date: `, 48, infoBoxY + 50, { continued: true })
-        .font('Helvetica-Bold').text(new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }));
+        .font(boldFont).text(student.name);
+      doc.font(regularFont).text(`Telegram ID: `, 48, infoBoxY + 36, { continued: true })
+        .font(boldFont).text(String(student.id));
+      doc.font(regularFont).text(`Date: `, 48, infoBoxY + 50, { continued: true })
+        .font(boldFont).text(new Date().toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }));
 
       // Right Column: Exam Info
       const rightColX = 300;
-      doc.font('Helvetica-Bold').fontSize(9).fillColor('#1E293B');
+      doc.font(boldFont).fontSize(9).fillColor('#1E293B');
       doc.text('EXAM DETAILS', rightColX, infoBoxY + 8);
-      doc.font('Helvetica').fontSize(9).fillColor('#334155');
+      doc.font(regularFont).fontSize(9).fillColor('#334155');
       doc.text(`Test Name: `, rightColX, infoBoxY + 22, { continued: true })
-        .font('Helvetica-Bold').text(quiz.title.slice(0, 32));
-      doc.font('Helvetica').text(`Category: `, rightColX, infoBoxY + 36, { continued: true })
-        .font('Helvetica-Bold').text(quiz.category || 'General');
-      doc.font('Helvetica').text(`Marking: `, rightColX, infoBoxY + 50, { continued: true })
-        .font('Helvetica-Bold').text(`+${quiz.marks_per_question} / -${quiz.negative_marks} per question`);
+        .font(boldFont).text(quiz.title.slice(0, 32));
+      doc.font(regularFont).text(`Category: `, rightColX, infoBoxY + 36, { continued: true })
+        .font(boldFont).text(quiz.category || 'General');
+      doc.font(regularFont).text(`Marking: `, rightColX, infoBoxY + 50, { continued: true })
+        .font(boldFont).text(`+${quiz.marks_per_question} / -${quiz.negative_marks} per question`);
 
       doc.y = infoBoxY + 76;
 
@@ -103,28 +121,28 @@ export async function generateScorecardPdf(
         const colW = contentWidth / 4;
 
         // Card 1: Score
-        doc.fillColor('#1E3A8A').font('Helvetica-Bold').fontSize(14)
+        doc.fillColor('#1E3A8A').font(boldFont).fontSize(14)
           .text(`${result.finalScore} / ${result.maxScore}`, 36, perfBoxY + 12, { width: colW, align: 'center' });
-        doc.fillColor('#4B5563').font('Helvetica').fontSize(8)
+        doc.fillColor('#4B5563').font(regularFont).fontSize(8)
           .text('TOTAL SCORE', 36, perfBoxY + 32, { width: colW, align: 'center' });
 
         // Card 2: Accuracy
-        doc.fillColor('#0D9488').font('Helvetica-Bold').fontSize(14)
+        doc.fillColor('#0D9488').font(boldFont).fontSize(14)
           .text(`${result.accuracy}%`, 36 + colW, perfBoxY + 12, { width: colW, align: 'center' });
-        doc.fillColor('#4B5563').font('Helvetica').fontSize(8)
+        doc.fillColor('#4B5563').font(regularFont).fontSize(8)
           .text('ACCURACY', 36 + colW, perfBoxY + 32, { width: colW, align: 'center' });
 
         // Card 3: Breakdown (Correct/Wrong/Skipped)
-        doc.fillColor('#15803D').font('Helvetica-Bold').fontSize(11)
+        doc.fillColor('#15803D').font(boldFont).fontSize(11)
           .text(`✅ ${result.correctCount}  ❌ ${result.wrongCount}  ⏭️ ${result.skippedCount}`, 36 + colW * 2, perfBoxY + 14, { width: colW, align: 'center' });
-        doc.fillColor('#4B5563').font('Helvetica').fontSize(8)
+        doc.fillColor('#4B5563').font(regularFont).fontSize(8)
           .text('ANSWERS BREAKDOWN', 36 + colW * 2, perfBoxY + 32, { width: colW, align: 'center' });
 
         // Card 4: Time & Verdict
         const timeStr = formatTime(result.timeTakenSeconds);
-        doc.fillColor('#6366F1').font('Helvetica-Bold').fontSize(11)
+        doc.fillColor('#6366F1').font(boldFont).fontSize(11)
           .text(`${timeStr}`, 36 + colW * 3, perfBoxY + 12, { width: colW, align: 'center' });
-        doc.fillColor('#4338CA').font('Helvetica-Bold').fontSize(8)
+        doc.fillColor('#4338CA').font(boldFont).fontSize(8)
           .text(`${result.remark}`, 36 + colW * 3, perfBoxY + 30, { width: colW, align: 'center' });
 
         doc.y = perfBoxY + 68;
@@ -132,7 +150,7 @@ export async function generateScorecardPdf(
 
       // ================= 4. SECTION TITLE: DETAILED SOLUTIONS =================
       doc.rect(36, doc.y, contentWidth, 22).fill('#334155');
-      doc.fillColor('#FFFFFF').font('Helvetica-Bold').fontSize(9)
+      doc.fillColor('#FFFFFF').font(boldFont).fontSize(9)
         .text('DETAILED QUESTION-BY-QUESTION SOLUTIONS & ANALYSIS', 46, doc.y + 6);
 
       doc.y += 28;
@@ -150,33 +168,26 @@ export async function generateScorecardPdf(
         const userAns = answerMap.get(q.id);
 
         // Estimate question block height before writing
-        // If remaining page height is < 140, start new page
         if (doc.y > pageHeight - 160) {
-          drawFooter(doc, pageWidth, pageHeight);
+          drawFooter(doc, pageWidth, pageHeight, regularFont);
           doc.addPage();
           doc.y = 40;
         }
 
-        const startY = doc.y;
-
-        // Question header bar
+        // Question status badge
         let qStatusBadge = '';
-        let badgeColor = '#475569';
         if (userAns) {
           if (userAns.is_correct) {
             qStatusBadge = ' [Correct +Marks]';
-            badgeColor = '#166534';
           } else if (userAns.selected_option_index === -1) {
             qStatusBadge = ' [Skipped]';
-            badgeColor = '#64748B';
           } else {
             qStatusBadge = ' [Incorrect -Negative]';
-            badgeColor = '#991B1B';
           }
         }
 
         // Question Title
-        doc.fillColor('#0F172A').font('Helvetica-Bold').fontSize(10);
+        doc.fillColor('#0F172A').font(boldFont).fontSize(10);
         doc.text(`Q${i + 1}. ${q.question_text}${qStatusBadge}`, 42, doc.y, {
           width: contentWidth - 12,
         });
@@ -193,13 +204,13 @@ export async function generateScorecardPdf(
           let suffix = '';
 
           if (isCorrect) {
-            doc.font('Helvetica-Bold').fontSize(9).fillColor('#15803D'); // Green
+            doc.font(boldFont).fontSize(9).fillColor('#15803D'); // Green
             suffix = '  <-- Correct Answer';
           } else if (isSelected) {
-            doc.font('Helvetica-Bold').fontSize(9).fillColor('#DC2626'); // Red
+            doc.font(boldFont).fontSize(9).fillColor('#DC2626'); // Red
             suffix = '  <-- Your Choice (Wrong)';
           } else {
-            doc.font('Helvetica').fontSize(9).fillColor('#334155');
+            doc.font(regularFont).fontSize(9).fillColor('#334155');
           }
 
           if (isSelected && isCorrect) {
@@ -221,7 +232,7 @@ export async function generateScorecardPdf(
 
           // Check if box fits on page
           if (doc.y + explBoxHeight > pageHeight - 50) {
-            drawFooter(doc, pageWidth, pageHeight);
+            drawFooter(doc, pageWidth, pageHeight, regularFont);
             doc.addPage();
             doc.y = 40;
           }
@@ -229,7 +240,7 @@ export async function generateScorecardPdf(
           doc.rect(46, doc.y, contentWidth - 20, explBoxHeight)
             .fillAndStroke('#F0FDF4', '#BBF7D0');
 
-          doc.fillColor('#166534').font('Helvetica-Oblique').fontSize(8.5);
+          doc.fillColor('#166534').font(regularFont).fontSize(8.5);
           doc.text(explText, 52, doc.y + 5, { width: contentWidth - 32 });
           doc.y += explBoxHeight + 6;
         } else {
@@ -242,7 +253,7 @@ export async function generateScorecardPdf(
       }
 
       // Draw footer on final page
-      drawFooter(doc, pageWidth, pageHeight);
+      drawFooter(doc, pageWidth, pageHeight, regularFont);
 
       doc.end();
     } catch (error) {
@@ -251,11 +262,11 @@ export async function generateScorecardPdf(
   });
 }
 
-function drawFooter(doc: PDFKit.PDFDocument, pageWidth: number, pageHeight: number) {
+function drawFooter(doc: PDFKit.PDFDocument, pageWidth: number, pageHeight: number, fontName: string) {
   const footerY = pageHeight - 28;
   doc.moveTo(36, footerY).lineTo(pageWidth - 36, footerY).strokeColor('#CBD5E1').stroke();
 
-  doc.fillColor('#64748B').font('Helvetica').fontSize(8)
+  doc.fillColor('#64748B').font(fontName).fontSize(8)
     .text('Examplayer Bot | Telegram: @Examplayer_bot | Automated Testing Platform', 36, footerY + 6, {
       width: pageWidth - 72,
       align: 'center',

@@ -151,25 +151,35 @@ export async function handleLaunchGroupQuiz(
     return;
   }
 
-  const quiz = await getQuizById(supabase, quizId);
-  if (!quiz) {
-    if (ctx.callbackQuery) {
-      await ctx.answerCallbackQuery({ text: 'Quiz nahi mila!', show_alert: true });
-    }
+  if (ctx.callbackQuery) {
+    await ctx.answerCallbackQuery({ text: 'Starting group quiz!' }).catch(() => {});
+  }
+
+  const botUsername = ctx.me?.username || 'Examplayer_bot';
+  executeGroupQuizBattle(ctx.api, supabase, chatId, quizId, botUsername).catch((err) => {
+    console.error('Error executing group quiz battle:', err);
+  });
+}
+
+/**
+ * Pure execution engine for group quiz battle (used by direct launch & background scheduler)
+ */
+export async function executeGroupQuizBattle(
+  api: import('grammy').Api,
+  supabase: SupabaseClient,
+  chatId: number,
+  quizId: string,
+  botUsername: string = 'Examplayer_bot'
+) {
+  if (activeGroupBattles.has(chatId)) {
     return;
   }
+
+  const quiz = await getQuizById(supabase, quizId);
+  if (!quiz) return;
 
   const questions = await getQuestionsForQuiz(supabase, quizId);
-  if (!questions || questions.length === 0) {
-    if (ctx.callbackQuery) {
-      await ctx.answerCallbackQuery({ text: 'Is quiz me questions nahi hain!', show_alert: true });
-    }
-    return;
-  }
-
-  if (ctx.callbackQuery) {
-    await ctx.answerCallbackQuery({ text: 'Starting group quiz!' });
-  }
+  if (!questions || questions.length === 0) return;
 
   const timeLimit = Math.min(600, Math.max(10, Number(quiz.time_limit_seconds) || 30));
 
@@ -192,50 +202,35 @@ export async function handleLaunchGroupQuiz(
     `⏱️ *Time per Question:* \`${timeLimit}s\` (Sabhi ke liye pura timer chalega!)\n\n` +
     `⚡ Sabhi members screen par ready rahein! Confetti & Polls aane wale hain...`;
 
-  if (ctx.callbackQuery) {
-    try {
-      await ctx.editMessageText(introMsg, { parse_mode: 'Markdown' });
-    } catch {
-      await ctx.reply(introMsg, { parse_mode: 'Markdown' });
-    }
-  } else {
-    await ctx.reply(introMsg, { parse_mode: 'Markdown' });
-  }
+  await api.sendMessage(chatId, introMsg, { parse_mode: 'Markdown' }).catch((err) => {
+    console.error('Failed to send group intro msg:', err);
+  });
 
   await sleep(5000);
 
   // 2. Loop through questions and send as Telegram Native Quiz Polls
   for (let i = 0; i < questions.length; i++) {
-    // Check if admin stopped the quiz
     if (battle.isCancelled) {
       break;
     }
 
     const q = questions[i];
     const options = Array.isArray(q.options) ? q.options : [];
-
-    // Clean existing leading numbers if present in JSON text
     const cleanQuestionText = q.question_text.replace(/^(Q\.?\s*\d+[\.\)]?\s*|\d+[\.\)]\s*)/i, '').trim();
-
-    // Escape HTML for safe parsing
     const escapedText = cleanQuestionText.slice(0, 260)
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;');
-
-    // Question poll title with bold Q
     const pollQuestion = `<b>Q</b>${i + 1}. ${escapedText}`;
-
-    // Ensure options don't exceed Telegram limit of 100 chars each
     const cleanOptions = options.map((opt) => String(opt).slice(0, 100));
 
     try {
       battle.currentCorrectIndex = q.correct_option_index;
 
-      const pollMessage = await ctx.api.sendPoll(chatId, pollQuestion, cleanOptions, {
+      const pollMessage = await api.sendPoll(chatId, pollQuestion, cleanOptions, {
         type: 'quiz',
         correct_option_id: q.correct_option_index,
-        is_anonymous: false, // Let students see who got it right
+        is_anonymous: false,
         open_period: timeLimit,
         question_parse_mode: 'HTML',
         explanation: q.explanation ? q.explanation.slice(0, 200) : undefined,
@@ -247,11 +242,8 @@ export async function handleLaunchGroupQuiz(
       console.error(`Error sending poll for question ${i + 1}:`, err);
     }
 
-    // Wait for the poll countdown timer to finish before sending the next question
-    // Group members have the full timeLimit seconds to answer!
     await sleep((timeLimit + 3) * 1000);
 
-    // Clean up mapping for this poll
     if (battle.currentPollId) {
       groupPollToChatMap.delete(battle.currentPollId);
     }
@@ -261,7 +253,6 @@ export async function handleLaunchGroupQuiz(
     }
   }
 
-  // If quiz was stopped mid-way by an admin
   if (battle.isCancelled) {
     activeGroupBattles.delete(chatId);
     return;
@@ -284,18 +275,20 @@ export async function handleLaunchGroupQuiz(
     });
   }
 
-  const botUsername = ctx.me.username;
   const finishKeyboard = new InlineKeyboard()
     .url('👤 Check My Profile & Score', `https://t.me/${botUsername}?start=profile`)
     .url('📚 Take Solo Test in DM', `https://t.me/${botUsername}?start=quiz_${quiz.id}`);
 
-  await ctx.reply(
+  await api.sendMessage(
+    chatId,
     `🏁 *GROUP QUIZ COMPLETE!*\n` +
     `━━━━━━━━━━━━━━━━━━━━━\n` +
     `🎉 *${quiz.title}* khatam ho chuka hai!${leaderboardText}\n\n` +
     `Sabhi participants ko badhai! Apna detailed scorecard dekhne ke liye neeche button par tap karein:`,
     { parse_mode: 'Markdown', reply_markup: finishKeyboard }
-  );
+  ).catch((err) => {
+    console.error('Failed to send group completion message:', err);
+  });
 }
 
 /**

@@ -57,6 +57,9 @@ import {
   handleScheduleCommand,
   handleSchedulePickQuiz,
   handleScheduleSetTime,
+  handleScheduleCustomPrompt,
+  handleSchedulePresetTime,
+  handleCustomTimeCommand,
   handleCancelScheduleCommand,
   handleScheduledStatusCommand,
 } from './handlers/groupSchedule';
@@ -115,6 +118,8 @@ export function createBot(env: Env): Bot {
 
   // Group Quiz Scheduling
   bot.command('schedule', (ctx) => handleScheduleCommand(ctx, supabase));
+  bot.command('scheduletime', (ctx) => handleCustomTimeCommand(ctx, supabase));
+  bot.command('schedule_time', (ctx) => handleCustomTimeCommand(ctx, supabase));
   bot.command('cancel_schedule', (ctx) => handleCancelScheduleCommand(ctx));
   bot.command('cancelschedule', (ctx) => handleCancelScheduleCommand(ctx));
   bot.command('scheduled', (ctx) => handleScheduledStatusCommand(ctx));
@@ -366,6 +371,16 @@ export function createBot(env: Env): Bot {
       const quizId = parts[1];
       const minutes = parseInt(parts[2], 10);
       return handleScheduleSetTime(ctx, supabase, quizId, minutes);
+    }
+    if (data.startsWith('sch_preset:')) {
+      const parts = data.split(':');
+      const quizId = parts[1];
+      const timeStr = `${parts[2]}:${parts[3]}`;
+      return handleSchedulePresetTime(ctx, supabase, quizId, timeStr);
+    }
+    if (data.startsWith('sch_custom:')) {
+      const quizId = data.replace('sch_custom:', '');
+      return handleScheduleCustomPrompt(ctx, supabase, quizId);
     }
     if (data === 'sch_cancel') {
       return handleCancelScheduleCommand(ctx);
