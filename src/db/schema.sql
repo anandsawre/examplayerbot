@@ -135,3 +135,74 @@ BEGIN
         (science_quiz_id, 'Which organelle is called the Powerhouse of the Cell?', '["Nucleus", "Ribosome", "Mitochondria", "Golgi body"]'::jsonb, 2, 'Mitochondria generates most of the chemical energy needed by the cell.', 3);
     END IF;
 END $$;
+
+-- ==========================================================
+-- PHASE 1 & PHASE 2 ADVANCED SCHEMA EXTENSIONS
+-- ==========================================================
+
+-- 7. User Profile Extensions (Streaks, Referrals, Duels)
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS longest_streak INTEGER DEFAULT 1;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS referrals_count INTEGER DEFAULT 0;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS referrer_id BIGINT;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS duel_rating INTEGER DEFAULT 1200;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS duel_wins INTEGER DEFAULT 0;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS duel_losses INTEGER DEFAULT 0;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS last_daily_date DATE;
+
+-- 8. Candidate Mistake Vault & Weak Area Bank (Phase 1A)
+CREATE TABLE IF NOT EXISTS public.user_mistakes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id BIGINT NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+    question_id UUID NOT NULL REFERENCES public.questions(id) ON DELETE CASCADE,
+    quiz_id UUID REFERENCES public.quizzes(id) ON DELETE CASCADE,
+    wrong_count INTEGER DEFAULT 1,
+    is_resolved BOOLEAN DEFAULT FALSE,
+    last_attempted_at TIMESTAMPTZ DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    CONSTRAINT uq_user_question_mistake UNIQUE (user_id, question_id)
+);
+CREATE INDEX IF NOT EXISTS idx_mistakes_user_id ON public.user_mistakes(user_id);
+CREATE INDEX IF NOT EXISTS idx_mistakes_unresolved ON public.user_mistakes(user_id, is_resolved);
+
+-- 9. Daily Question of the Day & Activity Drills (Phase 1B)
+CREATE TABLE IF NOT EXISTS public.daily_attempts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id BIGINT NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+    attempt_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    question_id UUID REFERENCES public.questions(id) ON DELETE CASCADE,
+    is_correct BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    CONSTRAINT uq_user_daily_attempt UNIQUE (user_id, attempt_date)
+);
+CREATE INDEX IF NOT EXISTS idx_daily_user_date ON public.daily_attempts(user_id, attempt_date);
+
+-- 10. Candidate Referral & Ambassador Program (Phase 2A)
+CREATE TABLE IF NOT EXISTS public.referrals (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    referrer_id BIGINT NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+    referred_id BIGINT NOT NULL UNIQUE REFERENCES public.users(id) ON DELETE CASCADE,
+    reward_granted BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_referrals_referrer ON public.referrals(referrer_id);
+
+-- 11. 1v1 Live Candidate Duels & Face-Off Battles (Phase 2B)
+CREATE TABLE IF NOT EXISTS public.duels (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    creator_id BIGINT NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+    creator_name TEXT NOT NULL,
+    opponent_id BIGINT REFERENCES public.users(id) ON DELETE CASCADE,
+    opponent_name TEXT,
+    quiz_id UUID REFERENCES public.quizzes(id) ON DELETE CASCADE,
+    question_ids JSONB NOT NULL,
+    creator_score NUMERIC DEFAULT 0,
+    opponent_score NUMERIC DEFAULT 0,
+    creator_time_ms INTEGER DEFAULT 0,
+    opponent_time_ms INTEGER DEFAULT 0,
+    status TEXT DEFAULT 'pending', -- 'pending', 'in_progress', 'completed', 'cancelled'
+    winner_id BIGINT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_duels_creator ON public.duels(creator_id);
+CREATE INDEX IF NOT EXISTS idx_duels_opponent ON public.duels(opponent_id);
+

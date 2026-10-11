@@ -4,6 +4,10 @@ import { Env } from '../config';
 import { upsertUser } from '../db/queries';
 import { handleViewQuiz, handleQuizzesList } from './quizzes';
 import { handleProfile } from './profile';
+import { handleIncomingReferral, handleReferralCommand } from './referral';
+import { handleMistakesCommand, handleStartRevisionTest } from './mistakes';
+import { handleDailyQotdCommand, handleStreakCommand } from './streak';
+import { handleDuelCommand } from './duel';
 
 export async function handleStart(ctx: Context, supabase: SupabaseClient, env?: Env) {
   const from = ctx.from;
@@ -17,18 +21,29 @@ export async function handleStart(ctx: Context, supabase: SupabaseClient, env?: 
     username: from.username,
   });
 
-  // Check Deep Linking payload (e.g. /start quiz_<quiz_id> or /start profile or /start quizzes)
+  // Check Deep Linking payload
   const payload = ctx.match as string | undefined;
   if (payload) {
-    if (payload.startsWith('quiz_')) {
+    if (payload.startsWith('ref_')) {
+      const referrerId = payload.replace('ref_', '');
+      await handleIncomingReferral(ctx, supabase, referrerId);
+    } else if (payload.startsWith('quiz_')) {
       const quizId = payload.replace('quiz_', '');
       return handleViewQuiz(ctx, supabase, env || ({} as any), quizId);
-    }
-    if (payload === 'profile') {
+    } else if (payload === 'profile') {
       return handleProfile(ctx, supabase);
-    }
-    if (payload === 'quizzes') {
+    } else if (payload === 'quizzes') {
       return handleQuizzesList(ctx, supabase);
+    } else if (payload === 'mistakes') {
+      return handleMistakesCommand(ctx, supabase);
+    } else if (payload === 'revision') {
+      return handleStartRevisionTest(ctx, supabase, env || ({} as any));
+    } else if (payload === 'daily' || payload === 'streak') {
+      return handleDailyQotdCommand(ctx, supabase, env || ({} as any));
+    } else if (payload.startsWith('duel')) {
+      return handleDuelCommand(ctx, supabase);
+    } else if (payload === 'refer') {
+      return handleReferralCommand(ctx, supabase);
     }
   }
 
@@ -40,14 +55,22 @@ export async function handleStart(ctx: Context, supabase: SupabaseClient, env?: 
     `🎯 *Platform Highlights:*\n` +
     `• ⏱️ Real-Time Examination Timer & Speed Analytics\n` +
     `• ⚠️ Precision Negative Marking & Accuracy Tracking\n` +
-    `• 📄 Downloadable PDF Solution Booklets & Detailed Explanations\n` +
-    `• 🏆 Dynamic Merit Lists & All-India Rank System\n` +
-    `• 👥 Automated Group Live Battles & Schedule Launcher (/schedule)\n\n` +
+    `• 📒 Intelligent Mistake Vault & Targeted Revision Bank (/mistakes)\n` +
+    `• 🔥 Daily Question of the Day & Streak Habit Dossier (/streak)\n` +
+    `• ⚔️ 1v1 Live Candidate Duels & ELO Rating System (/duel)\n` +
+    `• 👥 Ambassador Referral Program & Free Pass Rewards (/refer)\n` +
+    `• 📄 Downloadable PDF Solution Booklets & Rank Lists\n\n` +
     `Kripya shuru karne ke liye neeche vikalp chunein:`;
 
   const keyboard = new InlineKeyboard()
     .text('📚 All Mock Examinations', 'menu_quizzes')
     .text('🏆 All-India Leaderboard', 'menu_global_lb')
+    .row()
+    .text('📒 Mistake Vault', 'menu_mistakes')
+    .text('🔥 Daily Streak & QOTD', 'menu_streak')
+    .row()
+    .text('⚔️ 1v1 Live Duel', 'menu_duel')
+    .text('👥 Invite & Earn Pass', 'menu_refer')
     .row()
     .text('👤 Candidate Profile & Analytics', 'menu_profile')
     .text('ℹ️ User Manual & Commands', 'menu_help');
@@ -63,13 +86,21 @@ export async function handleHelp(ctx: Context) {
     `📖 *EXAMPLAYER PLATFORM — USER GUIDE & COMMANDS*\n` +
     `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
     `1. *Solo Examinations:* /quizzes enter karein aur apna vishay chunein. Timer aur negative marking ke saath test start hoga.\n` +
-    `2. *PDF Solution Booklets:* Har test attempt ke baad aap official PDF question paper with detailed explanation booklet download kar sakte hain.\n` +
-    `3. *Group Live Battles:* Apne Telegram Group me bot ko Admin banayein aur \`/groupquiz\` run karein.\n` +
-    `4. *Automated Scheduling:* Kisi specific samay par test auto-start karne ke liye group me \`/schedule\` ya \`/scheduletime 19:30\` use karein.\n` +
-    `5. *Evaluation Scheme:* Har correct response par full marks aur galat response par negative marking deduction apply hoga.\n\n` +
+    `2. *Mistake Vault & Revision:* Galat kiye gaye questions /mistakes me save hote hain. Unhe re-attempt karke weak areas master karein.\n` +
+    `3. *Daily Habit Loop:* Roz subah /daily se aaj ka Question of the Day solve karein aur /streak badhayein.\n` +
+    `4. *1v1 Live Duels:* Kisi peer ko rapid-fire face-off challenge dene ke liye /duel run karein.\n` +
+    `5. *Ambassador Referrals:* Doston ko invite karne ke liye /refer use karein aur free Scholar Pass unlock karein.\n` +
+    `6. *Group Live Battles:* Apne Telegram Group me bot ko Admin banayein aur \`/groupquiz\` ya \`/schedule\` run karein.\n` +
+    `7. *PDF Solution Booklets:* Har test attempt ke baad official PDF question paper with detailed explanation booklet download karein.\n\n` +
     `📋 *System Command Reference:*\n` +
     `• /start — Platform Dashboard\n` +
     `• /quizzes — Browse Mock Examination Papers\n` +
+    `• /mistakes — Candidate Mistake Vault & Weak Areas\n` +
+    `• /revision — Launch Weak Area Revision Drill\n` +
+    `• /streak — Daily Study Streak & Habit Dossier\n` +
+    `• /daily — Today's Question of the Day (QOTD)\n` +
+    `• /duel — 1v1 Live Candidate Face-Off Duel\n` +
+    `• /refer — Candidate Referral & Rewards Hub\n` +
     `• /groupquiz — Launch Group Live Battle\n` +
     `• /schedule — Automated Group Quiz Scheduler\n` +
     `• /stopquiz — Terminate Active Group Battle\n` +
@@ -87,3 +118,4 @@ export async function handleHelp(ctx: Context) {
     await ctx.reply(text, { parse_mode: 'Markdown', reply_markup: keyboard });
   }
 }
+

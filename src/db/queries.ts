@@ -1,5 +1,5 @@
 import { SupabaseClient } from '@supabase/supabase-js';
-import { User, Quiz, Question, ActiveSession, QuizAttempt, LeaderboardEntry } from '../types';
+import { User, Quiz, Question, ActiveSession, QuizAttempt, LeaderboardEntry, UserMistake, ReferralRecord, DuelSession } from '../types';
 
 // ================= USER QUERIES =================
 export async function upsertUser(
@@ -433,3 +433,371 @@ export async function getAllSettings(supabase: SupabaseClient): Promise<Record<s
   });
   return map;
 }
+
+// ================= PHASE 1A: MISTAKE VAULT & WEAK AREAS =================
+const memoryMistakes: Map<string, UserMistake> = new Map(); // key: `${userId}:${questionId}`
+
+export async function recordMistake(
+  supabase: SupabaseClient,
+  userId: number,
+  questionId: string,
+  quizId: string
+): Promise<void> {
+  const now = new Date().toISOString();
+  try {
+    const { data: existing, error } = await supabase
+      .from('user_mistakes')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('question_id', questionId)
+      .single();
+
+    if (!error && existing) {
+      await supabase
+        .from('user_mistakes')
+        .update({
+          wrong_count: (existing.wrong_count || 1) + 1,
+          is_resolved: false,
+          last_attempted_at: now,
+        })
+        .eq('id', existing.id);
+      return;
+    } else if (!error || error.code === 'PGRST116') {
+      const { error: insErr } = await supabase.from('user_mistakes').insert({
+        user_id: userId,
+        question_id: questionId,
+        quiz_id: quizId,
+        wrong_count: 1,
+        is_resolved: false,
+        last_attempted_at: now,
+      });
+      if (!insErr) return;
+    }
+  } catch {}
+
+  // Resilient memory fallback
+  const key = `${userId}:${questionId}`;
+  const cur = memoryMistakes.get(key);
+  if (cur) {
+    cur.wrong_count++;
+    cur.is_resolved = false;
+    cur.last_attempted_at = now;
+  } else {
+    memoryMistakes.set(key, {
+      user_id: userId,
+      question_id: questionId,
+      quiz_id: quizId,
+      wrong_count: 1,
+      is_resolved: false,
+      last_attempted_at: now,
+    });
+  }
+}
+
+export async function resolveMistake(
+  supabase: SupabaseClient,
+  userId: number,
+  questionId: string
+): Promise<void> {
+  try {
+    await supabase
+      .from('user_mistakes')
+      .update({ is_resolved: true })
+      .eq('user_id', userId)
+      .eq('question_id', questionId);
+  } catch {}
+
+  const key = `${userId}:${questionId}`;
+  const cur = memoryMistakes.get(key);
+  if (cur) cur.is_resolved = true;
+}
+
+export async function getUserMistakes(
+  supabase: SupabaseClient,
+  userId: number,
+  limit = 15
+): Promise<{ mistake: UserMistake; question: Question }[]> {
+  try {
+    const { data, error } = await supabase
+      .from('user_mistakes')
+      .select('*, question:questions(*)')
+      .eq('user_id', userId)
+      .eq('is_resolved', false)
+      .order('last_attempted_at', { ascending: false })
+      .limit(limit);
+
+    if (!error && data && data.length > 0) {
+      const valid = data
+        .filter((d: any) => d.question)
+        .map((d: any) => ({
+          mistake: d as UserMistake,
+          question: d.question as Question,
+        }));
+      if (valid.length > 0) return valid;
+    }
+  } catch {}
+
+  // Fallback to memory
+  const results: { mistake: UserMistake; question: Question }[] = [];
+  for (const m of memoryMistakes.values()) {
+    if (m.user_id === userId && !m.is_resolved) {
+      const q = await getQuestionById(supabase, m.question_id);
+      if (q) results.push({ mistake: m, question: q });
+      if (results.length >= limit) break;
+    }
+  }
+  return results;
+}
+
+export async function getUserMistakeStats(
+  supabase: SupabaseClient,
+  userId: number
+): Promise<{ totalUnresolved: number; totalResolved: number }> {
+  try {
+    const { data, error } = await supabase
+      .from('user_mistakes')
+      .select('is_resolved')
+      .eq('user_id', userId);
+
+    if (!error && data) {
+      let unresolved = 0;
+      let resolved = 0;
+      for (const row of data) {
+        if (row.is_resolved) resolved++;
+        else unresolved++;
+      }
+      return { totalUnresolved: unresolved, totalResolved: resolved };
+    }
+  } catch {}
+
+  let unresolved = 0;
+  let resolved = 0;
+  for (const m of memoryMistakes.values()) {
+    if (m.user_id === userId) {
+      if (m.is_resolved) resolved++;
+      else unresolved++;
+    }
+  }
+  return { totalUnresolved: unresolved, totalResolved: resolved };
+}
+
+export async function clearResolvedMistakes(
+  supabase: SupabaseClient,
+  userId: number
+): Promise<number> {
+  try {
+    await supabase
+      .from('user_mistakes')
+      .delete()
+      .eq('user_id', userId)
+      .eq('is_resolved', true);
+  } catch {}
+
+  for (const [k, m] of memoryMistakes.entries()) {
+    if (m.user_id === userId && m.is_resolved) {
+      memoryMistakes.delete(k);
+    }
+  }
+  return 1;
+}
+
+// ================= PHASE 1B: DAILY QUESTION & STREAKS =================
+const memoryDailyAttempts: Set<string> = new Set(); // `${userId}:${date}`
+
+export async function getDailyQuestion(supabase: SupabaseClient): Promise<Question | null> {
+  const today = new Date().toISOString().slice(0, 10);
+  const { data: questions } = await supabase.from('questions').select('*').limit(50);
+  if (!questions || questions.length === 0) return null;
+
+  let hash = 0;
+  for (let i = 0; i < today.length; i++) {
+    hash = (hash << 5) - hash + today.charCodeAt(i);
+    hash |= 0;
+  }
+  const index = Math.abs(hash) % questions.length;
+  return questions[index];
+}
+
+export async function hasAttemptedDailyToday(
+  supabase: SupabaseClient,
+  userId: number
+): Promise<boolean> {
+  const today = new Date().toISOString().slice(0, 10);
+  const key = `${userId}:${today}`;
+  if (memoryDailyAttempts.has(key)) return true;
+
+  try {
+    const { data } = await supabase
+      .from('daily_attempts')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('attempt_date', today)
+      .single();
+    if (data) return true;
+  } catch {}
+
+  const user = await getUser(supabase, userId);
+  return user?.last_daily_date === today;
+}
+
+export async function recordDailyAttempt(
+  supabase: SupabaseClient,
+  userId: number,
+  questionId: string,
+  isCorrect: boolean
+): Promise<{ currentStreak: number; longestStreak: number; isNewStreak: boolean }> {
+  const today = new Date().toISOString().slice(0, 10);
+  memoryDailyAttempts.add(`${userId}:${today}`);
+
+  try {
+    await supabase.from('daily_attempts').upsert({
+      user_id: userId,
+      attempt_date: today,
+      question_id: questionId,
+      is_correct: isCorrect,
+    });
+  } catch {}
+
+  const user = await getUser(supabase, userId);
+  let streak = user?.streak_days || 1;
+  let longest = user?.longest_streak || streak;
+
+  if (user?.last_daily_date) {
+    const lastDate = new Date(user.last_daily_date);
+    const currentDate = new Date(today);
+    const diffDays = Math.round((currentDate.getTime() - lastDate.getTime()) / (1000 * 3600 * 24));
+    if (diffDays === 1) {
+      streak += 1;
+    } else if (diffDays > 1) {
+      streak = 1;
+    }
+  } else {
+    streak = 1;
+  }
+
+  if (streak > longest) longest = streak;
+
+  try {
+    await supabase.from('users').update({
+      streak_days: streak,
+      longest_streak: longest,
+      last_daily_date: today,
+    }).eq('id', userId);
+  } catch {}
+
+  return { currentStreak: streak, longestStreak: longest, isNewStreak: true };
+}
+
+// ================= PHASE 2A: REFERRAL SYSTEM =================
+const memoryReferrals: Map<number, Set<number>> = new Map();
+
+export async function processReferral(
+  supabase: SupabaseClient,
+  referrerId: number,
+  referredId: number
+): Promise<{ success: boolean; totalReferrals: number; rewardGranted: boolean }> {
+  if (referrerId === referredId) {
+    return { success: false, totalReferrals: 0, rewardGranted: false };
+  }
+
+  let alreadyReferred = false;
+  try {
+    const { data } = await supabase
+      .from('referrals')
+      .select('id')
+      .eq('referred_id', referredId)
+      .single();
+    if (data) alreadyReferred = true;
+  } catch {}
+
+  const memSet = memoryReferrals.get(referrerId) || new Set();
+  if (memSet.has(referredId)) alreadyReferred = true;
+
+  if (alreadyReferred) {
+    return { success: false, totalReferrals: memSet.size, rewardGranted: false };
+  }
+
+  try {
+    await supabase.from('referrals').insert({
+      referrer_id: referrerId,
+      referred_id: referredId,
+      reward_granted: true,
+    });
+  } catch {}
+
+  memSet.add(referredId);
+  memoryReferrals.set(referrerId, memSet);
+
+  const referrer = await getUser(supabase, referrerId);
+  const newCount = (referrer?.referrals_count || 0) + 1;
+  const newScore = (referrer?.total_score || 0) + 5;
+  const grantPass = newCount >= 3;
+
+  try {
+    await supabase.from('users').update({
+      referrals_count: newCount,
+      total_score: newScore,
+      is_premium: grantPass || referrer?.is_premium,
+    }).eq('id', referrerId);
+  } catch {}
+
+  return {
+    success: true,
+    totalReferrals: newCount,
+    rewardGranted: true,
+  };
+}
+
+export async function getUserReferralStats(
+  supabase: SupabaseClient,
+  userId: number
+): Promise<{ totalReferrals: number; bonusPoints: number; isPremium: boolean }> {
+  const user = await getUser(supabase, userId);
+  const memSet = memoryReferrals.get(userId);
+  const total = user?.referrals_count || (memSet ? memSet.size : 0);
+  return {
+    totalReferrals: total,
+    bonusPoints: total * 5,
+    isPremium: !!user?.is_premium,
+  };
+}
+
+// ================= PHASE 2B: 1V1 DUELS =================
+export const activeDuels: Map<string, DuelSession> = new Map();
+export const duelPollToIdMap: Map<string, string> = new Map(); // pollId -> duelId
+
+export async function createDuelSession(
+  duel: DuelSession
+): Promise<DuelSession> {
+  activeDuels.set(duel.id, duel);
+  return duel;
+}
+
+export function getDuelSession(duelId: string): DuelSession | undefined {
+  return activeDuels.get(duelId);
+}
+
+export async function updateDuelUserStats(
+  supabase: SupabaseClient,
+  userId: number,
+  isWinner: boolean
+): Promise<{ newRating: number }> {
+  const user = await getUser(supabase, userId);
+  const curRating = user?.duel_rating || 1200;
+  const wins = user?.duel_wins || 0;
+  const losses = user?.duel_losses || 0;
+
+  const delta = isWinner ? 25 : -15;
+  const newRating = Math.max(800, curRating + delta);
+
+  try {
+    await supabase.from('users').update({
+      duel_rating: newRating,
+      duel_wins: isWinner ? wins + 1 : wins,
+      duel_losses: !isWinner ? losses + 1 : losses,
+    }).eq('id', userId);
+  } catch {}
+
+  return { newRating };
+}
+

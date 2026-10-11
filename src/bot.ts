@@ -63,6 +63,24 @@ import {
   handleCancelScheduleCommand,
   handleScheduledStatusCommand,
 } from './handlers/groupSchedule';
+import {
+  handleMistakesCommand,
+  handleStartRevisionTest,
+  handleClearResolvedMistakes,
+} from './handlers/mistakes';
+import {
+  handleStreakCommand,
+  handleDailyQotdCommand,
+  handleDailyPollAnswer,
+} from './handlers/streak';
+import { handleReferralCommand } from './handlers/referral';
+import {
+  handleDuelCommand,
+  handleAcceptDuel,
+  handleCancelDuel,
+  handleDuelPollAnswer,
+} from './handlers/duel';
+
 
 export function createBot(env: Env): Bot {
   if (!env.BOT_TOKEN) {
@@ -85,6 +103,18 @@ export function createBot(env: Env): Bot {
   bot.command('leaderboard', (ctx) => handleGlobalLeaderboard(ctx, supabase));
   bot.command('myprofile', (ctx) => handleProfile(ctx, supabase));
   bot.command('import', (ctx) => handleImportHelp(ctx));
+
+  // Phase 1: Mistake Notebook & Daily Streak
+  bot.command('mistakes', (ctx) => handleMistakesCommand(ctx, supabase));
+  bot.command('revision', (ctx) => handleStartRevisionTest(ctx, supabase, env));
+  bot.command('streak', (ctx) => handleStreakCommand(ctx, supabase));
+  bot.command('daily', (ctx) => handleDailyQotdCommand(ctx, supabase, env));
+  bot.command('qotd', (ctx) => handleDailyQotdCommand(ctx, supabase, env));
+
+  // Phase 2: Referral Ambassador Program & 1v1 Live Duels
+  bot.command('refer', (ctx) => handleReferralCommand(ctx, supabase));
+  bot.command('invite', (ctx) => handleReferralCommand(ctx, supabase));
+  bot.command('duel', (ctx) => handleDuelCommand(ctx, supabase));
 
   // Premium & Monetization Commands
   bot.command('unlock', (ctx) => handleUnlockCommand(ctx, supabase, env));
@@ -131,9 +161,20 @@ export function createBot(env: Env): Bot {
   });
 
   // ================= EVENTS =================
-  // Quiz Poll Answer Event (Solo or Group)
-  bot.on('poll_answer', (ctx) => {
+  // Quiz Poll Answer Event (Duel, Daily QOTD, Group Battle, or Solo Test)
+  bot.on('poll_answer', async (ctx) => {
+    // 1. Check if 1v1 Live Duel poll
+    const isDuel = await handleDuelPollAnswer(ctx.pollAnswer);
+    if (isDuel) return;
+
+    // 2. Check if Daily Question of the Day (QOTD) poll
+    const isDaily = await handleDailyPollAnswer(ctx, supabase);
+    if (isDaily) return;
+
+    // 3. Group Live Battle poll
     handleGroupPollAnswer(ctx.pollAnswer);
+
+    // 4. Solo Quiz poll
     return handleSoloPollAnswer(ctx, supabase, env);
   });
   // Solo Quiz Poll Expiration Event (Timer ended without answer on Serverless)
@@ -176,6 +217,18 @@ export function createBot(env: Env): Bot {
     }
     return handleProfile(ctx, supabase);
   });
+
+  // Phase 1: Mistake Notebook & Daily Streak Callbacks
+  bot.callbackQuery('menu_mistakes', (ctx) => handleMistakesCommand(ctx, supabase));
+  bot.callbackQuery('menu_start_revision', (ctx) => handleStartRevisionTest(ctx, supabase, env));
+  bot.callbackQuery('menu_clear_resolved', (ctx) => handleClearResolvedMistakes(ctx, supabase));
+  bot.callbackQuery('menu_streak', (ctx) => handleStreakCommand(ctx, supabase));
+  bot.callbackQuery('menu_daily_qotd', (ctx) => handleDailyQotdCommand(ctx, supabase, env));
+
+  // Phase 2: Referral Ambassador & 1v1 Duel Callbacks
+  bot.callbackQuery('menu_refer', (ctx) => handleReferralCommand(ctx, supabase));
+  bot.callbackQuery('menu_duel', (ctx) => handleDuelCommand(ctx, supabase));
+
 
   // Payment UI callbacks
   bot.callbackQuery('pay_send_ss', async (ctx) => {
@@ -414,6 +467,14 @@ export function createBot(env: Env): Bot {
           show_alert: true,
         });
       }
+    }
+
+    // 1v1 Live Candidate Duel callbacks
+    if (data.startsWith('accept_duel:')) {
+      return handleAcceptDuel(ctx, supabase);
+    }
+    if (data.startsWith('cancel_duel:')) {
+      return handleCancelDuel(ctx);
     }
   });
 

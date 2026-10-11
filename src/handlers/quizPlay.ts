@@ -11,6 +11,8 @@ import {
   getQuestionById,
   recordQuizAttempt,
   getUser,
+  recordMistake,
+  resolveMistake,
 } from '../db/queries';
 import { renderScorecardMessage } from '../services/quizEngine';
 import { calculateQuizResult } from '../services/scoring';
@@ -337,6 +339,7 @@ export async function sendNextPollQuestion(
           selected_option_index: -1,
           is_correct: false,
         });
+        recordMistake(supabase, userId, q.id, curSession.quizId).catch(() => {});
 
         await api.sendMessage(
           curSession.chatId,
@@ -410,6 +413,13 @@ export async function handleSoloPollAnswer(
     is_correct: isCorrect,
   });
 
+  // Track in Candidate Mistake Vault (Phase 1A)
+  if (isCorrect) {
+    resolveMistake(supabase, userId, currentQ.id).catch(() => {});
+  } else {
+    recordMistake(supabase, userId, currentQ.id, session.quizId).catch(() => {});
+  }
+
   // Advance index
   session.currentIndex++;
 
@@ -469,6 +479,7 @@ export async function handlePollClosed(
     selected_option_index: -1,
     is_correct: false,
   });
+  recordMistake(supabase, meta.userId, meta.questionId, activeSession.quiz_id).catch(() => {});
 
   const nextIndex = activeSession.current_index + 1;
   const totalQuestions = activeSession.question_ids.length;
@@ -706,6 +717,7 @@ export async function handleSkipQuestion(
       selected_option_index: -1,
       is_correct: false,
     });
+    recordMistake(supabase, userId, currentQ.id, session.quizId).catch(() => {});
   }
 
   // Increment index
