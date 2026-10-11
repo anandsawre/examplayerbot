@@ -181,7 +181,7 @@ export async function executeGroupQuizBattle(
   const questions = await getQuestionsForQuiz(supabase, quizId);
   if (!questions || questions.length === 0) return;
 
-  const timeLimit = Math.min(600, Math.max(10, Number(quiz.time_limit_seconds) || 30));
+  const timeLimit = Math.min(600, Math.max(20, Number(quiz.time_limit_seconds) || 30));
 
   // Initialize group battle state
   const battle: GroupQuizBattle = {
@@ -224,10 +224,11 @@ export async function executeGroupQuizBattle(
     const pollQuestion = `<b>Q</b>${i + 1}. ${escapedText}`;
     const cleanOptions = options.map((opt) => String(opt).slice(0, 100));
 
+    let sentPollMessage: any = null;
     try {
       battle.currentCorrectIndex = q.correct_option_index;
 
-      const pollMessage = await api.sendPoll(chatId, pollQuestion, cleanOptions, {
+      sentPollMessage = await api.sendPoll(chatId, pollQuestion, cleanOptions, {
         type: 'quiz',
         correct_option_id: q.correct_option_index,
         is_anonymous: false,
@@ -236,13 +237,23 @@ export async function executeGroupQuizBattle(
         explanation: q.explanation ? q.explanation.slice(0, 200) : undefined,
       } as any);
 
-      battle.currentPollId = pollMessage.poll.id;
-      groupPollToChatMap.set(pollMessage.poll.id, chatId);
+      battle.currentPollId = sentPollMessage.poll.id;
+      groupPollToChatMap.set(sentPollMessage.poll.id, chatId);
     } catch (err: any) {
       console.error(`Error sending poll for question ${i + 1}:`, err);
     }
 
-    await sleep((timeLimit + 3) * 1000);
+    // Wait for the question timer to expire
+    await sleep(timeLimit * 1000);
+
+    // Explicitly stop the poll on Telegram: locks answers and reveals correct checkmark & explanation!
+    if (sentPollMessage && sentPollMessage.message_id) {
+      try {
+        await api.stopPoll(chatId, sentPollMessage.message_id);
+      } catch (err) {
+        // Poll may have already closed, safe to ignore
+      }
+    }
 
     if (battle.currentPollId) {
       groupPollToChatMap.delete(battle.currentPollId);
@@ -250,6 +261,11 @@ export async function executeGroupQuizBattle(
 
     if (battle.isCancelled) {
       break;
+    }
+
+    // 3-second pause so group members can see the correct answer & explanation before next Q
+    if (i + 1 < questions.length) {
+      await sleep(3000);
     }
   }
 
