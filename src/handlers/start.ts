@@ -7,7 +7,7 @@ import { handleProfile } from './profile';
 import { handleIncomingReferral, handleReferralCommand } from './referral';
 import { handleMistakesCommand, handleStartRevisionTest } from './mistakes';
 import { handleDailyQotdCommand, handleStreakCommand } from './streak';
-import { handleDuelCommand } from './duel';
+import { handleDuelCommand, handleIncomingDuelInvite } from './duel';
 
 export async function handleStart(ctx: Context, supabase: SupabaseClient, env?: Env) {
   const from = ctx.from;
@@ -40,7 +40,9 @@ export async function handleStart(ctx: Context, supabase: SupabaseClient, env?: 
       return handleStartRevisionTest(ctx, supabase, env || ({} as any));
     } else if (payload === 'daily' || payload === 'streak') {
       return handleDailyQotdCommand(ctx, supabase, env || ({} as any));
-    } else if (payload.startsWith('duel')) {
+    } else if (payload.startsWith('duel_')) {
+      return handleIncomingDuelInvite(ctx, supabase, payload);
+    } else if (payload === 'duel') {
       return handleDuelCommand(ctx, supabase);
     } else if (payload === 'refer') {
       return handleReferralCommand(ctx, supabase);

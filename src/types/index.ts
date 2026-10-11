@@ -44,12 +44,15 @@ export interface DuelSession {
   opponent_id?: number;
   opponent_name?: string;
   quiz_id: string;
+  quiz_title?: string;
+  is_dm?: boolean;
   question_ids: string[];
   questions: Question[];
   current_q_index: number;
   creator_answers: { is_correct: boolean; time_ms: number }[];
   opponent_answers: { is_correct: boolean; time_ms: number }[];
   current_poll_id?: string;
+  current_poll_ids?: string[]; // for DM duels where 2 separate polls are sent to player 1 and player 2
   status: 'pending' | 'in_progress' | 'completed' | 'cancelled';
   winner_id?: number;
   created_at: string;

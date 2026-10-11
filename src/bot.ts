@@ -76,8 +76,10 @@ import {
 import { handleReferralCommand } from './handlers/referral';
 import {
   handleDuelCommand,
+  launchDuelWithCount,
   handleAcceptDuel,
   handleCancelDuel,
+  handleDeclineDuel,
   handleDuelPollAnswer,
 } from './handlers/duel';
 
@@ -475,6 +477,13 @@ export function createBot(env: Env): Bot {
     }
     if (data.startsWith('cancel_duel:')) {
       return handleCancelDuel(ctx);
+    }
+    if (data.startsWith('decline_duel:')) {
+      return handleDeclineDuel(ctx);
+    }
+    if (data.startsWith('duel_count:')) {
+      const count = parseInt(data.replace('duel_count:', ''), 10);
+      return launchDuelWithCount(ctx, supabase, count);
     }
   });
 
