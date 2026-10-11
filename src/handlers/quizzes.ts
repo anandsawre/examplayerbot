@@ -77,10 +77,18 @@ export async function handleQuizzesList(
     keyboard.row().text('🏠 Platform Dashboard', 'menu_start');
 
     if (ctx.callbackQuery) {
-      await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup: keyboard });
-      await ctx.answerCallbackQuery();
+      try {
+        await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup: keyboard });
+      } catch {
+        await ctx.editMessageText(text.replace(/[*_`\[\]]/g, ''), { reply_markup: keyboard });
+      }
+      ctx.answerCallbackQuery().catch(() => {});
     } else {
-      await ctx.reply(text, { parse_mode: 'Markdown', reply_markup: keyboard });
+      try {
+        await ctx.reply(text, { parse_mode: 'Markdown', reply_markup: keyboard });
+      } catch {
+        await ctx.reply(text.replace(/[*_`\[\]]/g, ''), { reply_markup: keyboard });
+      }
     }
     return;
   }
@@ -100,7 +108,7 @@ export async function handleQuizzesList(
 
       if (ctx.callbackQuery) {
         await ctx.editMessageText(text, { reply_markup: keyboard });
-        await ctx.answerCallbackQuery();
+        ctx.answerCallbackQuery().catch(() => {});
       } else {
         await ctx.reply(text, { reply_markup: keyboard });
       }
@@ -123,10 +131,18 @@ export async function handleQuizzesList(
     keyboard.text('🔙 Platform Dashboard', 'menu_start');
 
     if (ctx.callbackQuery) {
-      await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup: keyboard });
-      await ctx.answerCallbackQuery();
+      try {
+        await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup: keyboard });
+      } catch {
+        await ctx.editMessageText(text.replace(/[*_`\[\]]/g, ''), { reply_markup: keyboard });
+      }
+      ctx.answerCallbackQuery().catch(() => {});
     } else {
-      await ctx.reply(text, { parse_mode: 'Markdown', reply_markup: keyboard });
+      try {
+        await ctx.reply(text, { parse_mode: 'Markdown', reply_markup: keyboard });
+      } catch {
+        await ctx.reply(text.replace(/[*_`\[\]]/g, ''), { reply_markup: keyboard });
+      }
     }
     return;
   }
@@ -155,10 +171,18 @@ export async function handleQuizzesList(
   keyboard.text('🔙 Platform Dashboard', 'menu_start');
 
   if (ctx.callbackQuery) {
-    await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup: keyboard });
-    await ctx.answerCallbackQuery();
+    try {
+      await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup: keyboard });
+    } catch {
+      await ctx.editMessageText(text.replace(/[*_`\[\]]/g, ''), { reply_markup: keyboard });
+    }
+    ctx.answerCallbackQuery().catch(() => {});
   } else {
-    await ctx.reply(text, { parse_mode: 'Markdown', reply_markup: keyboard });
+    try {
+      await ctx.reply(text, { parse_mode: 'Markdown', reply_markup: keyboard });
+    } catch {
+      await ctx.reply(text.replace(/[*_`\[\]]/g, ''), { reply_markup: keyboard });
+    }
   }
 }
 

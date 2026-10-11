@@ -949,16 +949,32 @@ export async function deleteFolder(
   folderId: string
 ): Promise<boolean> {
   try {
-    // Move any quizzes in this folder to root (folder_id = null)
+    // 1. Unassign quizzes in this folder
     await supabase.from('quizzes').update({ folder_id: null }).eq('folder_id', folderId);
+
+    // 2. Unassign quizzes in any subfolders
+    const subfolders = await getFolders(supabase, folderId);
+    for (const sf of subfolders) {
+      await supabase.from('quizzes').update({ folder_id: null }).eq('folder_id', sf.id);
+      memoryQuizFolderMap.delete(sf.id);
+      memoryFolders.delete(sf.id);
+    }
+
+    // 3. Delete folder from database
     const { error } = await supabase.from('quiz_folders').delete().eq('id', folderId);
     if (!error) {
       memoryFolders.delete(folderId);
+      memoryQuizFolderMap.delete(folderId);
       return true;
+    } else {
+      console.error('Supabase deleteFolder error:', error);
     }
-  } catch {}
+  } catch (err) {
+    console.error('deleteFolder exception:', err);
+  }
 
   memoryFolders.delete(folderId);
+  memoryQuizFolderMap.delete(folderId);
   return true;
 }
 

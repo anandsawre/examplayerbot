@@ -48,7 +48,7 @@ export async function handleCreateFolderPrompt(
   parentIdStr: string
 ) {
   if (!isAdmin(ctx, env)) {
-    return ctx.answerCallbackQuery({ text: '⚠️ Platform Administrator access required.', show_alert: true });
+    return ctx.answerCallbackQuery({ text: '⚠️ Platform Administrator access required.', show_alert: true }).catch(() => {});
   }
 
   const userId = ctx.from?.id;
@@ -73,7 +73,7 @@ export async function handleCreateFolderPrompt(
     `📍 Target Location: *${escapeMarkdown(parentName)}*\n\n` +
     `Bas chat me naye folder ka naam likhkar bhej dijiye:\n` +
     `_Example: \`Prelims 2026\` ya \`Indian Polity\`_\n\n` +
-    `*(Aapko koi bhi lambi ID copy karne ki jarurat nahi hai!)*`;
+    `*(Kisi bhi lambi ID ko copy karne ki bilkul jarurat nahi hai!)*`;
 
   const keyboard = new InlineKeyboard();
   if (isSubfolder) {
@@ -83,10 +83,18 @@ export async function handleCreateFolderPrompt(
   }
 
   if (ctx.callbackQuery) {
-    await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup: keyboard });
-    await ctx.answerCallbackQuery();
+    try {
+      await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup: keyboard });
+    } catch {
+      await ctx.editMessageText(text.replace(/[*_`\[\]]/g, ''), { reply_markup: keyboard });
+    }
+    ctx.answerCallbackQuery().catch(() => {});
   } else {
-    await ctx.reply(text, { parse_mode: 'Markdown', reply_markup: keyboard });
+    try {
+      await ctx.reply(text, { parse_mode: 'Markdown', reply_markup: keyboard });
+    } catch {
+      await ctx.reply(text.replace(/[*_`\[\]]/g, ''), { reply_markup: keyboard });
+    }
   }
 }
 
@@ -136,7 +144,11 @@ export async function handleFolderTextInput(
       keyboard.text('🔙 Directory Root', 'menu_quizzes');
     }
 
-    await ctx.reply(notifyText, { parse_mode: 'Markdown', reply_markup: keyboard });
+    try {
+      await ctx.reply(notifyText, { parse_mode: 'Markdown', reply_markup: keyboard });
+    } catch {
+      await ctx.reply(notifyText.replace(/[*_`\[\]]/g, ''), { reply_markup: keyboard });
+    }
     return true;
   }
 
@@ -148,10 +160,14 @@ export async function handleFolderTextInput(
     }
 
     const keyboard = new InlineKeyboard().text('📂 Open Folder', `fldr:${session.folderId}`);
-    await ctx.reply(
-      `✅ *Folder Ka Naam Badal Diya Gaya!*\nNew Name: *${escapeMarkdown(text)}*`,
-      { parse_mode: 'Markdown', reply_markup: keyboard }
-    );
+    try {
+      await ctx.reply(
+        `✅ *Folder Ka Naam Badal Diya Gaya!*\nNew Name: *${escapeMarkdown(text)}*`,
+        { parse_mode: 'Markdown', reply_markup: keyboard }
+      );
+    } catch {
+      await ctx.reply(`✅ Folder Ka Naam Badal Diya Gaya!\nNew Name: ${text}`, { reply_markup: keyboard });
+    }
     return true;
   }
 
@@ -229,7 +245,11 @@ export async function handleCreateFolderCommand(
     `You can now move examination papers into this folder!`;
 
   const keyboard = new InlineKeyboard().text('📂 Open Folder in Directory', `fldr:${folder.id}`);
-  return ctx.reply(notifyText, { parse_mode: 'Markdown', reply_markup: keyboard });
+  try {
+    return ctx.reply(notifyText, { parse_mode: 'Markdown', reply_markup: keyboard });
+  } catch {
+    return ctx.reply(notifyText.replace(/[*_`\[\]]/g, ''), { reply_markup: keyboard });
+  }
 }
 
 /**
@@ -242,13 +262,13 @@ export async function handleRenameFolderPrompt(
   folderId: string
 ) {
   if (!isAdmin(ctx, env)) {
-    return ctx.answerCallbackQuery({ text: '⚠️ Administrator access required.', show_alert: true });
+    return ctx.answerCallbackQuery({ text: '⚠️ Administrator access required.', show_alert: true }).catch(() => {});
   }
 
   const userId = ctx.from?.id;
   const folder = await getFolderById(supabase, folderId);
   if (!folder) {
-    return ctx.answerCallbackQuery({ text: 'Folder not found.', show_alert: true });
+    return ctx.answerCallbackQuery({ text: 'Folder not found.', show_alert: true }).catch(() => {});
   }
 
   if (userId) {
@@ -260,7 +280,7 @@ export async function handleRenameFolderPrompt(
   }
 
   const text =
-    `✏️ *RENAME FOLDER: "${escapeMarkdown(folder.name)}"\n` +
+    `✏️ *RENAME FOLDER: "${escapeMarkdown(folder.name)}"*\n` +
     `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
     `Kripya is folder ka naya naam chat me likhkar bhej dijiye (e.g. \`IAS Prelims 2026\`):\n\n` +
     `*(Kisi bhi ID ko copy karne ki jarurat nahi hai!)*`;
@@ -268,10 +288,18 @@ export async function handleRenameFolderPrompt(
   const keyboard = new InlineKeyboard().text('❌ Cancel', `fldr:${folderId}`);
 
   if (ctx.callbackQuery) {
-    await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup: keyboard });
-    await ctx.answerCallbackQuery();
+    try {
+      await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup: keyboard });
+    } catch {
+      await ctx.editMessageText(text.replace(/[*_`\[\]]/g, ''), { reply_markup: keyboard });
+    }
+    ctx.answerCallbackQuery().catch(() => {});
   } else {
-    await ctx.reply(text, { parse_mode: 'Markdown', reply_markup: keyboard });
+    try {
+      await ctx.reply(text, { parse_mode: 'Markdown', reply_markup: keyboard });
+    } catch {
+      await ctx.reply(text.replace(/[*_`\[\]]/g, ''), { reply_markup: keyboard });
+    }
   }
 }
 
@@ -288,16 +316,34 @@ export async function handleRenameFolderCommand(
   const raw = ctx.message?.text || '';
   const match = raw.replace(/^\/renamefolder\s*/i, '').trim();
 
+  if (!match) {
+    return ctx.reply(
+      `✏️ *Folder Rename Syntax:*\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+      `1️⃣ *Button Se:* /quizzes me folder kholkar *[✏️ Rename Folder]* dabayein aur direct naya naam chat me bhej dein.\n\n` +
+      `2️⃣ *Command Se:* \`/renamefolder Purana Naam / Naya Naam\`\n` +
+      `_Example: \`/renamefolder Railway Science / Railway Exam GK\`_\n\n` +
+      `3️⃣ *ID Se:* \`/renamefolder <folder_id> Naya Naam\``,
+      { parse_mode: 'Markdown' }
+    );
+  }
+
   let folderId = '';
   let newName = '';
 
-  if (match.includes('/') || match.includes('>')) {
-    const sep = match.includes('/') ? '/' : '>';
+  const all = await getAllFolders(supabase);
+
+  // 1. Check if separated by '/', '>', or ' to '
+  let sep: string | null = null;
+  if (match.includes('/')) sep = '/';
+  else if (match.includes('>')) sep = '>';
+  else if (match.toLowerCase().includes(' to ')) sep = ' to ';
+
+  if (sep) {
     const parts = match.split(sep).map((p) => p.trim());
     const oldQuery = parts[0];
     newName = parts.slice(1).join(sep).trim();
 
-    const all = await getAllFolders(supabase);
     const found = all.find(
       (f) => f.name.toLowerCase() === oldQuery.toLowerCase() || f.id === oldQuery
     );
@@ -307,14 +353,42 @@ export async function handleRenameFolderCommand(
       return ctx.reply(`⚠️ Folder *"${escapeMarkdown(oldQuery)}"* nahi mila.`);
     }
   } else {
+    // 2. Check if first word is a known folder ID
     const parts = match.split(/\s+/);
-    if (parts.length < 2) {
-      return ctx.reply('⚠️ *Syntax:* `/renamefolder OldName / NewName` ya `/renamefolder <id> NewName`', {
-        parse_mode: 'Markdown',
-      });
+    const potentialId = parts[0];
+    const foundById = all.find((f) => f.id === potentialId);
+    if (foundById && parts.length >= 2) {
+      folderId = foundById.id;
+      newName = parts.slice(1).join(' ').trim();
+    } else {
+      // 3. Try to match an existing folder by name prefix
+      let matchedFolder: any = null;
+      let matchedLen = 0;
+      for (const f of all) {
+        if (match.toLowerCase().startsWith(f.name.toLowerCase())) {
+          if (f.name.length > matchedLen) {
+            matchedFolder = f;
+            matchedLen = f.name.length;
+          }
+        }
+      }
+
+      if (matchedFolder) {
+        folderId = matchedFolder.id;
+        newName = match.slice(matchedLen).trim();
+      } else if (parts.length >= 2) {
+        folderId = parts[0];
+        newName = parts.slice(1).join(' ').trim();
+      }
     }
-    folderId = parts[0];
-    newName = parts.slice(1).join(' ').trim();
+  }
+
+  if (!folderId || !newName) {
+    return ctx.reply(
+      `⚠️ *Folder nahi mila ya naya naam missing hai.*\n` +
+      `Kripya yeh format use karein:\n\`/renamefolder Purana Naam / Naya Naam\``,
+      { parse_mode: 'Markdown' }
+    );
   }
 
   const success = await updateFolder(supabase, folderId, newName);
@@ -323,10 +397,14 @@ export async function handleRenameFolderCommand(
   }
 
   const keyboard = new InlineKeyboard().text('📂 Open Folder', `fldr:${folderId}`);
-  return ctx.reply(
-    `✅ *Folder Renamed Successfully!*\nNew Name: *${escapeMarkdown(newName)}*`,
-    { parse_mode: 'Markdown', reply_markup: keyboard }
-  );
+  try {
+    return ctx.reply(
+      `✅ *Folder Renamed Successfully!*\nNew Name: *${escapeMarkdown(newName)}*`,
+      { parse_mode: 'Markdown', reply_markup: keyboard }
+    );
+  } catch {
+    return ctx.reply(`✅ Folder Renamed Successfully!\nNew Name: ${newName}`, { reply_markup: keyboard });
+  }
 }
 
 /**
@@ -339,12 +417,12 @@ export async function handleDeleteFolderPrompt(
   folderId: string
 ) {
   if (!isAdmin(ctx, env)) {
-    return ctx.answerCallbackQuery({ text: '⚠️ Administrator access required.', show_alert: true });
+    return ctx.answerCallbackQuery({ text: '⚠️ Administrator access required.', show_alert: true }).catch(() => {});
   }
 
   const folder = await getFolderById(supabase, folderId);
   if (!folder) {
-    return ctx.answerCallbackQuery({ text: 'Folder not found.', show_alert: true });
+    return ctx.answerCallbackQuery({ text: 'Folder not found.', show_alert: true }).catch(() => {});
   }
 
   const text =
@@ -360,10 +438,18 @@ export async function handleDeleteFolderPrompt(
     .text('❌ Cancel', `fldr:${folderId}`);
 
   if (ctx.callbackQuery) {
-    await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup: keyboard });
-    await ctx.answerCallbackQuery();
+    try {
+      await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup: keyboard });
+    } catch {
+      await ctx.editMessageText(text.replace(/[*_`\[\]]/g, ''), { reply_markup: keyboard });
+    }
+    ctx.answerCallbackQuery().catch(() => {});
   } else {
-    await ctx.reply(text, { parse_mode: 'Markdown', reply_markup: keyboard });
+    try {
+      await ctx.reply(text, { parse_mode: 'Markdown', reply_markup: keyboard });
+    } catch {
+      await ctx.reply(text.replace(/[*_`\[\]]/g, ''), { reply_markup: keyboard });
+    }
   }
 }
 
@@ -377,14 +463,18 @@ export async function handleConfirmDeleteFolder(
   folderId: string
 ) {
   if (!isAdmin(ctx, env)) {
-    return ctx.answerCallbackQuery({ text: '⚠️ Administrator access required.', show_alert: true });
+    return ctx.answerCallbackQuery({ text: '⚠️ Administrator access required.', show_alert: true }).catch(() => {});
   }
 
   const folder = await getFolderById(supabase, folderId);
   const parentId = folder?.parent_id;
 
-  await deleteFolder(supabase, folderId);
-  await ctx.answerCallbackQuery({ text: 'Folder deleted successfully.', show_alert: true });
+  const success = await deleteFolder(supabase, folderId);
+  if (!success) {
+    return ctx.answerCallbackQuery({ text: '❌ Failed to delete folder.', show_alert: true }).catch(() => {});
+  }
+
+  ctx.answerCallbackQuery({ text: '🗑️ Folder deleted successfully!' }).catch(() => {});
 
   return handleQuizzesList(ctx, supabase, parentId || null);
 }
@@ -402,21 +492,32 @@ export async function handleDeleteFolderCommand(
   const raw = ctx.message?.text || '';
   const query = raw.replace(/^\/delfolder\s*/i, '').trim();
   if (!query) {
-    return ctx.reply('⚠️ *Syntax:* `/delfolder <Folder Name ya ID>`', { parse_mode: 'Markdown' });
+    return ctx.reply(
+      `🗑️ *Folder Delete Syntax:*\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+      `1️⃣ *Button Se:* /quizzes me folder kholkar *[🗑️ Delete Folder]* dabayein aur confirm karein.\n` +
+      `2️⃣ *Command Se:* \`/delfolder Folder Ka Naam\`\n` +
+      `_Example: \`/delfolder Science\`_`,
+      { parse_mode: 'Markdown' }
+    );
   }
 
-  let folder = await getFolderById(supabase, query);
+  const all = await getAllFolders(supabase);
+  let folder = all.find((f) => f.id === query) || null;
   if (!folder) {
-    const all = await getAllFolders(supabase);
     folder = all.find((f) => f.name.toLowerCase() === query.toLowerCase()) || null;
   }
-
   if (!folder) {
-    return ctx.reply('❌ Folder nahi mila.');
+    folder = all.find((f) => f.name.toLowerCase().includes(query.toLowerCase())) || null;
   }
 
+  if (!folder) {
+    return ctx.reply(`❌ Folder *"${escapeMarkdown(query)}"* nahi mila.`);
+  }
+
+  const folderName = folder.name;
   await deleteFolder(supabase, folder.id);
-  return ctx.reply(`✅ Folder *"${escapeMarkdown(folder.name)}"* deleted. Contained tests moved to root.`, {
+  return ctx.reply(`✅ Folder *"${escapeMarkdown(folderName)}"* deleted. Contained tests moved to root.`, {
     parse_mode: 'Markdown',
   });
 }
@@ -431,7 +532,7 @@ export async function handleMoveQuizPicker(
   quizId: string
 ) {
   if (!isAdmin(ctx, env)) {
-    return ctx.answerCallbackQuery({ text: '⚠️ Administrator access required.', show_alert: true });
+    return ctx.answerCallbackQuery({ text: '⚠️ Administrator access required.', show_alert: true }).catch(() => {});
   }
 
   const quiz = await getQuizById(supabase, quizId);
@@ -456,10 +557,18 @@ export async function handleMoveQuizPicker(
   keyboard.text('🔙 Back to Editor', `edit_quiz:${quizId}`);
 
   if (ctx.callbackQuery) {
-    await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup: keyboard });
-    await ctx.answerCallbackQuery();
+    try {
+      await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup: keyboard });
+    } catch {
+      await ctx.editMessageText(text.replace(/[*_`\[\]]/g, ''), { reply_markup: keyboard });
+    }
+    ctx.answerCallbackQuery().catch(() => {});
   } else {
-    await ctx.reply(text, { parse_mode: 'Markdown', reply_markup: keyboard });
+    try {
+      await ctx.reply(text, { parse_mode: 'Markdown', reply_markup: keyboard });
+    } catch {
+      await ctx.reply(text.replace(/[*_`\[\]]/g, ''), { reply_markup: keyboard });
+    }
   }
 }
 
@@ -474,7 +583,7 @@ export async function handleExecuteMoveQuiz(
   targetFolderIdStr: string
 ) {
   if (!isAdmin(ctx, env)) {
-    return ctx.answerCallbackQuery({ text: '⚠️ Administrator access required.', show_alert: true });
+    return ctx.answerCallbackQuery({ text: '⚠️ Administrator access required.', show_alert: true }).catch(() => {});
   }
 
   const targetFolderId = targetFolderIdStr === 'root' ? null : targetFolderIdStr;
@@ -483,7 +592,7 @@ export async function handleExecuteMoveQuiz(
   await ctx.answerCallbackQuery({
     text: targetFolderId ? '✅ Examination assigned to folder!' : '✅ Examination moved to Directory Root!',
     show_alert: true,
-  });
+  }).catch(() => {});
 
   return handleEditQuizPanel(ctx, supabase, env, quizId);
 }
