@@ -206,3 +206,17 @@ CREATE TABLE IF NOT EXISTS public.duels (
 CREATE INDEX IF NOT EXISTS idx_duels_creator ON public.duels(creator_id);
 CREATE INDEX IF NOT EXISTS idx_duels_opponent ON public.duels(opponent_id);
 
+-- 12. Hierarchical Examination Folders & Subfolders
+CREATE TABLE IF NOT EXISTS public.quiz_folders (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name TEXT NOT NULL,
+    parent_id UUID REFERENCES public.quiz_folders(id) ON DELETE CASCADE, -- NULL = Root Folder, else Parent Folder
+    order_index INTEGER DEFAULT 0,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_folders_parent_id ON public.quiz_folders(parent_id);
+
+ALTER TABLE public.quizzes ADD COLUMN IF NOT EXISTS folder_id UUID REFERENCES public.quiz_folders(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_quizzes_folder_id ON public.quizzes(folder_id);
+

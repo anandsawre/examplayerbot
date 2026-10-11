@@ -82,6 +82,17 @@ import {
   handleDeclineDuel,
   handleDuelPollAnswer,
 } from './handlers/duel';
+import {
+  handleCreateFolderCommand,
+  handleRenameFolderCommand,
+  handleDeleteFolderCommand,
+  handleCreateFolderPrompt,
+  handleRenameFolderPrompt,
+  handleDeleteFolderPrompt,
+  handleConfirmDeleteFolder,
+  handleMoveQuizPicker,
+  handleExecuteMoveQuiz,
+} from './handlers/folders';
 
 
 export function createBot(env: Env): Bot {
@@ -144,6 +155,11 @@ export function createBot(env: Env): Bot {
   bot.command('delquiz', (ctx) => handleDeleteQuizCommand(ctx, supabase, env));
   bot.command('edittitle', (ctx) => handleEditTitleCommand(ctx, supabase, env));
   bot.command('editcat', (ctx) => handleEditCategoryCommand(ctx, supabase, env));
+
+  // Hierarchical Folder Management Commands
+  bot.command('newfolder', (ctx) => handleCreateFolderCommand(ctx, supabase, env));
+  bot.command('renamefolder', (ctx) => handleRenameFolderCommand(ctx, supabase, env));
+  bot.command('delfolder', (ctx) => handleDeleteFolderCommand(ctx, supabase, env));
 
   // Admin Global Broadcast Tool
   bot.command('broadcast', (ctx) => handleBroadcastCommand(ctx, supabase, env));
@@ -484,6 +500,36 @@ export function createBot(env: Env): Bot {
     if (data.startsWith('duel_count:')) {
       const count = parseInt(data.replace('duel_count:', ''), 10);
       return launchDuelWithCount(ctx, supabase, count);
+    }
+
+    // Hierarchical Folder & Directory Callbacks
+    if (data.startsWith('fldr:')) {
+      const folderId = data.replace('fldr:', '');
+      return handleQuizzesList(ctx, supabase, folderId);
+    }
+    if (data.startsWith('fldr_new:')) {
+      const parentId = data.replace('fldr_new:', '');
+      return handleCreateFolderPrompt(ctx, supabase, env, parentId);
+    }
+    if (data.startsWith('fldr_ren:')) {
+      const folderId = data.replace('fldr_ren:', '');
+      return handleRenameFolderPrompt(ctx, supabase, env, folderId);
+    }
+    if (data.startsWith('fldr_del:')) {
+      const folderId = data.replace('fldr_del:', '');
+      return handleDeleteFolderPrompt(ctx, supabase, env, folderId);
+    }
+    if (data.startsWith('fldr_del_confirm:')) {
+      const folderId = data.replace('fldr_del_confirm:', '');
+      return handleConfirmDeleteFolder(ctx, supabase, env, folderId);
+    }
+    if (data.startsWith('ed_move_fldr:')) {
+      const quizId = data.replace('ed_move_fldr:', '');
+      return handleMoveQuizPicker(ctx, supabase, env, quizId);
+    }
+    if (data.startsWith('move_q_do:')) {
+      const parts = data.split(':');
+      return handleExecuteMoveQuiz(ctx, supabase, env, parts[1], parts[2]);
     }
   });
 

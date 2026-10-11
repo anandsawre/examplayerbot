@@ -1,5 +1,5 @@
 import { SupabaseClient } from '@supabase/supabase-js';
-import { User, Quiz, Question, ActiveSession, QuizAttempt, LeaderboardEntry, UserMistake, ReferralRecord, DuelSession } from '../types';
+import { User, Quiz, Question, ActiveSession, QuizAttempt, LeaderboardEntry, UserMistake, ReferralRecord, DuelSession, QuizFolder } from '../types';
 
 // ================= USER QUERIES =================
 export async function upsertUser(
@@ -800,4 +800,223 @@ export async function updateDuelUserStats(
 
   return { newRating };
 }
+
+// ================= HIERARCHICAL FOLDERS & SUBFOLDERS =================
+export const memoryFolders: Map<string, QuizFolder> = new Map();
+
+export async function getFolders(
+  supabase: SupabaseClient,
+  parentId: string | null = null
+): Promise<QuizFolder[]> {
+  try {
+    let query = supabase.from('quiz_folders').select('*').order('name', { ascending: true });
+    if (parentId) {
+      query = query.eq('parent_id', parentId);
+    } else {
+      query = query.is('parent_id', null);
+    }
+    const { data, error } = await query;
+    if (!error && data) return data;
+  } catch {}
+
+  // Memory fallback
+  const list: QuizFolder[] = [];
+  for (const f of memoryFolders.values()) {
+    if (parentId ? f.parent_id === parentId : !f.parent_id) {
+      list.push(f);
+    }
+  }
+  return list.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export async function getAllFolders(supabase: SupabaseClient): Promise<QuizFolder[]> {
+  try {
+    const { data, error } = await supabase
+      .from('quiz_folders')
+      .select('*')
+      .order('name', { ascending: true });
+    if (!error && data) return data;
+  } catch {}
+
+  return Array.from(memoryFolders.values()).sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export async function getFolderById(
+  supabase: SupabaseClient,
+  folderId: string
+): Promise<QuizFolder | null> {
+  try {
+    const { data, error } = await supabase
+      .from('quiz_folders')
+      .select('*')
+      .eq('id', folderId)
+      .single();
+    if (!error && data) return data;
+  } catch {}
+
+  return memoryFolders.get(folderId) || null;
+}
+
+export async function getFolderPath(
+  supabase: SupabaseClient,
+  folderId: string
+): Promise<QuizFolder[]> {
+  const path: QuizFolder[] = [];
+  let currentId: string | null = folderId;
+
+  // Maximum depth safety: 10 levels
+  let depth = 0;
+  while (currentId && depth < 10) {
+    const folder = await getFolderById(supabase, currentId);
+    if (!folder) break;
+    path.unshift(folder);
+    currentId = folder.parent_id || null;
+    depth++;
+  }
+
+  return path;
+}
+
+export async function createFolder(
+  supabase: SupabaseClient,
+  name: string,
+  parentId: string | null = null
+): Promise<QuizFolder | null> {
+  const id = `fldr_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+  const now = new Date().toISOString();
+  const folder: QuizFolder = {
+    id,
+    name: name.trim(),
+    parent_id: parentId,
+    order_index: 0,
+    created_at: now,
+    updated_at: now,
+  };
+
+  try {
+    const { data, error } = await supabase
+      .from('quiz_folders')
+      .insert({
+        name: folder.name,
+        parent_id: folder.parent_id,
+        order_index: 0,
+      })
+      .select()
+      .single();
+
+    if (!error && data) {
+      memoryFolders.set(data.id, data);
+      return data;
+    }
+  } catch {}
+
+  memoryFolders.set(id, folder);
+  return folder;
+}
+
+export async function updateFolder(
+  supabase: SupabaseClient,
+  folderId: string,
+  name: string
+): Promise<boolean> {
+  const now = new Date().toISOString();
+  try {
+    const { error } = await supabase
+      .from('quiz_folders')
+      .update({ name: name.trim(), updated_at: now })
+      .eq('id', folderId);
+    if (!error) {
+      const cur = memoryFolders.get(folderId);
+      if (cur) {
+        cur.name = name.trim();
+        cur.updated_at = now;
+      }
+      return true;
+    }
+  } catch {}
+
+  const cur = memoryFolders.get(folderId);
+  if (cur) {
+    cur.name = name.trim();
+    cur.updated_at = now;
+    return true;
+  }
+  return false;
+}
+
+export async function deleteFolder(
+  supabase: SupabaseClient,
+  folderId: string
+): Promise<boolean> {
+  try {
+    // Move any quizzes in this folder to root (folder_id = null)
+    await supabase.from('quizzes').update({ folder_id: null }).eq('folder_id', folderId);
+    const { error } = await supabase.from('quiz_folders').delete().eq('id', folderId);
+    if (!error) {
+      memoryFolders.delete(folderId);
+      return true;
+    }
+  } catch {}
+
+  memoryFolders.delete(folderId);
+  return true;
+}
+
+export const memoryQuizFolderMap: Map<string, string | null> = new Map();
+
+export async function getQuizzesByFolder(
+  supabase: SupabaseClient,
+  folderId: string | null
+): Promise<Quiz[]> {
+  try {
+    let query = supabase.from('quizzes').select('*').eq('is_active', true);
+    if (folderId) {
+      query = query.eq('folder_id', folderId);
+    } else {
+      query = query.is('folder_id', null);
+    }
+    const { data, error } = await query.order('created_at', { ascending: false });
+    if (!error && data) {
+      const merged = data.map((q) => {
+        if (memoryQuizFolderMap.has(q.id)) {
+          return { ...q, folder_id: memoryQuizFolderMap.get(q.id) };
+        }
+        return q;
+      });
+      return merged.filter((q) => (folderId ? q.folder_id === folderId : !q.folder_id));
+    }
+  } catch {}
+
+  // Fallback: fetch all active quizzes
+  const all = await getActiveQuizzes(supabase);
+  const mapped = all.map((q) => {
+    if (memoryQuizFolderMap.has(q.id)) {
+      return { ...q, folder_id: memoryQuizFolderMap.get(q.id) };
+    }
+    return q;
+  });
+
+  if (folderId) {
+    return mapped.filter((q) => q.folder_id === folderId);
+  }
+  const filtered = mapped.filter((q) => !q.folder_id);
+  return filtered.length > 0 ? filtered : mapped;
+}
+
+export async function moveQuizToFolder(
+  supabase: SupabaseClient,
+  quizId: string,
+  folderId: string | null
+): Promise<boolean> {
+  memoryQuizFolderMap.set(quizId, folderId);
+  try {
+    const { error } = await supabase
+      .from('quizzes')
+      .update({ folder_id: folderId })
+      .eq('id', quizId);
+    if (!error) return true;
+  } catch {}
+  return true;
+}
+
 

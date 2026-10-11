@@ -58,6 +58,15 @@ export interface DuelSession {
   created_at: string;
 }
 
+export interface QuizFolder {
+  id: string;
+  name: string;
+  parent_id?: string | null;
+  order_index?: number;
+  created_at: string;
+  updated_at?: string;
+}
+
 export interface Quiz {
   id: string;
   title: string;
@@ -69,6 +78,7 @@ export interface Quiz {
   time_limit_seconds: number;
   is_active: boolean;
   is_premium?: boolean;
+  folder_id?: string | null;
   created_at: string;
 }
 

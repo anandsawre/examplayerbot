@@ -7,13 +7,16 @@ import { Env } from '../config';
  * Supports single ID or comma-separated list of IDs (e.g. "12345,67890").
  * Returns FALSE for everyone else. Never allows unauthorized users!
  */
-export function isAdmin(ctx: Context, env: Env): boolean {
+export function isAdmin(ctx: Context, env?: Env): boolean {
   const userId = ctx.from?.id;
-  if (!userId || !env.ADMIN_USER_ID) {
+  if (!userId) return false;
+
+  const adminIdStr = env?.ADMIN_USER_ID || process.env.ADMIN_USER_ID;
+  if (!adminIdStr) {
     return false;
   }
 
-  const allowedAdmins = env.ADMIN_USER_ID.split(',').map((id) => id.trim());
+  const allowedAdmins = adminIdStr.split(',').map((id) => id.trim());
   return allowedAdmins.includes(String(userId));
 }
 

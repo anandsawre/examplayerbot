@@ -1,7 +1,17 @@
 import { Context, InlineKeyboard } from 'grammy';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { Env } from '../config';
-import { getActiveQuizzes, getQuizById, deleteQuiz, updateQuiz } from '../db/queries';
+import {
+  getActiveQuizzes,
+  getQuizById,
+  deleteQuiz,
+  updateQuiz,
+  getFolders,
+  getAllFolders,
+  getFolderById,
+  getFolderPath,
+  getQuizzesByFolder,
+} from '../db/queries';
 import { isAdmin } from '../utils/admin';
 
 function escapeMarkdown(text: string): string {
@@ -14,33 +24,134 @@ function escapeMarkdown(text: string): string {
     .replace(/`/g, '\\`');
 }
 
-export async function handleQuizzesList(ctx: Context, supabase: SupabaseClient) {
-  const quizzes = await getActiveQuizzes(supabase);
+export async function handleQuizzesList(
+  ctx: Context,
+  supabase: SupabaseClient,
+  folderId?: string | null
+) {
+  const adminMode = isAdmin(ctx);
 
-  if (!quizzes || quizzes.length === 0) {
-    const text = '⚠️ Abhi koi test active nahi hai. Kripya thodi der baad check karein ya admin se contact karein.';
-    const keyboard = new InlineKeyboard().text('🔙 Main Menu', 'menu_start');
+  if (folderId) {
+    // INSIDE A FOLDER / SUBFOLDER
+    const currentFolder = await getFolderById(supabase, folderId);
+    if (!currentFolder) {
+      return handleQuizzesList(ctx, supabase, null);
+    }
+
+    const breadcrumbs = await getFolderPath(supabase, folderId);
+    const breadcrumbStr = breadcrumbs.map((b) => b.name).join(' ➔ ');
+    const subFolders = await getFolders(supabase, folderId);
+    const quizzes = await getQuizzesByFolder(supabase, folderId);
+
+    let text = `📂 *DIRECTORY: ${escapeMarkdown(breadcrumbStr)}*\n`;
+    text += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+    text += `📁 *Subfolders:* ${subFolders.length} | 📝 *Examination Papers:* ${quizzes.length}\n\n`;
+
+    const keyboard = new InlineKeyboard();
+
+    // 1. Subfolders
+    subFolders.forEach((sf) => {
+      keyboard.text(`📁 ${sf.name}`, `fldr:${sf.id}`).row();
+    });
+
+    // 2. Quizzes inside this folder
+    quizzes.forEach((quiz) => {
+      const badge = quiz.is_premium ? '🔒 [PREMIUM]' : '🟢 [FREE]';
+      keyboard.text(`${badge} ${quiz.title}`, `view_quiz:${quiz.id}`).row();
+    });
+
+    if (adminMode) {
+      keyboard
+        .text('➕ New Subfolder', `fldr_new:${folderId}`)
+        .text('✏️ Rename Folder', `fldr_ren:${folderId}`)
+        .text('🗑️ Delete Folder', `fldr_del:${folderId}`)
+        .row();
+    }
+
+    // Navigation: Back to parent or root
+    if (currentFolder.parent_id) {
+      keyboard.text('🔙 Back to Parent Folder', `fldr:${currentFolder.parent_id}`);
+    } else {
+      keyboard.text('🔙 Back to Directory Root', 'menu_quizzes');
+    }
+    keyboard.row().text('🏠 Platform Dashboard', 'menu_start');
 
     if (ctx.callbackQuery) {
-      await ctx.editMessageText(text, { reply_markup: keyboard });
+      await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup: keyboard });
       await ctx.answerCallbackQuery();
     } else {
-      await ctx.reply(text, { reply_markup: keyboard });
+      await ctx.reply(text, { parse_mode: 'Markdown', reply_markup: keyboard });
     }
     return;
   }
 
-  let text = `📚 *OFFICIAL MOCK EXAMINATIONS CATALOG*\n`;
+  // AT DIRECTORY ROOT
+  const rootFolders = await getFolders(supabase, null);
+  const rootQuizzes = await getQuizzesByFolder(supabase, null);
+  const totalQuizzes = await getActiveQuizzes(supabase);
+
+  // If NO folders exist at all, preserve the classic flat quiz catalog
+  const allFoldersCount = (await getAllFolders(supabase)).length;
+  if (rootFolders.length === 0 && allFoldersCount === 0) {
+    if (totalQuizzes.length === 0) {
+      const text = '⚠️ Abhi koi test active nahi hai. Kripya thodi der baad check karein ya admin se contact karein.';
+      const keyboard = new InlineKeyboard().text('🔙 Main Menu', 'menu_start');
+      if (adminMode) keyboard.row().text('📁 Create First Folder', 'fldr_new:root');
+
+      if (ctx.callbackQuery) {
+        await ctx.editMessageText(text, { reply_markup: keyboard });
+        await ctx.answerCallbackQuery();
+      } else {
+        await ctx.reply(text, { reply_markup: keyboard });
+      }
+      return;
+    }
+
+    let text = `📚 *OFFICIAL MOCK EXAMINATIONS CATALOG*\n`;
+    text += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+    text += `Kripya attempt karne ke liye examination paper select karein:\n\n`;
+
+    const keyboard = new InlineKeyboard();
+    totalQuizzes.forEach((quiz) => {
+      const badge = quiz.is_premium ? '🔒 [PREMIUM]' : '🟢 [FREE]';
+      keyboard.text(`${badge} ${quiz.title}`, `view_quiz:${quiz.id}`).row();
+    });
+
+    if (adminMode) {
+      keyboard.text('📁 Create Examination Folder', 'fldr_new:root').row();
+    }
+    keyboard.text('🔙 Platform Dashboard', 'menu_start');
+
+    if (ctx.callbackQuery) {
+      await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup: keyboard });
+      await ctx.answerCallbackQuery();
+    } else {
+      await ctx.reply(text, { parse_mode: 'Markdown', reply_markup: keyboard });
+    }
+    return;
+  }
+
+  // FOLDERS EXIST: Render hierarchical root
+  let text = `📚 *OFFICIAL EXAMINATION DIRECTORY (ROOT)*\n`;
   text += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-  text += `Kripya attempt karne ke liye examination paper select karein:\n\n`;
+  text += `Kripya subject category ya examination folder chunein:\n\n`;
 
   const keyboard = new InlineKeyboard();
 
-  quizzes.forEach((quiz) => {
-    const badge = quiz.is_premium ? '🔒 [PREMIUM]' : '🟢 [FREE]';
-    keyboard.text(`${badge} ${quiz.title}`, `view_quiz:${quiz.id}`).row();
+  rootFolders.forEach((f) => {
+    keyboard.text(`📁 ${f.name}`, `fldr:${f.id}`).row();
   });
 
+  if (rootQuizzes.length > 0) {
+    rootQuizzes.forEach((quiz) => {
+      const badge = quiz.is_premium ? '🔒 [PREMIUM]' : '🟢 [FREE]';
+      keyboard.text(`${badge} ${quiz.title}`, `view_quiz:${quiz.id}`).row();
+    });
+  }
+
+  if (adminMode) {
+    keyboard.text('➕ Create New Folder', 'fldr_new:root').row();
+  }
   keyboard.text('🔙 Platform Dashboard', 'menu_start');
 
   if (ctx.callbackQuery) {
@@ -242,11 +353,18 @@ export async function handleEditQuizPanel(
   const quiz = await getQuizById(supabase, quizId);
   if (!quiz) return;
 
+    let folderName = 'Directory Root';
+    if (quiz.folder_id) {
+      const f = await getFolderById(supabase, quiz.folder_id);
+      if (f) folderName = f.name;
+    }
+
   const text =
     `⚙️ *EXAMINATION CONFIGURATION EDITOR*\n` +
     `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
     `📝 *Title:* ${escapeMarkdown(quiz.title)}\n` +
     `📂 *Category:* ${escapeMarkdown(quiz.category)}\n` +
+    `📁 *Current Folder:* ${escapeMarkdown(folderName)}\n` +
     `⏱️ *Time Limit:* \`${quiz.time_limit_seconds}s\` per question\n` +
     `🎯 *Marking Scheme:* \`+${quiz.marks_per_question}\` / \`-${quiz.negative_marks}\`\n` +
     `👑 *Access Tier:* ${quiz.is_premium ? '🔒 Premium Pass' : '🟢 Open Access'}\n` +
@@ -259,6 +377,8 @@ export async function handleEditQuizPanel(
     .row()
     .text('🏷️ Rename Examination Title', `ed_title_prompt:${quiz.id}`)
     .text('📂 Change Subject Category', `ed_cat_prompt:${quiz.id}`)
+    .row()
+    .text('📁 Move / Assign to Folder', `ed_move_fldr:${quiz.id}`)
     .row()
     .text('🔙 Return to Examination', `view_quiz:${quiz.id}`);
 
