@@ -51,6 +51,15 @@ import {
   handleSetChannel,
   handleUnsetChannel,
 } from './handlers/adminSettings';
+import { handleDownloadPdfScorecard } from './handlers/pdfExport';
+import { handleBroadcastCommand, handleBroadcastCallback } from './handlers/broadcast';
+import {
+  handleScheduleCommand,
+  handleSchedulePickQuiz,
+  handleScheduleSetTime,
+  handleCancelScheduleCommand,
+  handleScheduledStatusCommand,
+} from './handlers/groupSchedule';
 
 export function createBot(env: Env): Bot {
   if (!env.BOT_TOKEN) {
@@ -100,6 +109,21 @@ export function createBot(env: Env): Bot {
   bot.command('delquiz', (ctx) => handleDeleteQuizCommand(ctx, supabase, env));
   bot.command('edittitle', (ctx) => handleEditTitleCommand(ctx, supabase, env));
   bot.command('editcat', (ctx) => handleEditCategoryCommand(ctx, supabase, env));
+
+  // Admin Global Broadcast Tool
+  bot.command('broadcast', (ctx) => handleBroadcastCommand(ctx, supabase, env));
+
+  // Group Quiz Scheduling
+  bot.command('schedule', (ctx) => handleScheduleCommand(ctx, supabase));
+  bot.command('cancel_schedule', (ctx) => handleCancelScheduleCommand(ctx));
+  bot.command('cancelschedule', (ctx) => handleCancelScheduleCommand(ctx));
+  bot.command('scheduled', (ctx) => handleScheduledStatusCommand(ctx));
+  bot.command('pdf', async (ctx) => {
+    const text = ctx.message?.text || '';
+    const qId = text.split(' ')[1];
+    if (qId) return handleDownloadPdfScorecard(ctx, supabase, qId);
+    return ctx.reply('ℹ️ PDF download karne ke liye format: `/pdf <quiz_id>` ya kisi test ke niche "Download PDF" button par tap karein.', { parse_mode: 'Markdown' });
+  });
 
   // ================= EVENTS =================
   // Quiz Poll Answer Event (Solo or Group)
@@ -314,6 +338,37 @@ export function createBot(env: Env): Bot {
       await authorizeGroup(supabase, groupId, title, ctx.from?.id);
       await ctx.answerCallbackQuery({ text: 'Group activated!' });
       return handleListGroupsCommand(ctx, supabase, env);
+    }
+
+    // PDF Scorecard & Solutions Download
+    if (data.startsWith('pdf_scorecard:')) {
+      const quizId = data.replace('pdf_scorecard:', '');
+      return handleDownloadPdfScorecard(ctx, supabase, quizId);
+    }
+
+    // Admin Broadcast callbacks
+    if (data.startsWith('bcast_send:')) {
+      const parts = data.split(':');
+      return handleBroadcastCallback(ctx, supabase, env, 'send', parts[1], parts[2]);
+    }
+    if (data.startsWith('bcast_cancel:')) {
+      const bcastId = data.replace('bcast_cancel:', '');
+      return handleBroadcastCallback(ctx, supabase, env, 'cancel', '', bcastId);
+    }
+
+    // Group Quiz Scheduling callbacks
+    if (data.startsWith('sch_pick:')) {
+      const quizId = data.replace('sch_pick:', '');
+      return handleSchedulePickQuiz(ctx, supabase, quizId);
+    }
+    if (data.startsWith('sch_set:')) {
+      const parts = data.split(':');
+      const quizId = parts[1];
+      const minutes = parseInt(parts[2], 10);
+      return handleScheduleSetTime(ctx, supabase, quizId, minutes);
+    }
+    if (data === 'sch_cancel') {
+      return handleCancelScheduleCommand(ctx);
     }
 
     // Payment Approval callbacks

@@ -38,10 +38,10 @@ export async function handleStart(ctx: Context, supabase: SupabaseClient, env?: 
     `✨ *Key Features:*\n` +
     `• ⏱️ Real exam simulation with timer\n` +
     `• ⚠️ Negative marking calculation\n` +
-    `• 💡 Detailed answer explanations\n` +
+    `• 📄 Instant Downloadable PDF Scorecards & Solutions\n` +
     `• 🏆 Live leaderboards & rank tracking\n` +
-    `• 👥 Telegram Group Live Poll Battles (/groupquiz)\n` +
-    `• 📊 Instant scorecard & analytics\n\n` +
+    `• 👥 Group Live Battles (/groupquiz) & Scheduling (/schedule)\n` +
+    `• 📊 Monospace Performance Scorecard\n\n` +
     `Neeche diye gaye buttons se shuru kijiye:`;
 
   const keyboard = new InlineKeyboard()
@@ -61,16 +61,19 @@ export async function handleHelp(ctx: Context) {
   const text =
     `📖 *Examplayer Bot Rules & Guide:*\n\n` +
     `1. *Solo Tests:* /quizzes dabayein aur apna pasandeeda test chunein.\n` +
-    `2. *Group Battles:* Bot ko kisi bhi Telegram Group me add karke /groupquiz run karein.\n` +
-    `3. *Scoring:* Correct answer par full marks milenge aur galat par penalty cut hogi.\n` +
-    `4. *Skipping:* Negative marking se bachne ke liye question skip kar sakte hain.\n` +
-    `5. *Importing Tests:* Bot ko seedhe \`.json\` file bhejkar naya test add karein.\n\n` +
+    `2. *PDF Scorecards:* Test khatam hone par pure test ka detailed PDF solution booklet download karein!\n` +
+    `3. *Group Battles:* Group me /groupquiz run karke live battle shuru karein.\n` +
+    `4. *Scheduled Quizzes:* Group me /schedule command se kisi bhi time ke liye automated test schedule karein.\n` +
+    `5. *Scoring:* Correct answer par full marks milenge aur galat par penalty cut hogi.\n\n` +
     `Commands:\n` +
     `• /start - Main menu\n` +
-    `• /quizzes - All mock tests\n` +
-    `• /groupquiz - Start battle in a group\n` +
-    `• /leaderboard - Top rankings\n` +
-    `• /myprofile - Your progress & streak\n` +
+    `• /quizzes - All mock tests & PDF papers\n` +
+    `• /groupquiz - Start live battle in group\n` +
+    `• /schedule - Schedule automated quiz in group\n` +
+    `• /stopquiz - Stop group battle\n` +
+    `• /leaderboard - Top merit list rankings\n` +
+    `• /myprofile - Your stats, accuracy & streak\n` +
+    `• /broadcast - Admin Announcement Dispatcher\n` +
     `• /import - JSON format guide`;
 
   const keyboard = new InlineKeyboard().text('🔙 Back to Main Menu', 'menu_start');

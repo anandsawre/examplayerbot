@@ -19,6 +19,7 @@ import { checkChannelMembership, sendJoinChannelPrompt } from './membership';
 import { showPaymentPrompt } from './payment';
 import { isAdmin } from '../utils/admin';
 import { groupPollToChatMap } from './groupQuiz';
+import { recentUserAttempts } from './pdfExport';
 
 export interface SoloPollSession {
   quizId: string;
@@ -513,6 +514,14 @@ export async function handlePollClosed(
     await deleteActiveSession(supabase, meta.userId);
     soloPollSessions.delete(meta.userId);
 
+    // Cache completed attempt for instant PDF scorecard download
+    recentUserAttempts.set(meta.userId, {
+      quizId: quiz.id,
+      result,
+      answers: currentAnswers,
+      completedAt: new Date(),
+    });
+
     const user = await getUser(supabase, meta.userId);
     const studentName = user?.first_name || 'Student';
 
@@ -563,6 +572,14 @@ async function finishSoloPollQuiz(
 
   // Cleanup active session in Supabase
   await deleteActiveSession(supabase, session.userId);
+
+  // Cache completed attempt for instant PDF scorecard download
+  recentUserAttempts.set(session.userId, {
+    quizId: quiz.id,
+    result,
+    answers: session.answers,
+    completedAt: new Date(),
+  });
 
   // Get user details
   const user = await getUser(supabase, session.userId);

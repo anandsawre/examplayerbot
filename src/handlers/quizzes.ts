@@ -103,6 +103,8 @@ export async function handleViewQuiz(
   keyboard
     .url('📢 Share to Channel / Group', shareUrl)
     .text('🏆 Leaderboard', `lb:${quiz.id}`)
+    .row()
+    .text('📄 Solution Booklet (PDF)', `pdf_scorecard:${quiz.id}`)
     .row();
 
   // Admin Controls (Toggle Premium, Edit Quiz, Delete Quiz) - ONLY in Private Chat

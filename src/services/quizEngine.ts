@@ -74,6 +74,8 @@ export function renderScorecardMessage(
     .url('🔄 Retake Solo Test', `https://t.me/${botUsername}?start=quiz_${quiz.id}`)
     .text('🏆 Leaderboard', `lb:${quiz.id}`)
     .row()
+    .text('📄 Download PDF Scorecard & Solutions', `pdf_scorecard:${quiz.id}`)
+    .row()
     .url('📋 All Quizzes', `https://t.me/${botUsername}?start=quizzes`)
     .url('👤 My Profile', `https://t.me/${botUsername}?start=profile`);
 

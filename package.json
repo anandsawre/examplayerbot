@@ -24,11 +24,13 @@
     "@supabase/supabase-js": "^2.49.1",
     "dotenv": "^16.4.7",
     "grammy": "^1.35.0",
+    "pdfkit": "^0.20.2",
     "tsx": "^4.19.3"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250224.0",
     "@types/node": "^22.13.9",
+    "@types/pdfkit": "^0.17.6",
     "typescript": "^5.8.2",
     "wrangler": "^3.111.0"
   }
