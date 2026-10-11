@@ -41,15 +41,41 @@ async function main() {
     const webhookPath = '/webhook';
     const fullWebhookUrl = `${cleanUrl}${webhookPath}`;
 
-    console.log(`🌐 Webhook mode enabled. Setting Telegram Webhook to: ${fullWebhookUrl}`);
-    await bot.api.setWebhook(fullWebhookUrl);
-    console.log(`✅ Webhook registered successfully!`);
+    const registerWebhook = async () => {
+      try {
+        console.log(`🌐 Setting Telegram Webhook to: ${fullWebhookUrl}`);
+        await bot.api.setWebhook(fullWebhookUrl, {
+          drop_pending_updates: false,
+          allowed_updates: ['message', 'callback_query', 'poll_answer', 'poll', 'chat_member', 'my_chat_member'],
+        });
+        console.log(`✅ Webhook registered successfully!`);
+      } catch (err) {
+        console.error('Error setting Telegram webhook:', err);
+      }
+    };
+
+    await registerWebhook();
+
+    // Auto-healing: Check every 2 minutes. If webhook was deleted by local runner, auto-restore it!
+    setInterval(async () => {
+      try {
+        const info = await bot.api.getWebhookInfo();
+        if (info.url !== fullWebhookUrl) {
+          console.log(`⚠️ Telegram webhook link was missing or modified ("${info.url}"). Auto-healing back to: ${fullWebhookUrl}`);
+          await registerWebhook();
+        }
+      } catch (e) {
+        console.error('Periodic webhook verification error:', e);
+      }
+    }, 120_000);
 
     const handleWebhook = webhookCallback(bot, 'http');
 
     const server = http.createServer((req, res) => {
+      const urlPath = (req.url || '').split('?')[0].replace(/\/$/, '');
+
       // Health check endpoint for Render & Uptime monitoring
-      if (req.method === 'GET' && (req.url === '/' || req.url === '/health')) {
+      if (req.method === 'GET' && (urlPath === '' || urlPath === '/health')) {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(
           JSON.stringify({
@@ -64,7 +90,7 @@ async function main() {
       }
 
       // Webhook payload from Telegram
-      if (req.method === 'POST' && req.url === webhookPath) {
+      if (req.method === 'POST' && urlPath === webhookPath) {
         handleWebhook(req, res);
         return;
       }
