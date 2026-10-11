@@ -4,6 +4,7 @@ dns.setDefaultResultOrder('ipv4first');
 import 'dotenv/config';
 import { createBot } from './bot';
 import { getConfig } from './config';
+import { registerBotCommands } from './utils/setCommands';
 
 async function runLocalBot() {
   console.log('🚀 Starting Examplayer Bot locally (Long Polling Mode)...');
@@ -34,6 +35,9 @@ async function runLocalBot() {
 
     const botInfo = await bot.api.getMe();
     console.log(`✅ Examplayer Bot is online as @${botInfo.username}!`);
+
+    // Register command hints and menu button with Telegram API
+    await registerBotCommands(bot.api);
     console.log('📱 Telegram open karein aur bot ko /start bhej kar test karein.');
 
     await bot.start();

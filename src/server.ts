@@ -6,6 +6,7 @@ import 'dotenv/config';
 import { webhookCallback } from 'grammy';
 import { createBot } from './bot';
 import { getConfig } from './config';
+import { registerBotCommands } from './utils/setCommands';
 
 async function main() {
   console.log('🚀 Initializing Examplayer Bot Server (Render / Production Node.js)...');
@@ -27,6 +28,9 @@ async function main() {
 
   const botInfo = await bot.api.getMe();
   console.log(`🤖 Logged in as Telegram Bot: @${botInfo.username} (ID: ${botInfo.id})`);
+
+  // Register command hints and menu button with Telegram API
+  await registerBotCommands(bot.api);
 
   // Detect whether to run in Webhook mode or Long Polling mode
   // Render provides RENDER_EXTERNAL_URL (e.g. https://examplayer-bot.onrender.com)
