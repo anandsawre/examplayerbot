@@ -10,6 +10,9 @@ import { webhookCallback } from 'grammy';
 import { createBot } from './bot';
 import { getConfig } from './config';
 import { registerBotCommands } from './utils/setCommands';
+import { getSupabase } from './db/supabase';
+import { handleAdminApiRequest } from './admin/adminApi';
+import { getAdminHtml } from './admin/adminUi';
 
 async function main() {
   console.log('🚀 Initializing Examplayer Bot Server (Render / Production Node.js)...');
@@ -37,8 +40,10 @@ async function main() {
   const webhookPath = '/webhook';
   const handleWebhook = webhookCallback(bot, 'http');
 
+  const supabase = getSupabase(config);
+
   // 1. START HTTP SERVER IMMEDIATELY so Render health check always passes on boot!
-  const server = http.createServer((req, res) => {
+  const server = http.createServer(async (req, res) => {
     const urlPath = (req.url || '').split('?')[0].replace(/\/$/, '');
 
     // Health check endpoint for Render & Uptime monitoring
@@ -60,6 +65,22 @@ async function main() {
     if (req.method === 'POST' && urlPath === webhookPath) {
       handleWebhook(req, res);
       return;
+    }
+
+    // Admin Web Portal Frontend UI
+    if (req.method === 'GET' && (urlPath === '/admin' || urlPath === '/admin/index.html')) {
+      res.writeHead(200, {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'no-cache',
+      });
+      res.end(getAdminHtml());
+      return;
+    }
+
+    // Admin Web Portal Backend REST API
+    if (urlPath.startsWith('/api/admin')) {
+      const handled = await handleAdminApiRequest(req, res, supabase, bot, config);
+      if (handled) return;
     }
 
     res.writeHead(404, { 'Content-Type': 'text/plain' });

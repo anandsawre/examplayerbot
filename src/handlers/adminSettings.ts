@@ -28,9 +28,12 @@ export async function handleSettingsCommand(
 
   const channelText = channel ? channel : '❌ Disabled (No subscription required)';
 
+  const portalUrl = (process.env.RENDER_EXTERNAL_URL || 'https://examplayer-bot.onrender.com').replace(/\/$/, '') + '/admin';
+
   const text =
     `⚙️ *ADMINISTRATIVE CONFIGURATION DASHBOARD*\n` +
     `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+    `🖥️ *Web Admin Portal (UI):* \`${portalUrl}\`\n\n` +
     `💳 *Active UPI VPA:* \`${upiId}\`\n` +
     `💰 *Scholar Pass Tariff:* \`₹${price}\`\n` +
     `📢 *Mandatory Channel:* \`${channelText}\`\n\n` +
@@ -57,7 +60,12 @@ export async function handleSettingsCommand(
     `• \`/broadcast\`\n` +
     `  Dispatch platform-wide announcements.`;
 
-  await ctx.reply(text, { parse_mode: 'Markdown' });
+  const keyboard = new InlineKeyboard()
+    .url('🖥️ Open Web Admin Portal (UI)', portalUrl)
+    .row()
+    .text('🛡️ View Admins Directory', 'adm_list');
+
+  await ctx.reply(text, { parse_mode: 'Markdown', reply_markup: keyboard });
 }
 
 // /setupi <new_upi>
