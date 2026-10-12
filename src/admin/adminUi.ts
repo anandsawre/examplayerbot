@@ -8,8 +8,16 @@ export function getAdminHtml(): string {
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <script>
+    (function() {
+      try {
+        var t = localStorage.getItem('examplayer_admin_theme') || 'dark';
+        document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    })();
+  </script>
   <style>
-    :root {
+    :root, [data-theme="dark"] {
       --bg-base: #080c14;
       --bg-surface: #0f172a;
       --bg-card: rgba(17, 24, 39, 0.75);
@@ -32,6 +40,163 @@ export function getAdminHtml(): string {
       --radius-lg: 20px;
       --transition-fast: 0.15s ease;
       --transition-smooth: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      --card-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+      --sidebar-bg: rgba(15, 23, 42, 0.75);
+      --modal-bg: #0f172a;
+      --modal-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+      --input-bg: rgba(15, 23, 42, 0.8);
+      --login-card-bg: rgba(15, 23, 42, 0.85);
+      --login-overlay-bg: #080c14;
+      --toast-bg: #1e293b;
+      --toast-color: #ffffff;
+      --table-border: rgba(255, 255, 255, 0.04);
+      --table-hover: rgba(255, 255, 255, 0.02);
+      --callout-bg: rgba(99, 102, 241, 0.08);
+      --callout-border: rgba(99, 102, 241, 0.2);
+      --callout-title: #a5b4fc;
+      --item-card-bg: rgba(255, 255, 255, 0.03);
+      --item-card-border: rgba(255, 255, 255, 0.08);
+      --code-bg: rgba(99, 102, 241, 0.1);
+      --code-color: #818cf8;
+      --scrollbar-thumb: rgba(255, 255, 255, 0.15);
+      --scrollbar-thumb-hover: rgba(255, 255, 255, 0.25);
+    }
+
+    [data-theme="light"] {
+      --bg-base: #f8fafc;
+      --bg-surface: #ffffff;
+      --bg-card: #ffffff;
+      --bg-card-hover: #f1f5f9;
+      --border-subtle: #e2e8f0;
+      --border-highlight: rgba(99, 102, 241, 0.4);
+      --primary: #4f46e5;
+      --primary-hover: #4338ca;
+      --primary-glow: rgba(79, 70, 229, 0.2);
+      --emerald: #059669;
+      --emerald-glow: rgba(5, 150, 105, 0.15);
+      --amber: #d97706;
+      --rose: #e11d48;
+      --cyan: #0284c7;
+      --text-main: #0f172a;
+      --text-muted: #475569;
+      --text-dark: #64748b;
+      --card-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.06), 0 2px 6px -1px rgba(15, 23, 42, 0.03);
+      --sidebar-bg: #ffffff;
+      --modal-bg: #ffffff;
+      --modal-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.15);
+      --input-bg: #f8fafc;
+      --login-card-bg: rgba(255, 255, 255, 0.98);
+      --login-overlay-bg: #f1f5f9;
+      --toast-bg: #ffffff;
+      --toast-color: #0f172a;
+      --table-border: #f1f5f9;
+      --table-hover: #f8fafc;
+      --callout-bg: #eef2ff;
+      --callout-border: #c7d2fe;
+      --callout-title: #4338ca;
+      --item-card-bg: #f8fafc;
+      --item-card-border: #e2e8f0;
+      --code-bg: #f1f5f9;
+      --code-color: #4338ca;
+      --scrollbar-thumb: #cbd5e1;
+      --scrollbar-thumb-hover: #94a3b8;
+    }
+
+    [data-theme="light"] body {
+      background-image: 
+        radial-gradient(circle at 15% 15%, rgba(99, 102, 241, 0.05) 0%, transparent 40%),
+        radial-gradient(circle at 85% 85%, rgba(6, 182, 212, 0.04) 0%, transparent 40%);
+    }
+
+    [data-theme="light"] .brand-title {
+      background: linear-gradient(135deg, #0f172a 30%, #4338ca 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    [data-theme="light"] #sidebar {
+      border-right: 1px solid #e2e8f0;
+      box-shadow: 2px 0 12px rgba(0, 0, 0, 0.03);
+    }
+
+    [data-theme="light"] .nav-item:hover {
+      background: #f1f5f9;
+      color: #0f172a;
+    }
+
+    [data-theme="light"] .nav-item.active {
+      background: linear-gradient(90deg, rgba(79, 70, 229, 0.1), rgba(79, 70, 229, 0.02));
+      color: #4f46e5;
+    }
+
+    [data-theme="light"] .btn-secondary {
+      background: #ffffff;
+      border-color: #cbd5e1;
+      color: #1e293b;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    }
+
+    [data-theme="light"] .btn-secondary:hover {
+      background: #f1f5f9;
+      border-color: #94a3b8;
+    }
+
+    [data-theme="light"] .form-control {
+      background: #ffffff;
+      border-color: #cbd5e1;
+      color: #0f172a;
+    }
+
+    [data-theme="light"] .form-control:focus {
+      background: #ffffff;
+      border-color: #4f46e5;
+      box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15);
+    }
+
+    [data-theme="light"] th {
+      background: #f8fafc;
+      color: #64748b;
+      border-bottom: 1px solid #cbd5e1;
+    }
+
+    [data-theme="light"] td {
+      color: #1e293b;
+      border-bottom: 1px solid #e2e8f0;
+    }
+
+    [data-theme="light"] tr:hover td {
+      background: #f8fafc;
+    }
+
+    [data-theme="light"] .metric-value {
+      color: #0f172a;
+    }
+
+    [data-theme="light"] .metric-icon-bg {
+      opacity: 0.05;
+    }
+
+    [data-theme="light"] .modal-box {
+      border-color: #cbd5e1;
+    }
+
+    [data-theme="light"] .modal-close {
+      color: #64748b;
+    }
+
+    [data-theme="light"] .modal-close:hover {
+      color: #0f172a;
+    }
+
+    [data-theme="light"] .file-dropzone {
+      background: rgba(79, 70, 229, 0.03);
+      border-color: rgba(79, 70, 229, 0.35);
+    }
+
+    [data-theme="light"] .file-dropzone:hover,
+    [data-theme="light"] .file-dropzone.dragover {
+      background: rgba(79, 70, 229, 0.08);
+      border-color: var(--primary);
     }
 
     * {
@@ -72,7 +237,7 @@ export function getAdminHtml(): string {
     /* App Layout */
     #sidebar {
       width: 270px;
-      background: rgba(15, 23, 42, 0.7);
+      background: var(--sidebar-bg);
       backdrop-filter: blur(20px);
       -webkit-backdrop-filter: blur(20px);
       border-right: 1px solid var(--border-subtle);
@@ -292,8 +457,8 @@ export function getAdminHtml(): string {
       border: 1px solid var(--border-subtle);
       border-radius: var(--radius-md);
       padding: 24px;
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
-      transition: border-color var(--transition-fast);
+      box-shadow: var(--card-shadow);
+      transition: border-color var(--transition-fast), background var(--transition-smooth);
     }
     .card:hover {
       border-color: rgba(255, 255, 255, 0.12);
@@ -313,6 +478,7 @@ export function getAdminHtml(): string {
       padding: 20px 22px;
       position: relative;
       overflow: hidden;
+      box-shadow: var(--card-shadow);
       transition: all var(--transition-smooth);
     }
     .metric-card:hover {
@@ -329,7 +495,7 @@ export function getAdminHtml(): string {
       font-family: 'Outfit', sans-serif;
       font-size: 32px;
       font-weight: 700;
-      color: #ffffff;
+      color: var(--text-main);
       line-height: 1;
     }
     .metric-sub {
@@ -371,11 +537,11 @@ export function getAdminHtml(): string {
     }
     td {
       padding: 14px 16px;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-      color: #e2e8f0;
+      border-bottom: 1px solid var(--table-border);
+      color: var(--text-main);
     }
     tr:hover td {
-      background: rgba(255, 255, 255, 0.02);
+      background: var(--table-hover);
     }
     .badge {
       display: inline-block;
@@ -413,11 +579,11 @@ export function getAdminHtml(): string {
     }
     .form-control {
       width: 100%;
-      background: rgba(15, 23, 42, 0.8);
+      background: var(--input-bg);
       border: 1px solid var(--border-subtle);
       border-radius: var(--radius-sm);
       padding: 10px 14px;
-      color: #fff;
+      color: var(--text-main);
       font-size: 14px;
       font-family: inherit;
       outline: none;
@@ -469,15 +635,16 @@ export function getAdminHtml(): string {
       display: flex;
     }
     .modal-box {
-      background: #0f172a;
-      border: 1px solid rgba(255, 255, 255, 0.12);
+      background: var(--modal-bg);
+      border: 1px solid var(--border-subtle);
       border-radius: var(--radius-lg);
       width: 100%;
       max-width: 640px;
       max-height: 90vh;
       overflow-y: auto;
       padding: 28px;
-      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+      box-shadow: var(--modal-shadow);
+      color: var(--text-main);
       animation: modalPop 0.2s cubic-bezier(0.16, 1, 0.3, 1);
     }
     .modal-box-lg {
@@ -522,16 +689,16 @@ export function getAdminHtml(): string {
       gap: 10px;
     }
     .toast {
-      background: #1e293b;
-      border: 1px solid rgba(255, 255, 255, 0.15);
+      background: var(--toast-bg);
+      border: 1px solid var(--border-subtle);
       border-radius: var(--radius-sm);
       padding: 12px 18px;
-      color: #fff;
+      color: var(--toast-color);
       font-size: 13px;
       display: flex;
       align-items: center;
       gap: 10px;
-      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+      box-shadow: var(--modal-shadow);
       animation: toastIn 0.25s ease;
     }
     .toast-success { border-left: 4px solid var(--emerald); }
@@ -548,8 +715,8 @@ export function getAdminHtml(): string {
       left: 0;
       right: 0;
       bottom: 0;
-      background: var(--bg-base);
-      background-image: radial-gradient(circle at center, rgba(99, 102, 241, 0.15) 0%, transparent 60%);
+      background: var(--login-overlay-bg);
+      background-image: radial-gradient(circle at center, rgba(99, 102, 241, 0.12) 0%, transparent 60%);
       z-index: 2000;
       display: flex;
       align-items: center;
@@ -559,13 +726,14 @@ export function getAdminHtml(): string {
     .login-card {
       width: 100%;
       max-width: 420px;
-      background: rgba(15, 23, 42, 0.85);
-      border: 1px solid rgba(255, 255, 255, 0.1);
+      background: var(--login-card-bg);
+      border: 1px solid var(--border-subtle);
       border-radius: var(--radius-lg);
       padding: 36px 32px;
-      box-shadow: 0 25px 60px rgba(0, 0, 0, 0.5);
+      box-shadow: var(--modal-shadow);
       backdrop-filter: blur(20px);
       text-align: center;
+      position: relative;
     }
     .login-icon {
       width: 58px;
@@ -603,6 +771,52 @@ export function getAdminHtml(): string {
       margin-top: 6px;
     }
 
+    .question-item-card {
+      background: var(--item-card-bg);
+      border: 1px solid var(--item-card-border);
+      border-radius: var(--radius-sm);
+      padding: 12px 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 8px;
+      transition: background var(--transition-fast), border-color var(--transition-fast);
+    }
+    .broadcast-target-card {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--item-card-bg);
+      border: 1px solid var(--border-subtle);
+      padding: 12px 14px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: all var(--transition-fast);
+    }
+    .broadcast-target-card:hover {
+      border-color: var(--primary);
+    }
+    .info-callout {
+      background: var(--callout-bg);
+      border: 1px solid var(--callout-border);
+      border-radius: var(--radius-sm);
+      padding: 14px;
+      margin-bottom: 18px;
+    }
+    .auth-tab-bar {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      background: rgba(0, 0, 0, 0.3);
+      padding: 4px;
+      border-radius: var(--radius-sm);
+      margin-bottom: 22px;
+    }
+    [data-theme="light"] .auth-tab-bar {
+      background: #f1f5f9;
+      border: 1px solid #e2e8f0;
+    }
+
     /* Responsive */
     @media (max-width: 900px) {
       #sidebar {
@@ -623,12 +837,15 @@ export function getAdminHtml(): string {
   <!-- DUAL-MODE LOGIN SCREEN -->
   <div id="login-overlay">
     <div class="login-card">
+      <button type="button" class="btn btn-secondary" onclick="toggleTheme()" title="Switch Light/Dark Theme" style="position: absolute; top: 14px; right: 14px; padding: 6px 10px; font-size: 13px; border-radius: 99px;">
+        <span class="theme-switch-icon">☀️</span>
+      </button>
       <div class="login-icon">🏛️</div>
       <h2>Examplayer Admin OS</h2>
       <p style="margin-bottom: 18px;">Secure Authentication for Platform Administrators</p>
 
       <!-- Auth Method Switcher Tabs -->
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; background: rgba(0,0,0,0.3); padding: 4px; border-radius: var(--radius-sm); margin-bottom: 22px;">
+      <div class="auth-tab-bar">
         <button type="button" id="auth-tab-otp" class="btn btn-secondary" style="justify-content: center; font-size: 12px; background: var(--primary); color: #fff;" onclick="switchAuthMode('otp')">
           📲 Telegram OTP
         </button>
@@ -739,7 +956,12 @@ export function getAdminHtml(): string {
         <span class="status-dot"></span>
         <span>Bot Live</span>
       </div>
-      <button class="btn-logout" onclick="logout()">Logout</button>
+      <div style="display:flex; align-items:center; gap:6px;">
+        <button type="button" class="btn-logout" onclick="toggleTheme()" title="Switch Light/Dark Theme" style="padding:5px 8px;">
+          <span class="theme-switch-icon">☀️</span>
+        </button>
+        <button class="btn-logout" onclick="logout()">Logout</button>
+      </div>
     </div>
   </aside>
 
@@ -751,6 +973,9 @@ export function getAdminHtml(): string {
         <p id="page-subtitle">Real-time candidate metrics, examinations directory and bot control.</p>
       </div>
       <div class="topbar-actions">
+        <button type="button" class="btn btn-secondary" id="btn-theme-toggle" onclick="toggleTheme()" title="Switch Theme">
+          <span class="theme-switch-icon">☀️</span> <span class="theme-switch-label">Light Theme</span>
+        </button>
         <button class="btn btn-secondary" onclick="openImportModal()">📥 Import JSON Test</button>
         <button class="btn btn-primary" onclick="openCreateQuizModal()">➕ Create Test</button>
       </div>
@@ -992,21 +1217,21 @@ export function getAdminHtml(): string {
           <div class="form-group" style="margin-bottom: 18px;">
             <label class="form-label">Audience Distribution Reach</label>
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px;">
-              <label style="display:flex; align-items:center; gap:10px; background:rgba(255,255,255,0.04); border:1px solid var(--border-subtle); padding:12px 14px; border-radius:var(--radius-sm); cursor:pointer;">
+              <label class="broadcast-target-card">
                 <input type="radio" name="broadcast-target" value="users" checked style="accent-color:var(--primary);">
                 <div>
                   <div style="font-weight:600; font-size:13px;">👤 Candidates Only</div>
                   <div style="font-size:11px; color:var(--text-muted);">Registered individual students</div>
                 </div>
               </label>
-              <label style="display:flex; align-items:center; gap:10px; background:rgba(255,255,255,0.04); border:1px solid var(--border-subtle); padding:12px 14px; border-radius:var(--radius-sm); cursor:pointer;">
+              <label class="broadcast-target-card">
                 <input type="radio" name="broadcast-target" value="groups" style="accent-color:var(--primary);">
                 <div>
                   <div style="font-weight:600; font-size:13px;">🏛️ Community Groups Only</div>
                   <div style="font-size:11px; color:var(--text-muted);">Authorized discussion groups</div>
                 </div>
               </label>
-              <label style="display:flex; align-items:center; gap:10px; background:rgba(255,255,255,0.04); border:1px solid var(--border-subtle); padding:12px 14px; border-radius:var(--radius-sm); cursor:pointer;">
+              <label class="broadcast-target-card">
                 <input type="radio" name="broadcast-target" value="all" style="accent-color:var(--primary);">
                 <div>
                   <div style="font-weight:600; font-size:13px;">🌐 Global Blast (All Channels)</div>
@@ -1020,8 +1245,8 @@ export function getAdminHtml(): string {
             <label class="form-label">Announcement Content (Supports Markdown: *bold*, _italics_, &#96;code&#96;)</label>
             <textarea id="broadcast-text" class="form-control" style="min-height: 140px;" placeholder="📢 Important Examination Announcement:&#10;&#10;New All-India UPSC Mock Test Paper 4 is now live! Attempt now via /quizzes." required></textarea>
           </div>
-          <div style="background: rgba(99, 102, 241, 0.08); border: 1px solid rgba(99, 102, 241, 0.2); border-radius: var(--radius-sm); padding: 14px; margin-bottom: 18px;">
-            <div style="font-weight: 600; font-size: 13px; color: #a5b4fc; margin-bottom: 4px;">⚠️ High-Priority Dispatch Notice:</div>
+          <div class="info-callout">
+            <div style="font-weight: 600; font-size: 13px; color: var(--callout-title); margin-bottom: 4px;">⚠️ High-Priority Dispatch Notice:</div>
             <div style="font-size: 12px; color: var(--text-muted);">This message will be dispatched in asynchronous batches according to the chosen distribution reach. Rate limits are handled automatically.</div>
           </div>
           <button type="submit" class="btn btn-primary" id="btn-broadcast">🚀 Dispatch Announcement Now</button>
@@ -1132,7 +1357,7 @@ export function getAdminHtml(): string {
           <div class="file-dropzone" id="json-dropzone" onclick="document.getElementById('json-file-input').click()">
             <input type="file" id="json-file-input" accept=".json,application/json" style="display:none;" onchange="handleFileSelect(event)">
             <div style="font-size: 34px; margin-bottom: 6px;">📄</div>
-            <div style="font-weight: 600; font-size: 14px; color: #fff; margin-bottom: 4px;">Click to Choose JSON File, or Drag & Drop Here</div>
+            <div style="font-weight: 600; font-size: 14px; color: var(--text-main); margin-bottom: 4px;">Click to Choose JSON File, or Drag & Drop Here</div>
             <div style="font-size: 12px; color: var(--text-muted);" id="file-chosen-status">Select any .json examination paper</div>
           </div>
           <div id="import-preview-badge" style="display:none; margin-bottom: 14px; background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: var(--radius-sm); padding: 10px 14px; font-size: 12px; color: #34d399;"></div>
@@ -1381,6 +1606,7 @@ export function getAdminHtml(): string {
 
     // Init App
     document.addEventListener('DOMContentLoaded', () => {
+      initTheme();
       if (authToken) {
         verifySession();
       } else {
@@ -2236,13 +2462,7 @@ export function getAdminHtml(): string {
           }
           res.questions.forEach((q, idx) => {
             const card = document.createElement('div');
-            card.style.background = 'rgba(255, 255, 255, 0.03)';
-            card.style.border = '1px solid rgba(255, 255, 255, 0.08)';
-            card.style.borderRadius = 'var(--radius-sm)';
-            card.style.padding = '12px 14px';
-            card.style.display = 'flex';
-            card.style.justifyContent = 'space-between';
-            card.style.alignItems = 'flex-start';
+            card.className = 'question-item-card';
 
             const optsHtml = q.options.map((opt, i) => \`
               <span style="display:inline-block; margin-right:8px; font-size:12px; \${i === q.correct_option_index ? 'color:#34d399; font-weight:600;' : 'color:var(--text-muted);'}">
@@ -2254,7 +2474,7 @@ export function getAdminHtml(): string {
               <div>
                 <div style="font-weight:600; font-size:13px; margin-bottom:6px;">Q\${idx + 1}. \${q.question_text}</div>
                 <div style="margin-bottom:4px;">\${optsHtml}</div>
-                \${q.explanation ? \`<div style="font-size:11px; color:#94a3b8; font-style:italic;">💡 \${q.explanation}</div>\` : ''}
+                \${q.explanation ? \`<div style="font-size:11px; color:var(--text-muted); font-style:italic;">💡 \${q.explanation}</div>\` : ''}
               </div>
               <div style="display:flex; gap:6px;">
                 <button class="btn btn-secondary" style="padding:4px 8px; font-size:11px;" onclick="openEditQuestionModal('\${q.id}')">✏️ Edit</button>
@@ -2434,6 +2654,35 @@ export function getAdminHtml(): string {
       container.appendChild(el);
       setTimeout(() => el.remove(), 4000);
     }
+
+    // THEME MANAGEMENT (DARK / LIGHT / WHITE)
+    function initTheme() {
+      var current = document.documentElement.getAttribute('data-theme') || 'dark';
+      updateThemeUi(current);
+    }
+
+    function toggleTheme() {
+      var current = document.documentElement.getAttribute('data-theme') || 'dark';
+      var next = current === 'dark' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', next);
+      try {
+        localStorage.setItem('examplayer_admin_theme', next);
+      } catch (e) {}
+      updateThemeUi(next);
+      showToast(next === 'light' ? 'Switched to Light (White) Theme ☀️' : 'Switched to Dark Theme 🌙', 'success');
+    }
+
+    function updateThemeUi(theme) {
+      var isLight = theme === 'light';
+      document.querySelectorAll('.theme-switch-icon').forEach(function(el) {
+        el.innerText = isLight ? '🌙' : '☀️';
+      });
+      document.querySelectorAll('.theme-switch-label').forEach(function(el) {
+        el.innerText = isLight ? 'Dark Theme' : 'Light Theme';
+      });
+    }
+
+    setTimeout(initTheme, 50);
   </script>
 </body>
 </html>
