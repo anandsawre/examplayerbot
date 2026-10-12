@@ -620,21 +620,72 @@ export function getAdminHtml(): string {
 </head>
 <body>
 
-  <!-- LOGIN SCREEN -->
+  <!-- DUAL-MODE LOGIN SCREEN -->
   <div id="login-overlay">
     <div class="login-card">
       <div class="login-icon">🏛️</div>
       <h2>Examplayer Admin OS</h2>
-      <p>Enter Master Secret Key or Telegram Admin ID to manage operations.</p>
-      <form id="login-form">
-        <div class="form-group" style="text-align: left;">
-          <label class="form-label">Master Key / Admin ID</label>
-          <input type="password" id="login-key" class="form-control" placeholder="Enter key (e.g. 747573651)" required autofocus>
-        </div>
-        <button type="submit" class="btn btn-primary" style="width: 100%; justify-content: center; padding: 12px;">
-          Authenticate & Unlock Console ⚡
+      <p style="margin-bottom: 18px;">Secure Authentication for Platform Administrators</p>
+
+      <!-- Auth Method Switcher Tabs -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; background: rgba(0,0,0,0.3); padding: 4px; border-radius: var(--radius-sm); margin-bottom: 22px;">
+        <button type="button" id="auth-tab-otp" class="btn btn-secondary" style="justify-content: center; font-size: 12px; background: var(--primary); color: #fff;" onclick="switchAuthMode('otp')">
+          📲 Telegram OTP
         </button>
-      </form>
+        <button type="button" id="auth-tab-pass" class="btn btn-secondary" style="justify-content: center; font-size: 12px;" onclick="switchAuthMode('password')">
+          🔑 Master Password
+        </button>
+      </div>
+
+      <!-- MODE 1: TELEGRAM OTP LOGIN -->
+      <div id="auth-mode-otp">
+        <!-- Step 1: Request OTP -->
+        <form id="otp-request-form" style="text-align: left;">
+          <div class="form-group">
+            <label class="form-label">Telegram Admin User ID</label>
+            <input type="number" id="otp-user-id" class="form-control" placeholder="Enter your ID (e.g. 747573651)" required autofocus>
+            <small style="color: var(--text-dark); font-size: 11px;">Bot will send a 6-digit OTP directly to your Telegram chat.</small>
+          </div>
+          <button type="submit" id="btn-request-otp" class="btn btn-primary" style="width: 100%; justify-content: center; padding: 12px;">
+            Send Security OTP 📩
+          </button>
+        </form>
+
+        <!-- Step 2: Verify OTP (Hidden by default) -->
+        <form id="otp-verify-form" style="display: none; text-align: left;">
+          <div style="background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: var(--radius-sm); padding: 10px 14px; margin-bottom: 16px; font-size: 12px; color: #34d399;">
+            📲 <strong>OTP Dispatched!</strong> Check your Telegram private messages for the 6-digit security code.
+          </div>
+          <div class="form-group">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <label class="form-label" style="margin-bottom:0;">Enter 6-Digit Code</label>
+              <span id="otp-timer" style="font-size: 11px; color: #fbbf24; font-family: monospace;">⏱️ 05:00</span>
+            </div>
+            <input type="text" id="otp-code-input" class="form-control" placeholder="123456" maxlength="6" style="letter-spacing: 6px; font-size: 18px; text-align: center; font-weight: 700; font-family: 'JetBrains Mono', monospace;" required>
+          </div>
+          <button type="submit" id="btn-verify-otp" class="btn btn-emerald" style="width: 100%; justify-content: center; padding: 12px; margin-bottom: 12px;">
+            Verify & Unlock Console ⚡
+          </button>
+          <div style="text-align: center;">
+            <a href="javascript:void(0)" onclick="resetOtpStep()" style="font-size: 12px; color: var(--text-muted); text-decoration: none;">← Change User ID or Resend</a>
+          </div>
+        </form>
+      </div>
+
+      <!-- MODE 2: MASTER PASSWORD LOGIN -->
+      <div id="auth-mode-password" style="display: none; text-align: left;">
+        <form id="password-login-form">
+          <div class="form-group">
+            <label class="form-label">Master Administrator Password</label>
+            <input type="password" id="login-password-input" class="form-control" placeholder="Enter master password" required>
+            <small style="color: var(--text-dark); font-size: 11px;">Configured in ADMIN_PASSWORD environment variable.</small>
+          </div>
+          <button type="submit" class="btn btn-primary" style="width: 100%; justify-content: center; padding: 12px;">
+            Authenticate with Password 🔑
+          </button>
+        </form>
+      </div>
+
     </div>
   </div>
 
@@ -668,6 +719,10 @@ export function getAdminHtml(): string {
       <li class="nav-item" onclick="switchTab('admins')">
         <span class="nav-icon">🛡️</span>
         <span>Admins Hub</span>
+      </li>
+      <li class="nav-item" onclick="switchTab('groups')">
+        <span class="nav-icon">🏛️</span>
+        <span>Community Groups</span>
       </li>
       <li class="nav-item" onclick="switchTab('broadcast')">
         <span class="nav-icon">📢</span>
@@ -733,6 +788,12 @@ export function getAdminHtml(): string {
           <div class="metric-value" id="stat-attempts">0</div>
           <div class="metric-sub">🎯 Attempts evaluated</div>
           <div class="metric-icon-bg">🎯</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Community Groups</div>
+          <div class="metric-value" id="stat-groups" style="color: #a78bfa;">0</div>
+          <div class="metric-sub">🏛️ Authorized groups</div>
+          <div class="metric-icon-bg">🏛️</div>
         </div>
       </div>
 
@@ -828,12 +889,20 @@ export function getAdminHtml(): string {
     <!-- TAB 4: STUDENTS DIRECTORY -->
     <div id="tab-users" class="tab-content" style="display: none;">
       <div class="card">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 12px;">
           <div>
             <h3 style="font-family: 'Outfit'; font-size: 19px;">Candidate Directory & Pass Management</h3>
-            <p style="font-size: 13px; color: var(--text-muted);">Inspect candidate performance and grant/revoke Premium Scholar Passes.</p>
+            <p style="font-size: 13px; color: var(--text-muted);">Inspect candidate performance and grant/revoke Premium Scholar Passes (Notifies candidate via Telegram).</p>
           </div>
-          <input type="text" id="users-search" class="form-control" placeholder="Search candidate name or username..." style="max-width: 300px;" oninput="debounceUserSearch()">
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <input type="text" id="users-search" class="form-control" placeholder="Search by name, @username, or Telegram ID..." style="max-width: 300px;" oninput="debounceUserSearch()">
+            <button class="btn btn-emerald" style="font-size: 12px; padding: 7px 12px; white-space: nowrap;" onclick="quickUnlockPrompt()">⚡ Quick Pass by ID</button>
+          </div>
+        </div>
+        <div style="display: flex; gap: 8px; margin-bottom: 14px;">
+          <button class="btn btn-secondary user-filter-btn active" style="font-size:12px; padding:6px 12px;" onclick="setUserFilter('all')">👥 All Candidates</button>
+          <button class="btn btn-secondary user-filter-btn" style="font-size:12px; padding:6px 12px;" onclick="setUserFilter('premium')">👑 Scholar Pass Only</button>
+          <button class="btn btn-secondary user-filter-btn" style="font-size:12px; padding:6px 12px;" onclick="setUserFilter('free')">🟢 Open Tier Only</button>
         </div>
         <div class="table-container">
           <table>
@@ -885,27 +954,82 @@ export function getAdminHtml(): string {
       </div>
     </div>
 
-    <!-- TAB 6: BROADCAST STUDIO -->
+    <!-- TAB 6: COMMUNITY GROUPS DESK -->
+    <div id="tab-groups" class="tab-content" style="display: none;">
+      <div class="card" style="margin-bottom: 24px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; flex-wrap: wrap; gap: 12px;">
+          <div>
+            <h3 style="font-family: 'Outfit'; font-size: 19px;">Community Groups Authorization Desk</h3>
+            <p style="font-size: 13px; color: var(--text-muted);">Authorize Telegram discussion groups for /groupquiz live battles or revoke permissions.</p>
+          </div>
+          <button class="btn btn-primary" onclick="openAddGroupModal()">🏛️ Authorize Community Group</button>
+        </div>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Group Title</th>
+                <th>Telegram Group ID</th>
+                <th>Authorization Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="groups-table-body">
+              <tr><td colspan="4" style="text-align:center;">Loading authorized groups...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 7: BROADCAST STUDIO -->
     <div id="tab-broadcast" class="tab-content" style="display: none;">
       <div class="card">
         <h3 style="font-family: 'Outfit'; font-size: 19px; margin-bottom: 6px;">Announcement Broadcast Studio</h3>
-        <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 20px;">Dispatch instant announcements and alerts to all registered candidates via Telegram Bot.</p>
+        <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 20px;">Dispatch instant announcements and alerts to students, groups or all channels via Telegram Bot.</p>
         
         <form id="broadcast-form">
+          <div class="form-group" style="margin-bottom: 18px;">
+            <label class="form-label">Audience Distribution Reach</label>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px;">
+              <label style="display:flex; align-items:center; gap:10px; background:rgba(255,255,255,0.04); border:1px solid var(--border-subtle); padding:12px 14px; border-radius:var(--radius-sm); cursor:pointer;">
+                <input type="radio" name="broadcast-target" value="users" checked style="accent-color:var(--primary);">
+                <div>
+                  <div style="font-weight:600; font-size:13px;">👤 Candidates Only</div>
+                  <div style="font-size:11px; color:var(--text-muted);">Registered individual students</div>
+                </div>
+              </label>
+              <label style="display:flex; align-items:center; gap:10px; background:rgba(255,255,255,0.04); border:1px solid var(--border-subtle); padding:12px 14px; border-radius:var(--radius-sm); cursor:pointer;">
+                <input type="radio" name="broadcast-target" value="groups" style="accent-color:var(--primary);">
+                <div>
+                  <div style="font-weight:600; font-size:13px;">🏛️ Community Groups Only</div>
+                  <div style="font-size:11px; color:var(--text-muted);">Authorized discussion groups</div>
+                </div>
+              </label>
+              <label style="display:flex; align-items:center; gap:10px; background:rgba(255,255,255,0.04); border:1px solid var(--border-subtle); padding:12px 14px; border-radius:var(--radius-sm); cursor:pointer;">
+                <input type="radio" name="broadcast-target" value="all" style="accent-color:var(--primary);">
+                <div>
+                  <div style="font-weight:600; font-size:13px;">🌐 Global Blast (All Channels)</div>
+                  <div style="font-size:11px; color:var(--text-muted);">Both Candidates & Groups</div>
+                </div>
+              </label>
+            </div>
+          </div>
+
           <div class="form-group">
             <label class="form-label">Announcement Content (Supports Markdown: *bold*, _italics_, &#96;code&#96;)</label>
             <textarea id="broadcast-text" class="form-control" style="min-height: 140px;" placeholder="📢 Important Examination Announcement:&#10;&#10;New All-India UPSC Mock Test Paper 4 is now live! Attempt now via /quizzes." required></textarea>
           </div>
           <div style="background: rgba(99, 102, 241, 0.08); border: 1px solid rgba(99, 102, 241, 0.2); border-radius: var(--radius-sm); padding: 14px; margin-bottom: 18px;">
             <div style="font-weight: 600; font-size: 13px; color: #a5b4fc; margin-bottom: 4px;">⚠️ High-Priority Dispatch Notice:</div>
-            <div style="font-size: 12px; color: var(--text-muted);">This message will be dispatched in asynchronous batches to all candidates in the database. Rate limits are handled automatically.</div>
+            <div style="font-size: 12px; color: var(--text-muted);">This message will be dispatched in asynchronous batches according to the chosen distribution reach. Rate limits are handled automatically.</div>
           </div>
           <button type="submit" class="btn btn-primary" id="btn-broadcast">🚀 Dispatch Announcement Now</button>
         </form>
       </div>
     </div>
 
-    <!-- TAB 7: SETTINGS -->
+    <!-- TAB 8: SETTINGS -->
     <div id="tab-settings" class="tab-content" style="display: none;">
       <div class="card" style="max-width: 650px;">
         <h3 style="font-family: 'Outfit'; font-size: 19px; margin-bottom: 6px;">Global Platform Settings</h3>
@@ -922,7 +1046,10 @@ export function getAdminHtml(): string {
             <input type="number" id="setting-price" class="form-control" placeholder="99" required>
           </div>
           <div class="form-group">
-            <label class="form-label">Mandatory Telegram Announcement Channel</label>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+              <label class="form-label" style="margin-bottom:0;">Mandatory Telegram Announcement Channel</label>
+              <button type="button" class="btn btn-secondary" style="padding:2px 8px; font-size:11px;" onclick="clearChannelField()">Clear Channel</button>
+            </div>
             <input type="text" id="setting-channel" class="form-control" placeholder="e.g. @ExamplayerAnnouncements (Leave blank to disable)">
             <small style="color:var(--text-dark); font-size:11px;">If configured, students must join this channel before tests unlock.</small>
           </div>
@@ -1128,6 +1255,121 @@ export function getAdminHtml(): string {
     </div>
   </div>
 
+  <!-- MODAL: AUTHORIZE COMMUNITY GROUP -->
+  <div id="modal-add-group" class="modal-backdrop">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>Authorize Community Group</h3>
+        <button class="modal-close" onclick="closeModal('modal-add-group')">✕</button>
+      </div>
+      <form id="add-group-form">
+        <div class="form-group">
+          <label class="form-label">Telegram Group ID (Numeric)</label>
+          <input type="text" id="ag-id" class="form-control" placeholder="e.g. -1001987654321" required>
+          <small style="color:var(--text-dark); font-size:11px;">Obtain via /auth or forwarding group message to @userinfobot.</small>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Community / Group Title</label>
+          <input type="text" id="ag-title" class="form-control" placeholder="e.g. UPSC Prelims Discussion Group" required>
+        </div>
+        <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center;">Authorize Group 🏛️</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: EDIT EXAMINATION SCHEME -->
+  <div id="modal-edit-quiz" class="modal-backdrop">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>Edit Examination Scheme</h3>
+        <button class="modal-close" onclick="closeModal('modal-edit-quiz')">✕</button>
+      </div>
+      <form id="edit-quiz-form">
+        <input type="hidden" id="eq-id">
+        <div class="form-group">
+          <label class="form-label">Paper Title</label>
+          <input type="text" id="eq-title" class="form-control" required>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+          <div class="form-group">
+            <label class="form-label">Subject Category</label>
+            <input type="text" id="eq-category" class="form-control" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Folder Location</label>
+            <select id="eq-folder" class="form-control">
+              <option value="">📁 Directory Root (No folder)</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Description / Syllabus</label>
+          <textarea id="eq-desc" class="form-control"></textarea>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px;">
+          <div class="form-group">
+            <label class="form-label">Marks Per Question</label>
+            <input type="number" step="0.5" id="eq-marks" class="form-control" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Negative Penalty</label>
+            <input type="number" step="0.1" id="eq-neg" class="form-control" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Time Per Question (sec)</label>
+            <input type="number" id="eq-time" class="form-control" required>
+          </div>
+        </div>
+        <div class="form-group" style="display:flex; align-items:center; gap:10px; margin-top:6px;">
+          <input type="checkbox" id="eq-premium" style="width:18px; height:18px; accent-color: var(--primary);">
+          <label for="eq-premium" style="font-size:13px; font-weight:500; cursor:pointer;">Require Premium Scholar Pass (Locked)</label>
+        </div>
+        <button type="submit" class="btn btn-primary" style="width: 100%; justify-content:center; margin-top:14px;">
+          Save Scheme Changes 💾
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: EDIT QUESTION -->
+  <div id="modal-edit-question" class="modal-backdrop">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>Edit Question</h3>
+        <button class="modal-close" onclick="closeModal('modal-edit-question')">✕</button>
+      </div>
+      <form id="edit-question-form">
+        <input type="hidden" id="eq-q-id">
+        <div class="form-group">
+          <label class="form-label">Question Text</label>
+          <input type="text" id="eq-q-text" class="form-control" required>
+        </div>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-bottom:12px;">
+          <input type="text" id="eq-q-opt-0" class="form-control" placeholder="Option A" required>
+          <input type="text" id="eq-q-opt-1" class="form-control" placeholder="Option B" required>
+          <input type="text" id="eq-q-opt-2" class="form-control" placeholder="Option C" required>
+          <input type="text" id="eq-q-opt-3" class="form-control" placeholder="Option D" required>
+        </div>
+        <div style="display:grid; grid-template-columns: 1fr 2fr; gap:12px; margin-bottom:12px;">
+          <div>
+            <label class="form-label">Correct Option</label>
+            <select id="eq-q-correct" class="form-control">
+              <option value="0">Option A</option>
+              <option value="1">Option B</option>
+              <option value="2">Option C</option>
+              <option value="3">Option D</option>
+            </select>
+          </div>
+          <div>
+            <label class="form-label">Detailed Explanation</label>
+            <input type="text" id="eq-q-exp" class="form-control" placeholder="Explanation...">
+          </div>
+        </div>
+        <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center;">Save Question Changes 💾</button>
+      </form>
+    </div>
+  </div>
+
   <!-- TOAST ALERTS CONTAINER -->
   <div id="toast-container"></div>
 
@@ -1160,15 +1402,128 @@ export function getAdminHtml(): string {
       }
     }
 
-    // Login Handler
-    document.getElementById('login-form').addEventListener('submit', async (e) => {
+    let currentOtpUserId = '';
+    let otpCountdownInterval = null;
+
+    function switchAuthMode(mode) {
+      if (mode === 'otp') {
+        document.getElementById('auth-mode-otp').style.display = 'block';
+        document.getElementById('auth-mode-password').style.display = 'none';
+        document.getElementById('auth-tab-otp').style.background = 'var(--primary)';
+        document.getElementById('auth-tab-otp').style.color = '#fff';
+        document.getElementById('auth-tab-pass').style.background = 'transparent';
+        document.getElementById('auth-tab-pass').style.color = 'var(--text-main)';
+      } else {
+        document.getElementById('auth-mode-otp').style.display = 'none';
+        document.getElementById('auth-mode-password').style.display = 'block';
+        document.getElementById('auth-tab-pass').style.background = 'var(--primary)';
+        document.getElementById('auth-tab-pass').style.color = '#fff';
+        document.getElementById('auth-tab-otp').style.background = 'transparent';
+        document.getElementById('auth-tab-otp').style.color = 'var(--text-main)';
+      }
+    }
+
+    // Step 1: Request OTP
+    document.getElementById('otp-request-form')?.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const key = document.getElementById('login-key').value;
+      const userId = document.getElementById('otp-user-id').value.trim();
+      const btn = document.getElementById('btn-request-otp');
+      btn.innerText = 'Dispatching Code... ⏳';
+      btn.disabled = true;
+
+      try {
+        const res = await fetch('/api/admin/auth/request-otp', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          currentOtpUserId = userId;
+          document.getElementById('otp-request-form').style.display = 'none';
+          document.getElementById('otp-verify-form').style.display = 'block';
+          document.getElementById('otp-code-input').value = '';
+          document.getElementById('otp-code-input').focus();
+          startOtpCountdown(300); // 5 mins
+          showToast('Security code sent to your Telegram! 📲', 'success');
+        } else {
+          showToast(data.error || 'Failed to dispatch code.', 'error');
+        }
+      } catch {
+        showToast('Network error while requesting code.', 'error');
+      } finally {
+        btn.innerText = 'Send Security OTP 📩';
+        btn.disabled = false;
+      }
+    });
+
+    // Step 2: Verify OTP
+    document.getElementById('otp-verify-form')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const otp = document.getElementById('otp-code-input').value.trim();
+      const btn = document.getElementById('btn-verify-otp');
+      btn.innerText = 'Verifying... ⏳';
+      btn.disabled = true;
+
       try {
         const res = await fetch('/api/admin/auth/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ key }),
+          body: JSON.stringify({ type: 'otp', userId: currentOtpUserId, otp }),
+        });
+        const data = await res.json();
+        if (data.success && data.token) {
+          authToken = data.token;
+          localStorage.setItem('examplayer_admin_token', authToken);
+          document.getElementById('login-overlay').style.display = 'none';
+          clearInterval(otpCountdownInterval);
+          showToast('Authenticated via Telegram 2FA! 🚀', 'success');
+          loadDashboard();
+        } else {
+          showToast(data.error || 'Invalid OTP code.', 'error');
+        }
+      } catch {
+        showToast('Verification network error.', 'error');
+      } finally {
+        btn.innerText = 'Verify & Unlock Console ⚡';
+        btn.disabled = false;
+      }
+    });
+
+    function resetOtpStep() {
+      clearInterval(otpCountdownInterval);
+      document.getElementById('otp-request-form').style.display = 'block';
+      document.getElementById('otp-verify-form').style.display = 'none';
+      document.getElementById('otp-code-input').value = '';
+    }
+
+    function startOtpCountdown(seconds) {
+      clearInterval(otpCountdownInterval);
+      let remaining = seconds;
+      const timerEl = document.getElementById('otp-timer');
+      otpCountdownInterval = setInterval(() => {
+        remaining--;
+        if (remaining <= 0) {
+          clearInterval(otpCountdownInterval);
+          timerEl.innerText = '⚠️ Expired';
+          timerEl.style.color = 'var(--rose)';
+          return;
+        }
+        const m = String(Math.floor(remaining / 60)).padStart(2, '0');
+        const s = String(remaining % 60).padStart(2, '0');
+        timerEl.innerText = '⏱️ ' + m + ':' + s;
+      }, 1000);
+    }
+
+    // Mode 2: Password Login
+    document.getElementById('password-login-form')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const password = document.getElementById('login-password-input').value;
+      try {
+        const res = await fetch('/api/admin/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type: 'password', password }),
         });
         const data = await res.json();
         if (data.success && data.token) {
@@ -1178,9 +1533,9 @@ export function getAdminHtml(): string {
           showToast('Welcome back, Administrator!', 'success');
           loadDashboard();
         } else {
-          showToast(data.error || 'Authentication rejected.', 'error');
+          showToast(data.error || 'Invalid password.', 'error');
         }
-      } catch (err) {
+      } catch {
         showToast('Login network error.', 'error');
       }
     });
@@ -1218,7 +1573,7 @@ export function getAdminHtml(): string {
       if (target) target.style.display = 'block';
 
       // Update Nav active
-      const idxMap = { dashboard: 0, folders: 1, quizzes: 2, users: 3, admins: 4, broadcast: 5, settings: 6 };
+      const idxMap = { dashboard: 0, folders: 1, quizzes: 2, users: 3, admins: 4, groups: 5, broadcast: 6, settings: 7 };
       const navItems = document.querySelectorAll('.nav-item');
       if (navItems[idxMap[tabId]]) navItems[idxMap[tabId]].classList.add('active');
 
@@ -1229,7 +1584,8 @@ export function getAdminHtml(): string {
         quizzes: ['Examinations Catalog & Papers', 'Create tests, inspect formulas, build questions or manage syllabus.'],
         users: ['Candidate Directory & Access Pass', 'Review registered students and grant Premium Scholar Passes.'],
         admins: ['Platform Administrators Hub', 'Manage primary and appointed bot administrators.'],
-        broadcast: ['Announcement Broadcast Studio', 'Dispatch mass announcements and test notifications to students.'],
+        groups: ['Community Groups Authorization Desk', 'Authorize Telegram groups to host live quiz tournaments or revoke permissions.'],
+        broadcast: ['Announcement Broadcast Studio', 'Dispatch mass announcements and test notifications to students or groups.'],
         settings: ['Global Platform Settings', 'Configure UPI payment VPA, tariff prices, and mandatory channels.']
       };
       if (titles[tabId]) {
@@ -1243,6 +1599,7 @@ export function getAdminHtml(): string {
       if (tabId === 'quizzes') loadQuizzes();
       if (tabId === 'users') loadUsers();
       if (tabId === 'admins') loadAdmins();
+      if (tabId === 'groups') loadGroups();
       if (tabId === 'settings') loadSettings();
     }
 
@@ -1257,10 +1614,13 @@ export function getAdminHtml(): string {
           document.getElementById('stat-quizzes').innerText = s.totalQuizzes.toLocaleString();
           document.getElementById('stat-questions').innerText = s.totalQuestions.toLocaleString();
           document.getElementById('stat-attempts').innerText = s.totalAttempts.toLocaleString();
+          const groupsEl = document.getElementById('stat-groups');
+          if (groupsEl) groupsEl.innerText = (s.authorizedGroups || 0).toLocaleString();
         }
 
         const quizRes = await apiRequest('/api/admin/quizzes');
         if (quizRes.success) {
+          globalQuizzes = quizRes.quizzes;
           const tbody = document.getElementById('dashboard-recent-quizzes');
           tbody.innerHTML = '';
           const recents = quizRes.quizzes.slice(0, 5);
@@ -1277,7 +1637,8 @@ export function getAdminHtml(): string {
               <td>\${q.total_questions} Qs</td>
               <td><span class="badge \${q.is_premium ? 'badge-premium' : 'badge-free'}">\${q.is_premium ? '🔒 PREMIUM' : '🟢 FREE'}</span></td>
               <td>
-                <button class="btn btn-secondary" style="padding:4px 10px; font-size:11px;" onclick="openQuestionsDrawer('\${q.id}', '\${q.title.replace(/'/g, "\\\\'")}')">Questions</button>
+                <button class="btn btn-secondary" style="padding:4px 8px; font-size:11px;" onclick="openQuestionsDrawer('\${q.id}', '\${q.title.replace(/'/g, "\\\\'")}')">Questions</button>
+                <button class="btn btn-secondary" style="padding:4px 8px; font-size:11px; margin-left:4px;" onclick="openEditQuizModal('\${q.id}')">✏️ Edit</button>
               </td>
             \`;
             tbody.appendChild(tr);
@@ -1311,6 +1672,7 @@ export function getAdminHtml(): string {
               <td>\${parentName}</td>
               <td>\${f.quizCount || 0} Tests</td>
               <td>
+                <button class="btn btn-secondary" style="padding:4px 8px; font-size:11px; margin-right:4px;" onclick="renameFolderPrompt('\${f.id}', '\${f.name.replace(/'/g, "\\\\'")}')">✏️ Rename</button>
                 <button class="btn btn-danger" style="padding:4px 8px; font-size:11px;" onclick="deleteFolderPrompt('\${f.id}', '\${f.name.replace(/'/g, "\\\\'")}')">Delete</button>
               </td>
             \`;
@@ -1323,7 +1685,12 @@ export function getAdminHtml(): string {
     }
 
     function populateFolderDropdowns(folders) {
-      const selects = [document.getElementById('cq-folder'), document.getElementById('import-folder'), document.getElementById('cf-parent')];
+      const selects = [
+        document.getElementById('cq-folder'),
+        document.getElementById('import-folder'),
+        document.getElementById('cf-parent'),
+        document.getElementById('eq-folder')
+      ];
       selects.forEach(sel => {
         if (!sel) return;
         const currentVal = sel.value;
@@ -1343,6 +1710,7 @@ export function getAdminHtml(): string {
       try {
         const res = await apiRequest('/api/admin/quizzes');
         if (res.success) {
+          globalQuizzes = res.quizzes;
           const tbody = document.getElementById('quizzes-table-body');
           tbody.innerHTML = '';
           if (res.quizzes.length === 0) {
@@ -1361,7 +1729,8 @@ export function getAdminHtml(): string {
               <td><span class="badge \${q.is_premium ? 'badge-premium' : 'badge-free'}">\${q.is_premium ? '🔒 PREMIUM' : '🟢 FREE'}</span></td>
               <td>
                 <button class="btn btn-secondary" style="padding:4px 8px; font-size:11px;" onclick="openQuestionsDrawer('\${q.id}', '\${q.title.replace(/'/g, "\\\\'")}')">Questions</button>
-                <button class="btn btn-danger" style="padding:4px 8px; font-size:11px;" onclick="deleteQuizPrompt('\${q.id}', '\${q.title.replace(/'/g, "\\\\'")}')">Delete</button>
+                <button class="btn btn-secondary" style="padding:4px 8px; font-size:11px; margin-left:4px;" onclick="openEditQuizModal('\${q.id}')">✏️ Edit</button>
+                <button class="btn btn-danger" style="padding:4px 8px; font-size:11px; margin-left:4px;" onclick="deleteQuizPrompt('\${q.id}', '\${q.title.replace(/'/g, "\\\\'")}')">Delete</button>
               </td>
             \`;
             tbody.appendChild(tr);
@@ -1372,17 +1741,81 @@ export function getAdminHtml(): string {
       }
     }
 
+    function openEditQuizModal(quizId) {
+      const q = globalQuizzes.find(item => item.id === quizId);
+      if (!q) return;
+      document.getElementById('eq-id').value = q.id;
+      document.getElementById('eq-title').value = q.title || '';
+      document.getElementById('eq-category').value = q.category || 'General';
+      document.getElementById('eq-folder').value = q.folder_id || '';
+      document.getElementById('eq-desc').value = q.description || '';
+      document.getElementById('eq-marks').value = q.marks_per_question ?? 2.0;
+      document.getElementById('eq-neg').value = q.negative_marks ?? 0.5;
+      document.getElementById('eq-time').value = q.time_limit_seconds ?? 30;
+      document.getElementById('eq-premium').checked = Boolean(q.is_premium);
+      document.getElementById('modal-edit-quiz').classList.add('open');
+    }
+
+    document.getElementById('edit-quiz-form')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const quizId = document.getElementById('eq-id').value;
+      if (!quizId) return;
+      const body = {
+        title: document.getElementById('eq-title').value,
+        category: document.getElementById('eq-category').value,
+        folder_id: document.getElementById('eq-folder').value || null,
+        description: document.getElementById('eq-desc').value,
+        marks_per_question: Number(document.getElementById('eq-marks').value),
+        negative_marks: Number(document.getElementById('eq-neg').value),
+        time_limit_seconds: Number(document.getElementById('eq-time').value),
+        is_premium: document.getElementById('eq-premium').checked,
+      };
+      try {
+        const res = await apiRequest(\`/api/admin/quizzes/\${quizId}\`, 'PUT', body);
+        if (res.success) {
+          showToast('Examination scheme updated! 💾', 'success');
+          closeModal('modal-edit-quiz');
+          loadQuizzes();
+          loadDashboard();
+        } else {
+          showToast(res.error || 'Failed to update quiz scheme.', 'error');
+        }
+      } catch {
+        showToast('Error updating quiz.', 'error');
+      }
+    });
+
     // 4. USERS LOADER
     let searchTimeout;
+    let currentUserTier = 'all';
+
     function debounceUserSearch() {
       clearTimeout(searchTimeout);
       searchTimeout = setTimeout(loadUsers, 300);
     }
 
+    function setUserFilter(tier) {
+      currentUserTier = tier;
+      document.querySelectorAll('.user-filter-btn').forEach(btn => btn.classList.remove('active'));
+      const activeBtn = Array.from(document.querySelectorAll('.user-filter-btn')).find(b => {
+        if (tier === 'all') return b.innerText.includes('All');
+        if (tier === 'premium') return b.innerText.includes('Scholar');
+        if (tier === 'free') return b.innerText.includes('Open');
+        return false;
+      });
+      if (activeBtn) activeBtn.classList.add('active');
+      loadUsers();
+    }
+
     async function loadUsers() {
-      const q = document.getElementById('users-search')?.value || '';
+      const q = (document.getElementById('users-search')?.value || '').trim();
       try {
-        const res = await apiRequest('/api/admin/users' + (q ? '?q=' + encodeURIComponent(q) : ''));
+        const params = new URLSearchParams();
+        if (q) params.set('q', q);
+        if (currentUserTier !== 'all') params.set('tier', currentUserTier);
+        const queryStr = params.toString() ? '?' + params.toString() : '';
+
+        const res = await apiRequest('/api/admin/users' + queryStr);
         if (res.success) {
           const tbody = document.getElementById('users-table-body');
           tbody.innerHTML = '';
@@ -1418,12 +1851,24 @@ export function getAdminHtml(): string {
       try {
         const res = await apiRequest(\`/api/admin/users/\${userId}/toggle-premium\`, 'POST', { is_premium: shouldBePremium });
         if (res.success) {
-          showToast(shouldBePremium ? 'Scholar Pass granted!' : 'Scholar Pass revoked.', 'success');
+          showToast(shouldBePremium ? 'Scholar Pass granted & Telegram celebratory message dispatched! 📲' : 'Scholar Pass revoked.', 'success');
           loadUsers();
+          loadDashboard();
         }
       } catch {
         showToast('Failed to update status.', 'error');
       }
+    }
+
+    async function quickUnlockPrompt() {
+      const inputId = prompt('Enter candidate Telegram User ID to grant Scholar Pass (e.g. 5988607147):');
+      if (!inputId || !inputId.trim()) return;
+      const numId = parseInt(inputId.trim(), 10);
+      if (isNaN(numId)) {
+        showToast('Invalid numerical Telegram ID.', 'error');
+        return;
+      }
+      toggleUserPremium(numId, true);
     }
 
     // 5. ADMINS LOADER
@@ -1466,7 +1911,96 @@ export function getAdminHtml(): string {
       }
     }
 
-    // 6. SETTINGS LOADER
+    // 6. COMMUNITY GROUPS LOADER
+    async function loadGroups() {
+      try {
+        const res = await apiRequest('/api/admin/groups');
+        if (res.success) {
+          const tbody = document.getElementById('groups-table-body');
+          tbody.innerHTML = '';
+          if (res.groups.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:var(--text-dark);">No community groups authorized yet. Click "Authorize Community Group" to add one.</td></tr>';
+            return;
+          }
+          res.groups.forEach(g => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = \`
+              <td><strong>🏛️ \${g.group_title || 'Community Group'}</strong></td>
+              <td><code>\${g.group_id}</code></td>
+              <td>
+                <span class="badge \${g.is_active ? 'badge-free' : 'badge-premium'}">
+                  \${g.is_active ? '🟢 ACTIVE' : '🔴 REVOKED'}
+                </span>
+              </td>
+              <td>
+                <button class="btn \${g.is_active ? 'btn-danger' : 'btn-emerald'}" style="padding:4px 8px; font-size:11px;" onclick="toggleGroupStatus(\${g.group_id}, \${!g.is_active}, '\${(g.group_title || 'Group').replace(/'/g, "\\\\'")}')">
+                  \${g.is_active ? 'Revoke Authorization' : 'Activate Group'}
+                </button>
+                <button class="btn btn-secondary" style="padding:4px 8px; font-size:11px; margin-left:4px;" onclick="deleteGroupRecord(\${g.group_id})">
+                  Delete
+                </button>
+              </td>
+            \`;
+            tbody.appendChild(tr);
+          });
+        }
+      } catch (err) {
+        showToast('Failed to load groups.', 'error');
+      }
+    }
+
+    async function toggleGroupStatus(groupId, isActive, groupTitle) {
+      try {
+        const res = await apiRequest(\`/api/admin/groups/\${groupId}/toggle\`, 'POST', { isActive, groupTitle });
+        if (res.success) {
+          showToast(isActive ? 'Group authorization approved! 🏛️' : 'Group authorization revoked.', 'success');
+          loadGroups();
+          loadDashboard();
+        }
+      } catch {
+        showToast('Failed to toggle group status.', 'error');
+      }
+    }
+
+    async function deleteGroupRecord(groupId) {
+      if (!confirm(\`Permanently remove group \${groupId} from records?\`)) return;
+      try {
+        const res = await apiRequest(\`/api/admin/groups/\${groupId}\`, 'DELETE');
+        if (res.success) {
+          showToast('Group record deleted.', 'success');
+          loadGroups();
+          loadDashboard();
+        }
+      } catch {
+        showToast('Failed to delete group record.', 'error');
+      }
+    }
+
+    document.getElementById('add-group-form')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const groupId = document.getElementById('ag-id').value.trim();
+      const groupTitle = document.getElementById('ag-title').value.trim();
+      try {
+        const res = await apiRequest('/api/admin/groups', 'POST', { groupId, groupTitle });
+        if (res.success) {
+          showToast('Group authorized successfully! 🏛️', 'success');
+          closeModal('modal-add-group');
+          document.getElementById('add-group-form').reset();
+          loadGroups();
+          loadDashboard();
+        } else {
+          showToast(res.error || 'Failed to authorize group.', 'error');
+        }
+      } catch {
+        showToast('Error authorizing group.', 'error');
+      }
+    });
+
+    function openAddGroupModal() {
+      document.getElementById('modal-add-group').classList.add('open');
+    }
+
+    // 7. SETTINGS LOADER
     async function loadSettings() {
       try {
         const res = await apiRequest('/api/admin/settings');
@@ -1478,6 +2012,11 @@ export function getAdminHtml(): string {
       } catch (err) {
         showToast('Failed to load settings.', 'error');
       }
+    }
+
+    function clearChannelField() {
+      document.getElementById('setting-channel').value = '';
+      showToast('Channel cleared. Click "Save Configuration" to apply.', 'success');
     }
 
     document.getElementById('settings-form').addEventListener('submit', async (e) => {
@@ -1495,19 +2034,21 @@ export function getAdminHtml(): string {
       }
     });
 
-    // 7. BROADCAST HANDLER
-    document.getElementById('broadcast-form').addEventListener('submit', async (e) => {
+    // 8. BROADCAST HANDLER (MULTI-TARGET: CANDIDATES, GROUPS, ALL)
+    document.getElementById('broadcast-form')?.addEventListener('submit', async (e) => {
       e.preventDefault();
       const message = document.getElementById('broadcast-text').value;
-      if (!confirm('Broadcast this announcement to all candidates in database?')) return;
+      const target = document.querySelector('input[name="broadcast-target"]:checked')?.value || 'users';
+      const targetLabel = target === 'users' ? 'all registered candidates' : (target === 'groups' ? 'all authorized community groups' : 'GLOBAL BLAST (Candidates + Groups)');
+      if (!confirm(\`Confirm dispatch of announcement to \${targetLabel}?\`)) return;
       const btn = document.getElementById('btn-broadcast');
       btn.innerText = 'Dispatching Announcement... ⏳';
       btn.disabled = true;
 
       try {
-        const res = await apiRequest('/api/admin/broadcast', 'POST', { message });
+        const res = await apiRequest('/api/admin/broadcast', 'POST', { message, target });
         if (res.success) {
-          showToast(\`Dispatched to \${res.delivered} candidates (\${res.failed} skipped)!\`, 'success');
+          showToast(\`Dispatched to \${res.delivered} recipients (\${res.failed} skipped)! 🚀\`, 'success');
           document.getElementById('broadcast-text').value = '';
         } else {
           showToast(res.error || 'Broadcast failed.', 'error');
@@ -1678,12 +2219,15 @@ export function getAdminHtml(): string {
       loadQuestionsList(quizId);
     }
 
+    let currentQuizQuestions = [];
+
     async function loadQuestionsList(quizId) {
       const container = document.getElementById('questions-list-container');
       container.innerHTML = '<div style="text-align:center; color:var(--text-dark);">Loading questions...</div>';
       try {
         const res = await apiRequest(\`/api/admin/quizzes/\${quizId}/questions\`);
         if (res.success) {
+          currentQuizQuestions = res.questions;
           document.getElementById('mq-count').innerText = res.questions.length;
           container.innerHTML = '';
           if (res.questions.length === 0) {
@@ -1712,7 +2256,10 @@ export function getAdminHtml(): string {
                 <div style="margin-bottom:4px;">\${optsHtml}</div>
                 \${q.explanation ? \`<div style="font-size:11px; color:#94a3b8; font-style:italic;">💡 \${q.explanation}</div>\` : ''}
               </div>
-              <button class="btn btn-danger" style="padding:4px 8px; font-size:11px;" onclick="deleteQuestion('\${q.id}')">Delete</button>
+              <div style="display:flex; gap:6px;">
+                <button class="btn btn-secondary" style="padding:4px 8px; font-size:11px;" onclick="openEditQuestionModal('\${q.id}')">✏️ Edit</button>
+                <button class="btn btn-danger" style="padding:4px 8px; font-size:11px;" onclick="deleteQuestion('\${q.id}')">Delete</button>
+              </div>
             \`;
             container.appendChild(card);
           });
@@ -1721,6 +2268,49 @@ export function getAdminHtml(): string {
         container.innerHTML = '<div style="color:var(--rose);">Failed to load questions.</div>';
       }
     }
+
+    function openEditQuestionModal(questionId) {
+      const q = currentQuizQuestions.find(item => item.id === questionId);
+      if (!q) return;
+      document.getElementById('eq-q-id').value = q.id;
+      document.getElementById('eq-q-text').value = q.question_text || '';
+      document.getElementById('eq-q-opt-0').value = q.options[0] || '';
+      document.getElementById('eq-q-opt-1').value = q.options[1] || '';
+      document.getElementById('eq-q-opt-2').value = q.options[2] || '';
+      document.getElementById('eq-q-opt-3').value = q.options[3] || '';
+      document.getElementById('eq-q-correct').value = q.correct_option_index ?? 0;
+      document.getElementById('eq-q-exp').value = q.explanation || '';
+      document.getElementById('modal-edit-question').classList.add('open');
+    }
+
+    document.getElementById('edit-question-form')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const questionId = document.getElementById('eq-q-id').value;
+      if (!questionId) return;
+      const body = {
+        question_text: document.getElementById('eq-q-text').value,
+        options: [
+          document.getElementById('eq-q-opt-0').value,
+          document.getElementById('eq-q-opt-1').value,
+          document.getElementById('eq-q-opt-2').value,
+          document.getElementById('eq-q-opt-3').value,
+        ],
+        correct_option_index: Number(document.getElementById('eq-q-correct').value),
+        explanation: document.getElementById('eq-q-exp').value,
+      };
+      try {
+        const res = await apiRequest(\`/api/admin/questions/\${questionId}\`, 'PUT', body);
+        if (res.success) {
+          showToast('Question updated! 💾', 'success');
+          closeModal('modal-edit-question');
+          loadQuestionsList(currentQuizIdForQuestions);
+        } else {
+          showToast(res.error || 'Failed to update question.', 'error');
+        }
+      } catch {
+        showToast('Error updating question.', 'error');
+      }
+    });
 
     document.getElementById('add-question-form').addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -1817,6 +2407,22 @@ export function getAdminHtml(): string {
         }
       } catch {
         showToast('Error deleting folder.', 'error');
+      }
+    }
+
+    async function renameFolderPrompt(folderId, name) {
+      const newName = prompt('Enter new title for folder:', name);
+      if (!newName || !newName.trim() || newName.trim() === name) return;
+      try {
+        const res = await apiRequest(\`/api/admin/folders/\${folderId}\`, 'PUT', { name: newName.trim() });
+        if (res.success) {
+          showToast('Folder renamed! 📁', 'success');
+          loadFolders();
+        } else {
+          showToast(res.error || 'Failed to rename folder.', 'error');
+        }
+      } catch {
+        showToast('Error renaming folder.', 'error');
       }
     }
 

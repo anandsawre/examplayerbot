@@ -15,6 +15,9 @@ import {
   setSetting,
   getUser,
   setUserPremium,
+  getAuthorizedGroups,
+  authorizeGroup,
+  revokeGroup,
 } from '../db/queries';
 import {
   getRootAdmins,
@@ -26,6 +29,14 @@ import {
 
 // Simple in-memory session token tracking
 const validTokens: Set<string> = new Set();
+
+// In-memory OTP storage for Telegram 2FA
+interface OtpRecord {
+  code: string;
+  expiresAt: number;
+  attempts: number;
+}
+const otpStore: Map<string, OtpRecord> = new Map();
 
 function parseJsonBody(req: http.IncomingMessage): Promise<any> {
   return new Promise((resolve, reject) => {
@@ -53,7 +64,7 @@ function sendJson(res: http.ServerResponse, status: number, data: any) {
     'Content-Type': 'application/json',
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-admin-key',
   });
   res.end(JSON.stringify(data));
 }
@@ -73,16 +84,8 @@ function verifyAuth(req: http.IncomingMessage, env: Env): boolean {
 function isMasterSecret(input: string, env: Env): boolean {
   if (!input) return false;
   const trimmed = input.trim();
-  const configuredPassword = process.env.ADMIN_PASSWORD;
-  if (configuredPassword && trimmed === configuredPassword.trim()) return true;
-
-  const rootAdmins = getRootAdmins(env);
-  if (rootAdmins.includes(trimmed)) return true;
-
-  if (env.ADMIN_USER_ID && trimmed === env.ADMIN_USER_ID.trim()) return true;
-  if (trimmed === 'examplayer2026') return true;
-
-  return false;
+  const configuredPassword = process.env.ADMIN_PASSWORD || 'ExamPlayer@Admin2026';
+  return trimmed === configuredPassword.trim();
 }
 
 export async function handleAdminApiRequest(
@@ -111,27 +114,156 @@ export async function handleAdminApiRequest(
     return false;
   }
 
-  // 1. LOGIN ENDPOINT (No auth required)
+  // 1A. REQUEST TELEGRAM OTP ENDPOINT
+  if (path === '/api/admin/auth/request-otp' && method === 'POST') {
+    try {
+      const body = await parseJsonBody(req);
+      const idStr = String(body.userId || '').trim();
+      if (!idStr || isNaN(Number(idStr))) {
+        sendJson(res, 400, { success: false, error: 'Please enter a valid numerical Telegram User ID.' });
+        return true;
+      }
+
+      await syncAdminCache(supabase);
+      const rootAdmins = getRootAdmins(env);
+      const appointedAdmins = getAppointedAdmins();
+      const allAdmins = [...rootAdmins, ...appointedAdmins];
+
+      if (!allAdmins.includes(idStr)) {
+        sendJson(res, 403, {
+          success: false,
+          error: 'Access Denied: Telegram ID ' + idStr + ' is not registered as an administrator.',
+        });
+        return true;
+      }
+
+      // Rate limit check: 30 seconds
+      const existing = otpStore.get(idStr);
+      if (existing && Date.now() < existing.expiresAt - 4.5 * 60 * 1000) {
+        sendJson(res, 429, {
+          success: false,
+          error: 'Please wait 30 seconds before requesting another code.',
+        });
+        return true;
+      }
+
+      const code = Math.floor(100000 + Math.random() * 900000).toString();
+      otpStore.set(idStr, {
+        code,
+        expiresAt: Date.now() + 5 * 60 * 1000,
+        attempts: 0,
+      });
+
+      const otpMsg =
+        `🔐 *EXAMPLAYER ADMIN PORTAL LOGIN*\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `A login verification request was initiated for your administrator account.\n\n` +
+        `Your 6-Digit One-Time Security Code (OTP) is:\n\n` +
+        `👉 *${code}*\n\n` +
+        `⏱️ *Validity:* 5 Minutes\n` +
+        `⚠️ *Security Notice:* Never share this code with anyone. If you did not initiate this request, your account is secure — just ignore this alert.`;
+
+      try {
+        await bot.api.sendMessage(Number(idStr), otpMsg, { parse_mode: 'Markdown' });
+      } catch (tgErr: any) {
+        console.error('Failed to send Telegram OTP:', tgErr);
+        sendJson(res, 500, {
+          success: false,
+          error: 'Could not deliver message to Telegram. Make sure you have started the bot (/start) in Telegram.',
+        });
+        return true;
+      }
+
+      sendJson(res, 200, {
+        success: true,
+        message: 'Security code dispatched to your Telegram private chat! 📲',
+      });
+      return true;
+    } catch (err: any) {
+      sendJson(res, 400, { success: false, error: err?.message || 'Failed to request OTP.' });
+      return true;
+    }
+  }
+
+  // 1B. LOGIN VERIFICATION ENDPOINT (OTP or Password)
   if (path === '/api/admin/auth/login' && method === 'POST') {
     try {
       const body = await parseJsonBody(req);
-      const password = (body.password || body.key || '').trim();
-      if (isMasterSecret(password, env)) {
+      const { type, password, key, userId, otp } = body;
+
+      // Option 1: TELEGRAM OTP LOGIN
+      if (type === 'otp' || (userId && otp)) {
+        const idStr = String(userId || '').trim();
+        const codeInput = String(otp || '').trim();
+        const record = otpStore.get(idStr);
+
+        if (!record) {
+          sendJson(res, 400, {
+            success: false,
+            error: 'No active OTP found. Please request a new security code.',
+          });
+          return true;
+        }
+
+        if (Date.now() > record.expiresAt) {
+          otpStore.delete(idStr);
+          sendJson(res, 400, {
+            success: false,
+            error: 'Security code has expired. Please request a fresh OTP.',
+          });
+          return true;
+        }
+
+        if (record.attempts >= 5) {
+          otpStore.delete(idStr);
+          sendJson(res, 429, {
+            success: false,
+            error: 'Too many incorrect attempts. Please request a new security code.',
+          });
+          return true;
+        }
+
+        if (codeInput !== record.code) {
+          record.attempts++;
+          sendJson(res, 401, {
+            success: false,
+            error: 'Incorrect OTP code. Please check your Telegram message and try again.',
+          });
+          return true;
+        }
+
+        // OTP Verified successfully!
+        otpStore.delete(idStr);
         const token = `adm_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
         validTokens.add(token);
         sendJson(res, 200, {
           success: true,
           token,
-          message: 'Authentication successful',
-        });
-        return true;
-      } else {
-        sendJson(res, 401, {
-          success: false,
-          error: 'Invalid Administrator Key or Password.',
+          method: 'telegram_otp',
+          message: 'Authenticated via Telegram 2FA',
         });
         return true;
       }
+
+      // Option 2: MASTER PASSWORD LOGIN
+      const passInput = (password || key || '').trim();
+      if (passInput && isMasterSecret(passInput, env)) {
+        const token = `adm_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+        validTokens.add(token);
+        sendJson(res, 200, {
+          success: true,
+          token,
+          method: 'password',
+          message: 'Authenticated via Master Password',
+        });
+        return true;
+      }
+
+      sendJson(res, 401, {
+        success: false,
+        error: 'Authentication failed. Please verify your OTP code or Master Password.',
+      });
+      return true;
     } catch {
       sendJson(res, 400, { success: false, error: 'Malformed JSON payload.' });
       return true;
@@ -152,6 +284,7 @@ export async function handleAdminApiRequest(
       const { count: quizzesCount } = await supabase.from('quizzes').select('*', { count: 'exact', head: true });
       const { count: questionsCount } = await supabase.from('questions').select('*', { count: 'exact', head: true });
       const { count: attemptsCount } = await supabase.from('quiz_attempts').select('*', { count: 'exact', head: true });
+      const { count: groupsCount } = await supabase.from('authorized_groups').select('*', { count: 'exact', head: true }).eq('is_active', true);
       const folders = await getAllFolders(supabase);
       await syncAdminCache(supabase);
       const rootAdmins = getRootAdmins(env);
@@ -167,6 +300,7 @@ export async function handleAdminApiRequest(
           totalAttempts: attemptsCount || 0,
           totalFolders: folders.length,
           totalAdmins: rootAdmins.length + appointedAdmins.length,
+          authorizedGroups: groupsCount || 0,
         },
       });
       return true;
@@ -271,6 +405,32 @@ export async function handleAdminApiRequest(
         sendJson(res, 200, { success: ok });
         return true;
       }
+      if (parts.length === 1 && method === 'PUT') {
+        const body = await parseJsonBody(req);
+        const updateData: any = {};
+        if (body.title !== undefined) updateData.title = body.title.trim();
+        if (body.category !== undefined) updateData.category = body.category.trim();
+        if (body.description !== undefined) updateData.description = body.description.trim();
+        if (body.folder_id !== undefined) updateData.folder_id = body.folder_id || null;
+        if (body.marks_per_question !== undefined) updateData.marks_per_question = Number(body.marks_per_question);
+        if (body.negative_marks !== undefined) updateData.negative_marks = Number(body.negative_marks);
+        if (body.time_limit_seconds !== undefined) updateData.time_limit_seconds = Number(body.time_limit_seconds);
+        if (body.is_premium !== undefined) updateData.is_premium = Boolean(body.is_premium);
+
+        const { data, error } = await supabase
+          .from('quizzes')
+          .update(updateData)
+          .eq('id', quizId)
+          .select()
+          .single();
+
+        if (error) {
+          sendJson(res, 500, { success: false, error: error.message });
+          return true;
+        }
+        sendJson(res, 200, { success: true, quiz: data });
+        return true;
+      }
 
       if (parts[1] === 'questions') {
         if (method === 'GET') {
@@ -315,16 +475,40 @@ export async function handleAdminApiRequest(
       }
     }
 
-    // Question deletion
-    if (path.startsWith('/api/admin/questions/') && method === 'DELETE') {
+    // Question update and deletion
+    if (path.startsWith('/api/admin/questions/')) {
       const questionId = path.replace('/api/admin/questions/', '');
-      const { error } = await supabase.from('questions').delete().eq('id', questionId);
-      if (error) {
-        sendJson(res, 500, { success: false, error: error.message });
+      if (method === 'DELETE') {
+        const { error } = await supabase.from('questions').delete().eq('id', questionId);
+        if (error) {
+          sendJson(res, 500, { success: false, error: error.message });
+          return true;
+        }
+        sendJson(res, 200, { success: true });
         return true;
       }
-      sendJson(res, 200, { success: true });
-      return true;
+      if (method === 'PUT') {
+        const body = await parseJsonBody(req);
+        const updateData: any = {};
+        if (body.question_text !== undefined) updateData.question_text = body.question_text.trim();
+        if (body.options !== undefined && Array.isArray(body.options)) updateData.options = body.options;
+        if (body.correct_option_index !== undefined) updateData.correct_option_index = Number(body.correct_option_index);
+        if (body.explanation !== undefined) updateData.explanation = body.explanation ? body.explanation.trim() : null;
+
+        const { data, error } = await supabase
+          .from('questions')
+          .update(updateData)
+          .eq('id', questionId)
+          .select()
+          .single();
+
+        if (error) {
+          sendJson(res, 500, { success: false, error: error.message });
+          return true;
+        }
+        sendJson(res, 200, { success: true, question: data });
+        return true;
+      }
     }
 
     // 5. BULK JSON IMPORT DIRECTLY FROM UI
@@ -384,10 +568,21 @@ export async function handleAdminApiRequest(
     // 6. USERS / STUDENTS MANAGEMENT
     if (path === '/api/admin/users') {
       if (method === 'GET') {
-        const query = urlObj.searchParams.get('q') || '';
+        const query = (urlObj.searchParams.get('q') || '').trim();
+        const tier = urlObj.searchParams.get('tier') || '';
         let dbQuery = supabase.from('users').select('*').order('last_active_at', { ascending: false }).limit(100);
         if (query) {
-          dbQuery = dbQuery.or(`first_name.ilike.%${query}%,username.ilike.%${query}%`);
+          const isNum = !isNaN(Number(query));
+          if (isNum) {
+            dbQuery = dbQuery.or(`id.eq.${Number(query)},first_name.ilike.%${query}%,username.ilike.%${query}%`);
+          } else {
+            dbQuery = dbQuery.or(`first_name.ilike.%${query}%,username.ilike.%${query}%`);
+          }
+        }
+        if (tier === 'premium') {
+          dbQuery = dbQuery.eq('is_premium', true);
+        } else if (tier === 'free') {
+          dbQuery = dbQuery.eq('is_premium', false);
         }
         const { data, error } = await dbQuery;
         if (error) {
@@ -405,6 +600,21 @@ export async function handleAdminApiRequest(
       const body = await parseJsonBody(req);
       const isPremium = Boolean(body.is_premium);
       const ok = await setUserPremium(supabase, userId, isPremium);
+
+      if (ok && isPremium) {
+        try {
+          await bot.api.sendMessage(
+            userId,
+            `🎉 *BADHAI HO! PREMIUM PASS ACTIVATED!*\n━━━━━━━━━━━━━━━━━━━━━\n` +
+            `Aapka payment verify ho chuka hai aur sabhi tests unlock ho gaye hain! 🚀\n\n` +
+            `Abhi /quizzes me jaiye aur full mock tests practice shuru kijiye!`,
+            { parse_mode: 'Markdown' }
+          );
+        } catch (notifyErr) {
+          console.warn(`Could not send premium activation Telegram message to user ${userId}:`, notifyErr);
+        }
+      }
+
       sendJson(res, 200, { success: ok, userId, is_premium: isPremium });
       return true;
     }
@@ -471,7 +681,57 @@ export async function handleAdminApiRequest(
       return true;
     }
 
-    // 8. SETTINGS MANAGEMENT
+    // 8. COMMUNITY GROUPS AUTHORIZATION DESK
+    if (path === '/api/admin/groups') {
+      if (method === 'GET') {
+        const groups = await getAuthorizedGroups(supabase);
+        sendJson(res, 200, { success: true, groups });
+        return true;
+      }
+      if (method === 'POST') {
+        const body = await parseJsonBody(req);
+        const groupId = Number(body.groupId);
+        const groupTitle = String(body.groupTitle || 'Community Group').trim();
+        if (!groupId || isNaN(groupId)) {
+          sendJson(res, 400, { success: false, error: 'Valid numerical Telegram Group ID required.' });
+          return true;
+        }
+        const ok = await authorizeGroup(supabase, groupId, groupTitle, 0);
+        sendJson(res, 200, { success: ok, groupId, groupTitle });
+        return true;
+      }
+    }
+
+    if (path.startsWith('/api/admin/groups/')) {
+      const rest = path.replace('/api/admin/groups/', '');
+      const parts = rest.split('/');
+      const groupId = Number(parts[0]);
+
+      if (parts.length === 1 && method === 'DELETE') {
+        const { error } = await supabase.from('authorized_groups').delete().eq('group_id', groupId);
+        if (error) {
+          sendJson(res, 500, { success: false, error: error.message });
+          return true;
+        }
+        sendJson(res, 200, { success: true, groupId });
+        return true;
+      }
+
+      if (parts[1] === 'toggle' && (method === 'POST' || method === 'PUT')) {
+        const body = await parseJsonBody(req);
+        const isActive = Boolean(body.isActive);
+        let ok = false;
+        if (isActive) {
+          ok = await authorizeGroup(supabase, groupId, body.groupTitle || 'Community Group');
+        } else {
+          ok = await revokeGroup(supabase, groupId);
+        }
+        sendJson(res, 200, { success: ok, groupId, isActive });
+        return true;
+      }
+    }
+
+    // 9. SETTINGS MANAGEMENT
     if (path === '/api/admin/settings') {
       if (method === 'GET') {
         const upiId = await getSetting(supabase, 'upi_id', env.UPI_ID || 'examplayer@upi');
@@ -493,42 +753,66 @@ export async function handleAdminApiRequest(
       }
     }
 
-    // 9. BROADCAST TOOL
+    // 10. BROADCAST TOOL (MULTI-TARGET: CANDIDATES, COMMUNITY GROUPS, OR GLOBAL BLAST)
     if (path === '/api/admin/broadcast' && method === 'POST') {
       const body = await parseJsonBody(req);
       const messageText = (body.message || '').trim();
+      const target = (body.target || 'users') as 'users' | 'groups' | 'all';
       if (!messageText) {
         sendJson(res, 400, { success: false, error: 'Broadcast message cannot be empty.' });
         return true;
       }
 
-      // Fetch all user IDs from database
-      const { data: users, error } = await supabase.from('users').select('id');
-      if (error || !users) {
-        sendJson(res, 500, { success: false, error: 'Failed to fetch candidate list.' });
-        return true;
+      let usersDelivered = 0;
+      let groupsDelivered = 0;
+      let failed = 0;
+      let totalTargets = 0;
+
+      // 1. Dispatch to Registered Students if target is 'users' or 'all'
+      if (target === 'users' || target === 'all') {
+        const { data: users } = await supabase.from('users').select('id');
+        if (users && users.length > 0) {
+          totalTargets += users.length;
+          for (const u of users) {
+            try {
+              await bot.api.sendMessage(u.id, messageText, { parse_mode: 'Markdown' });
+              usersDelivered++;
+            } catch {
+              failed++;
+            }
+            await new Promise((r) => setTimeout(r, 35));
+          }
+        }
       }
 
-      let delivered = 0;
-      let failed = 0;
-
-      // Dispatch asynchronously in batches
-      for (const u of users) {
-        try {
-          await bot.api.sendMessage(u.id, messageText, { parse_mode: 'Markdown' });
-          delivered++;
-        } catch {
-          failed++;
+      // 2. Dispatch to Authorized Groups if target is 'groups' or 'all'
+      if (target === 'groups' || target === 'all') {
+        const { data: groups } = await supabase
+          .from('authorized_groups')
+          .select('group_id')
+          .eq('is_active', true);
+        if (groups && groups.length > 0) {
+          totalTargets += groups.length;
+          for (const g of groups) {
+            try {
+              await bot.api.sendMessage(g.group_id, messageText, { parse_mode: 'Markdown' });
+              groupsDelivered++;
+            } catch {
+              failed++;
+            }
+            await new Promise((r) => setTimeout(r, 45));
+          }
         }
-        // Small delay to respect Telegram rate limits
-        await new Promise((r) => setTimeout(r, 40));
       }
 
       sendJson(res, 200, {
         success: true,
-        delivered,
+        delivered: usersDelivered + groupsDelivered,
+        usersDelivered,
+        groupsDelivered,
         failed,
-        total: users.length,
+        total: totalTargets,
+        target,
       });
       return true;
     }
