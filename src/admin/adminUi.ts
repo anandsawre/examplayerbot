@@ -432,6 +432,23 @@ export function getAdminHtml(): string {
       min-height: 90px;
     }
 
+    /* File Upload Dropzone */
+    .file-dropzone {
+      border: 2px dashed rgba(99, 102, 241, 0.4);
+      background: rgba(99, 102, 241, 0.05);
+      border-radius: var(--radius-md);
+      padding: 24px 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: all var(--transition-fast);
+      user-select: none;
+    }
+    .file-dropzone:hover, .file-dropzone.dragover {
+      border-color: var(--primary);
+      background: rgba(99, 102, 241, 0.12);
+      transform: translateY(-2px);
+    }
+
     /* Modals */
     .modal-backdrop {
       position: fixed;
@@ -982,9 +999,21 @@ export function getAdminHtml(): string {
             <option value="">📁 Directory Root</option>
           </select>
         </div>
+
         <div class="form-group">
-          <label class="form-label">Paste JSON Schema</label>
-          <textarea id="import-json" class="form-control" style="min-height: 220px; font-family:'JetBrains Mono', monospace; font-size:12px;" placeholder='{
+          <label class="form-label">Method 1: Select or Drag & Drop .JSON File from Computer</label>
+          <div class="file-dropzone" id="json-dropzone" onclick="document.getElementById('json-file-input').click()">
+            <input type="file" id="json-file-input" accept=".json,application/json" style="display:none;" onchange="handleFileSelect(event)">
+            <div style="font-size: 34px; margin-bottom: 6px;">📄</div>
+            <div style="font-weight: 600; font-size: 14px; color: #fff; margin-bottom: 4px;">Click to Choose JSON File, or Drag & Drop Here</div>
+            <div style="font-size: 12px; color: var(--text-muted);" id="file-chosen-status">Select any .json examination paper</div>
+          </div>
+          <div id="import-preview-badge" style="display:none; margin-bottom: 14px; background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: var(--radius-sm); padding: 10px 14px; font-size: 12px; color: #34d399;"></div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Method 2: Or Paste / Review JSON Text</label>
+          <textarea id="import-json" class="form-control" style="min-height: 180px; font-family:'JetBrains Mono', monospace; font-size:12px;" placeholder='{
   "title": "General Science Challenge",
   "category": "Science",
   "is_premium": false,
@@ -1001,7 +1030,7 @@ export function getAdminHtml(): string {
   ]
 }' required></textarea>
         </div>
-        <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center;">
+        <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center; padding:12px;">
           Import & Save to Supabase 🚀
         </button>
       </form>
@@ -1552,6 +1581,73 @@ export function getAdminHtml(): string {
       }
     });
 
+    function handleFileSelect(event) {
+      const file = event.target.files && event.target.files[0];
+      if (!file) return;
+      processSelectedJsonFile(file);
+    }
+
+    function processSelectedJsonFile(file) {
+      if (!file.name.toLowerCase().endsWith('.json') && file.type !== 'application/json') {
+        showToast('Please select a valid .json file.', 'error');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const content = e.target.result;
+          const parsed = JSON.parse(content);
+          document.getElementById('import-json').value = JSON.stringify(parsed, null, 2);
+          
+          const questionsCount = Array.isArray(parsed.questions) ? parsed.questions.length : 0;
+          const statusEl = document.getElementById('file-chosen-status');
+          if (statusEl) {
+            statusEl.innerHTML = \`✅ <strong>\${file.name}</strong> (\${Math.round(file.size / 1024)} KB)\`;
+            statusEl.style.color = '#34d399';
+          }
+
+          const badgeEl = document.getElementById('import-preview-badge');
+          if (badgeEl) {
+            badgeEl.style.display = 'block';
+            badgeEl.innerHTML = \`✅ <strong>Ready:</strong> "\${parsed.title || 'Untitled'}" | 📚 \${questionsCount} Questions | Category: \${parsed.category || 'General'}\`;
+          }
+
+          showToast(\`Loaded \${file.name} (\${questionsCount} questions detected)!\`, 'success');
+        } catch (err) {
+          showToast('Invalid JSON file format: ' + err.message, 'error');
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    // Attach Dropzone Drag & Drop
+    setTimeout(() => {
+      const dropzone = document.getElementById('json-dropzone');
+      if (dropzone) {
+        ['dragenter', 'dragover'].forEach(eventName => {
+          dropzone.addEventListener(eventName, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dropzone.classList.add('dragover');
+          }, false);
+        });
+        ['dragleave', 'drop'].forEach(eventName => {
+          dropzone.addEventListener(eventName, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dropzone.classList.remove('dragover');
+          }, false);
+        });
+        dropzone.addEventListener('drop', (e) => {
+          const dt = e.dataTransfer;
+          const file = dt.files && dt.files[0];
+          if (file) {
+            processSelectedJsonFile(file);
+          }
+        }, false);
+      }
+    }, 500);
+
     document.getElementById('import-form').addEventListener('submit', async (e) => {
       e.preventDefault();
       try {
@@ -1681,7 +1777,18 @@ export function getAdminHtml(): string {
 
     // Modal Helpers
     function openCreateQuizModal() { document.getElementById('modal-create-quiz').classList.add('open'); }
-    function openImportModal() { document.getElementById('modal-import').classList.add('open'); }
+    function openImportModal() {
+      document.getElementById('modal-import').classList.add('open');
+      const input = document.getElementById('json-file-input');
+      if (input) input.value = '';
+      const status = document.getElementById('file-chosen-status');
+      if (status) {
+        status.innerHTML = 'Select any .json examination paper';
+        status.style.color = 'var(--text-muted)';
+      }
+      const badge = document.getElementById('import-preview-badge');
+      if (badge) badge.style.display = 'none';
+    }
     function openCreateFolderModal() { document.getElementById('modal-create-folder').classList.add('open'); }
     function openAddAdminModal() { document.getElementById('modal-add-admin').classList.add('open'); }
     function closeModal(id) { document.getElementById(id).classList.remove('open'); }
