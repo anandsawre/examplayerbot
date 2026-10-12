@@ -933,6 +933,10 @@ export function getAdminHtml(): string {
         <span class="nav-icon">👥</span>
         <span>Students Directory</span>
       </li>
+      <li class="nav-item" onclick="switchTab('leaderboard')">
+        <span class="nav-icon">🏆</span>
+        <span>Leaderboard & Merit</span>
+      </li>
       <li class="nav-item" onclick="switchTab('admins')">
         <span class="nav-icon">🛡️</span>
         <span>Admins Hub</span>
@@ -1151,6 +1155,99 @@ export function getAdminHtml(): string {
       </div>
     </div>
 
+    <!-- TAB: LEADERBOARD & MERIT STANDINGS -->
+    <div id="tab-leaderboard" class="tab-content" style="display: none;">
+      <div class="metrics-grid" style="grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); margin-bottom: 20px;">
+        <div class="metric-card">
+          <div class="metric-label">Ranked Candidates</div>
+          <div class="metric-value" id="stat-lb-users">0</div>
+          <div class="metric-sub">👥 Students on scoreboard</div>
+          <div class="metric-icon-bg">🏆</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">All-India #1 Topper</div>
+          <div class="metric-value" id="stat-lb-topper" style="font-size: 20px; color: #fbbf24;">—</div>
+          <div class="metric-sub">🥇 Highest cumulative score</div>
+          <div class="metric-icon-bg">🥇</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Peak Merit Score</div>
+          <div class="metric-value" id="stat-lb-top-score" style="color: #38bdf8;">0</div>
+          <div class="metric-sub">⚡ Peak merit points record</div>
+          <div class="metric-icon-bg">⚡</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; flex-wrap: wrap; gap: 12px;">
+          <div>
+            <h3 style="font-family: 'Outfit'; font-size: 19px;">Competitive Merit Standings</h3>
+            <p style="font-size: 13px; color: var(--text-muted);">Inspect cumulative All-India rankings or analyze candidate performance by specific examination module.</p>
+          </div>
+          <div style="display: flex; gap: 8px;">
+            <button class="btn btn-secondary lb-view-btn active" id="btn-lb-global" onclick="setLbView('global')">🌐 All-India Standings</button>
+            <button class="btn btn-secondary lb-view-btn" id="btn-lb-quiz" onclick="setLbView('quiz')">📝 Per-Examination Standings</button>
+          </div>
+        </div>
+
+        <!-- SUBVIEW 1: GLOBAL LEADERBOARD -->
+        <div id="lb-view-global">
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th style="width: 80px;">Rank</th>
+                  <th>Candidate</th>
+                  <th>Telegram User ID</th>
+                  <th>Tests Completed</th>
+                  <th>Cumulative Score</th>
+                  <th>Daily Streak</th>
+                  <th>Scholar Pass</th>
+                </tr>
+              </thead>
+              <tbody id="lb-global-table-body">
+                <tr><td colspan="7" style="text-align:center;">Loading All-India standings...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- SUBVIEW 2: PER-TEST LEADERBOARD -->
+        <div id="lb-view-quiz" style="display: none;">
+          <div style="display: flex; gap: 14px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; background: var(--item-card-bg); border: 1px solid var(--item-card-border); padding: 14px; border-radius: var(--radius-sm);">
+            <div style="flex: 1; min-width: 250px;">
+              <label class="form-label" style="margin-bottom: 4px;">Select Examination Module:</label>
+              <select id="lb-quiz-select" class="form-control" onchange="onQuizLeaderboardSelect(this.value)">
+                <option value="">Select an examination paper...</option>
+              </select>
+            </div>
+            <div id="lb-quiz-meta" style="display: flex; gap: 16px; font-size: 13px; color: var(--text-muted); align-items: center; flex-wrap: wrap;">
+              <!-- Populated dynamically: questions, marking scheme, attempts count -->
+            </div>
+          </div>
+
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th style="width: 80px;">Rank</th>
+                  <th>Candidate</th>
+                  <th>Score (pts)</th>
+                  <th>✅ Correct</th>
+                  <th>❌ Incorrect</th>
+                  <th>🎯 Accuracy</th>
+                  <th>⏱️ Time Taken</th>
+                </tr>
+              </thead>
+              <tbody id="lb-quiz-table-body">
+                <tr><td colspan="7" style="text-align:center; color:var(--text-dark);">Select an examination paper above to display candidate standings.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- TAB 5: ADMINS MANAGEMENT -->
     <div id="tab-admins" class="tab-content" style="display: none;">
       <div class="card" style="margin-bottom: 24px;">
@@ -1196,11 +1293,12 @@ export function getAdminHtml(): string {
                 <th>Group Title</th>
                 <th>Telegram Group ID</th>
                 <th>Authorization Status</th>
+                <th>Live Status & Schedule</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody id="groups-table-body">
-              <tr><td colspan="4" style="text-align:center;">Loading authorized groups...</td></tr>
+              <tr><td colspan="5" style="text-align:center;">Loading authorized groups...</td></tr>
             </tbody>
           </table>
         </div>
@@ -1502,6 +1600,100 @@ export function getAdminHtml(): string {
     </div>
   </div>
 
+  <!-- MODAL: LAUNCH GROUP QUIZ BATTLE -->
+  <div id="modal-group-launch" class="modal-backdrop">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>🚀 Launch Live Battle in Group</h3>
+        <button class="modal-close" onclick="closeModal('modal-group-launch')">✕</button>
+      </div>
+      <form id="group-launch-form" onsubmit="submitGroupLaunch(event)">
+        <input type="hidden" id="gl-group-id">
+        <div class="form-group">
+          <label class="form-label">Target Community Group</label>
+          <input type="text" id="gl-group-title" class="form-control" readonly style="opacity:0.85; font-weight:600;">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Select Examination Paper</label>
+          <select id="gl-quiz-select" class="form-control" required>
+            <option value="">Select an examination paper...</option>
+          </select>
+        </div>
+        <div class="info-callout" style="margin-bottom:18px;">
+          <div style="font-weight:600; font-size:13px; color:var(--callout-title); margin-bottom:4px;">⚡ Instant Battle Execution:</div>
+          <div style="font-size:12px; color:var(--text-muted);">The bot will broadcast a 5-second countdown alert into this group and then sequentially deliver native Telegram quiz polls with automatic timeouts and ranklist scorecard.</div>
+        </div>
+        <div style="display:flex; justify-content:flex-end; gap:10px;">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('modal-group-launch')">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btn-submit-gl">🚀 Start Live Battle</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: SCHEDULE GROUP QUIZ BATTLE -->
+  <div id="modal-group-schedule" class="modal-backdrop">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>⏰ Schedule Group Examination Battle</h3>
+        <button class="modal-close" onclick="closeModal('modal-group-schedule')">✕</button>
+      </div>
+      <form id="group-schedule-form" onsubmit="submitGroupSchedule(event)">
+        <input type="hidden" id="gs-group-id">
+        <div class="form-group">
+          <label class="form-label">Target Community Group</label>
+          <input type="text" id="gs-group-title" class="form-control" readonly style="opacity:0.85; font-weight:600;">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Select Examination Paper</label>
+          <select id="gs-quiz-select" class="form-control" required>
+            <option value="">Select an examination paper...</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Execution Timing Mode</label>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:12px;">
+            <label class="broadcast-target-card">
+              <input type="radio" name="gs-mode" value="preset" checked onchange="toggleGsMode()" style="accent-color:var(--primary);">
+              <div>
+                <div style="font-weight:600; font-size:13px;">⏱️ Quick Delay</div>
+                <div style="font-size:11px; color:var(--text-muted);">Launch after set minutes</div>
+              </div>
+            </label>
+            <label class="broadcast-target-card">
+              <input type="radio" name="gs-mode" value="custom" onchange="toggleGsMode()" style="accent-color:var(--primary);">
+              <div>
+                <div style="font-weight:600; font-size:13px;">🕒 Target IST Time</div>
+                <div style="font-size:11px; color:var(--text-muted);">Exact slot today (HH:MM)</div>
+              </div>
+            </label>
+          </div>
+          <div id="gs-preset-box">
+            <select id="gs-delay-select" class="form-control">
+              <option value="5">⏱️ 5 Minutes Delay</option>
+              <option value="15" selected>⏱️ 15 Minutes Delay</option>
+              <option value="30">⏱️ 30 Minutes Delay</option>
+              <option value="60">⏱️ 1 Hour Delay</option>
+              <option value="120">⏱️ 2 Hours Delay</option>
+            </select>
+          </div>
+          <div id="gs-custom-box" style="display:none;">
+            <input type="text" id="gs-custom-time" class="form-control" placeholder="e.g. 20:00 or 8:30 PM or 45">
+            <small style="font-size:11px; color:var(--text-muted); display:block; margin-top:4px;">Supports 24h format (e.g. 21:00), 12h format (e.g. 9:00 PM), or relative minutes (e.g. 45).</small>
+          </div>
+        </div>
+        <div class="info-callout" style="margin-bottom:18px;">
+          <div style="font-weight:600; font-size:13px; color:var(--callout-title); margin-bottom:4px;">📢 Automated Group Announcement:</div>
+          <div style="font-size:12px; color:var(--text-muted);">The bot will post an official schedule announcement with countdown in the group, deliver a 60-second alert before starting, and trigger the polls automatically.</div>
+        </div>
+        <div style="display:flex; justify-content:flex-end; gap:10px;">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('modal-group-schedule')">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btn-submit-gs">⏰ Confirm & Schedule</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- MODAL: EDIT EXAMINATION SCHEME -->
   <div id="modal-edit-quiz" class="modal-backdrop">
     <div class="modal-box">
@@ -1799,7 +1991,7 @@ export function getAdminHtml(): string {
       if (target) target.style.display = 'block';
 
       // Update Nav active
-      const idxMap = { dashboard: 0, folders: 1, quizzes: 2, users: 3, admins: 4, groups: 5, broadcast: 6, settings: 7 };
+      const idxMap = { dashboard: 0, folders: 1, quizzes: 2, users: 3, leaderboard: 4, admins: 5, groups: 6, broadcast: 7, settings: 8 };
       const navItems = document.querySelectorAll('.nav-item');
       if (navItems[idxMap[tabId]]) navItems[idxMap[tabId]].classList.add('active');
 
@@ -1809,6 +2001,7 @@ export function getAdminHtml(): string {
         folders: ['Examination Folders & Directories', 'Hierarchical classification of mock tests and question categories.'],
         quizzes: ['Examinations Catalog & Papers', 'Create tests, inspect formulas, build questions or manage syllabus.'],
         users: ['Candidate Directory & Access Pass', 'Review registered students and grant Premium Scholar Passes.'],
+        leaderboard: ['Candidate Merit Standings', 'Inspect All-India cumulative rankings and test-specific scoreboards.'],
         admins: ['Platform Administrators Hub', 'Manage primary and appointed bot administrators.'],
         groups: ['Community Groups Authorization Desk', 'Authorize Telegram groups to host live quiz tournaments or revoke permissions.'],
         broadcast: ['Announcement Broadcast Studio', 'Dispatch mass announcements and test notifications to students or groups.'],
@@ -1824,6 +2017,7 @@ export function getAdminHtml(): string {
       if (tabId === 'folders') loadFolders();
       if (tabId === 'quizzes') loadQuizzes();
       if (tabId === 'users') loadUsers();
+      if (tabId === 'leaderboard') loadLeaderboard();
       if (tabId === 'admins') loadAdmins();
       if (tabId === 'groups') loadGroups();
       if (tabId === 'settings') loadSettings();
@@ -2145,11 +2339,56 @@ export function getAdminHtml(): string {
           const tbody = document.getElementById('groups-table-body');
           tbody.innerHTML = '';
           if (res.groups.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:var(--text-dark);">No community groups authorized yet. Click "Authorize Community Group" to add one.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:var(--text-dark);">No community groups authorized yet. Click "Authorize Community Group" to add one.</td></tr>';
             return;
           }
           res.groups.forEach(g => {
             const tr = document.createElement('tr');
+            let schedStatusHtml = '<span style="color:var(--text-dark); font-size:12px;">⚪ No Schedule</span>';
+            if (g.isBattleActive) {
+              schedStatusHtml = '<span class="badge badge-premium">🔥 Live Battle Active</span>';
+            } else if (g.activeSchedule) {
+              schedStatusHtml = \`
+                <div style="font-size:12px; font-weight:600; color:var(--cyan);">
+                  ⏰ \${g.activeSchedule.quizTitle}
+                </div>
+                <div style="font-size:11px; color:var(--text-muted); margin-bottom:4px;">
+                  \${g.activeSchedule.timeFormatted} IST
+                </div>
+                <button class="btn btn-danger" style="padding:2px 7px; font-size:10px;" onclick="cancelGroupScheduleFromWeb(\${g.group_id})">
+                  🛑 Cancel
+                </button>
+              \`;
+            }
+
+            const cleanTitle = (g.group_title || 'Community Group').replace(/'/g, "\\\\'");
+
+            let actionBtns = '';
+            if (g.is_active) {
+              actionBtns += \`
+                <button class="btn btn-primary" style="padding:4px 8px; font-size:11px;" onclick="openGroupLaunchModal(\${g.group_id}, '\${cleanTitle}')">
+                  🚀 Launch
+                </button>
+                <button class="btn btn-secondary" style="padding:4px 8px; font-size:11px; margin-left:4px;" onclick="openGroupScheduleModal(\${g.group_id}, '\${cleanTitle}')">
+                  ⏰ Schedule
+                </button>
+                <button class="btn btn-danger" style="padding:4px 8px; font-size:11px; margin-left:4px;" onclick="toggleGroupStatus(\${g.group_id}, false, '\${cleanTitle}')">
+                  Revoke
+                </button>
+              \`;
+            } else {
+              actionBtns += \`
+                <button class="btn btn-emerald" style="padding:4px 8px; font-size:11px;" onclick="toggleGroupStatus(\${g.group_id}, true, '\${cleanTitle}')">
+                  Activate
+                </button>
+              \`;
+            }
+            actionBtns += \`
+              <button class="btn btn-secondary" style="padding:4px 8px; font-size:11px; margin-left:4px;" onclick="deleteGroupRecord(\${g.group_id})">
+                Delete
+              </button>
+            \`;
+
             tr.innerHTML = \`
               <td><strong>🏛️ \${g.group_title || 'Community Group'}</strong></td>
               <td><code>\${g.group_id}</code></td>
@@ -2158,14 +2397,8 @@ export function getAdminHtml(): string {
                   \${g.is_active ? '🟢 ACTIVE' : '🔴 REVOKED'}
                 </span>
               </td>
-              <td>
-                <button class="btn \${g.is_active ? 'btn-danger' : 'btn-emerald'}" style="padding:4px 8px; font-size:11px;" onclick="toggleGroupStatus(\${g.group_id}, \${!g.is_active}, '\${(g.group_title || 'Group').replace(/'/g, "\\\\'")}')">
-                  \${g.is_active ? 'Revoke Authorization' : 'Activate Group'}
-                </button>
-                <button class="btn btn-secondary" style="padding:4px 8px; font-size:11px; margin-left:4px;" onclick="deleteGroupRecord(\${g.group_id})">
-                  Delete
-                </button>
-              </td>
+              <td>\${schedStatusHtml}</td>
+              <td style="white-space: nowrap;">\${actionBtns}</td>
             \`;
             tbody.appendChild(tr);
           });
@@ -2224,6 +2457,313 @@ export function getAdminHtml(): string {
 
     function openAddGroupModal() {
       document.getElementById('modal-add-group').classList.add('open');
+    }
+
+    // Modal: Launch Group Live Battle
+    function openGroupLaunchModal(groupId, groupTitle) {
+      document.getElementById('gl-group-id').value = groupId;
+      document.getElementById('gl-group-title').value = groupTitle;
+      const sel = document.getElementById('gl-quiz-select');
+      sel.innerHTML = '<option value="">Select an examination paper...</option>';
+      if (globalQuizzes && globalQuizzes.length > 0) {
+        globalQuizzes.forEach(q => {
+          const opt = document.createElement('option');
+          opt.value = q.id;
+          opt.innerText = q.title + ' (' + q.total_questions + ' Qs | ' + q.category + ')';
+          sel.appendChild(opt);
+        });
+      }
+      document.getElementById('modal-group-launch').classList.add('open');
+    }
+
+    async function submitGroupLaunch(e) {
+      e.preventDefault();
+      const groupId = document.getElementById('gl-group-id').value;
+      const quizId = document.getElementById('gl-quiz-select').value;
+      if (!quizId) {
+        showToast('Please select an examination paper.', 'error');
+        return;
+      }
+      const btn = document.getElementById('btn-submit-gl');
+      btn.disabled = true;
+      btn.innerText = 'Launching...';
+      try {
+        const res = await apiRequest('/api/admin/groups/' + groupId + '/launch', 'POST', { quizId });
+        if (res.success) {
+          showToast('Live examination battle launched successfully! 🚀', 'success');
+          closeModal('modal-group-launch');
+          loadGroups();
+        } else {
+          showToast(res.error || 'Failed to launch battle.', 'error');
+        }
+      } catch {
+        showToast('Error launching battle.', 'error');
+      } finally {
+        btn.disabled = false;
+        btn.innerText = '🚀 Start Live Battle';
+      }
+    }
+
+    // Modal: Schedule Group Live Battle
+    function openGroupScheduleModal(groupId, groupTitle) {
+      document.getElementById('gs-group-id').value = groupId;
+      document.getElementById('gs-group-title').value = groupTitle;
+      const sel = document.getElementById('gs-quiz-select');
+      sel.innerHTML = '<option value="">Select an examination paper...</option>';
+      if (globalQuizzes && globalQuizzes.length > 0) {
+        globalQuizzes.forEach(q => {
+          const opt = document.createElement('option');
+          opt.value = q.id;
+          opt.innerText = q.title + ' (' + q.total_questions + ' Qs | ' + q.category + ')';
+          sel.appendChild(opt);
+        });
+      }
+      document.getElementById('modal-group-schedule').classList.add('open');
+    }
+
+    function toggleGsMode() {
+      const mode = document.querySelector('input[name="gs-mode"]:checked')?.value;
+      if (mode === 'preset') {
+        document.getElementById('gs-preset-box').style.display = 'block';
+        document.getElementById('gs-custom-box').style.display = 'none';
+      } else {
+        document.getElementById('gs-preset-box').style.display = 'none';
+        document.getElementById('gs-custom-box').style.display = 'block';
+      }
+    }
+
+    async function submitGroupSchedule(e) {
+      e.preventDefault();
+      const groupId = document.getElementById('gs-group-id').value;
+      const quizId = document.getElementById('gs-quiz-select').value;
+      if (!quizId) {
+        showToast('Please select an examination paper.', 'error');
+        return;
+      }
+      const mode = document.querySelector('input[name="gs-mode"]:checked')?.value;
+      let payload = { quizId };
+      if (mode === 'preset') {
+        payload.delayMinutes = document.getElementById('gs-delay-select').value;
+      } else {
+        const customTime = document.getElementById('gs-custom-time').value.trim();
+        if (!customTime) {
+          showToast('Please enter target time.', 'error');
+          return;
+        }
+        payload.timeStr = customTime;
+      }
+
+      const btn = document.getElementById('btn-submit-gs');
+      btn.disabled = true;
+      btn.innerText = 'Scheduling...';
+      try {
+        const res = await apiRequest('/api/admin/groups/' + groupId + '/schedule', 'POST', payload);
+        if (res.success) {
+          showToast('Examination scheduled for ' + res.timeFormatted + ' IST! ⏰', 'success');
+          closeModal('modal-group-schedule');
+          loadGroups();
+        } else {
+          showToast(res.error || 'Failed to schedule.', 'error');
+        }
+      } catch {
+        showToast('Error scheduling battle.', 'error');
+      } finally {
+        btn.disabled = false;
+        btn.innerText = '⏰ Confirm & Schedule';
+      }
+    }
+
+    async function cancelGroupScheduleFromWeb(groupId) {
+      if (!confirm('Cancel scheduled examination session for this group?')) return;
+      try {
+        const res = await apiRequest('/api/admin/groups/' + groupId + '/cancel-schedule', 'POST');
+        if (res.success) {
+          showToast('Scheduled session cancelled. Notice sent to group.', 'success');
+          loadGroups();
+        } else {
+          showToast(res.error || 'Failed to cancel schedule.', 'error');
+        }
+      } catch {
+        showToast('Error cancelling schedule.', 'error');
+      }
+    }
+
+    // ================= LEADERBOARD & MERIT MANAGEMENT =================
+    let currentLbView = 'global';
+    let globalLeaderboardCache = [];
+
+    async function loadLeaderboard() {
+      if (!globalQuizzes || globalQuizzes.length === 0) {
+        try {
+          const qRes = await apiRequest('/api/admin/quizzes');
+          if (qRes.success) globalQuizzes = qRes.quizzes;
+        } catch {}
+      }
+      populateLbQuizSelect();
+
+      try {
+        const res = await apiRequest('/api/admin/leaderboard/global');
+        if (res.success) {
+          globalLeaderboardCache = res.leaderboard || [];
+          renderGlobalLeaderboard(globalLeaderboardCache);
+        }
+      } catch {
+        showToast('Failed to load leaderboard data.', 'error');
+      }
+    }
+
+    function populateLbQuizSelect() {
+      const sel = document.getElementById('lb-quiz-select');
+      if (!sel) return;
+      const cur = sel.value;
+      sel.innerHTML = '<option value="">Select an examination paper...</option>';
+      if (globalQuizzes && globalQuizzes.length > 0) {
+        globalQuizzes.forEach(q => {
+          const opt = document.createElement('option');
+          opt.value = q.id;
+          opt.innerText = q.title + ' (' + q.total_questions + ' Qs | ' + q.category + ')';
+          sel.appendChild(opt);
+        });
+      }
+      if (cur) sel.value = cur;
+    }
+
+    function renderGlobalLeaderboard(users) {
+      const tbody = document.getElementById('lb-global-table-body');
+      if (!tbody) return;
+      tbody.innerHTML = '';
+
+      document.getElementById('stat-lb-users').innerText = users.length.toLocaleString();
+      if (users.length > 0) {
+        const topUser = users[0];
+        const topName = topUser.username ? '@' + topUser.username : (topUser.first_name || 'Candidate');
+        document.getElementById('stat-lb-topper').innerText = topName;
+        document.getElementById('stat-lb-top-score').innerText = (topUser.total_score || 0).toLocaleString() + ' pts';
+      } else {
+        document.getElementById('stat-lb-topper').innerText = '—';
+        document.getElementById('stat-lb-top-score').innerText = '0 pts';
+      }
+
+      if (users.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:var(--text-dark);">No candidate attempts recorded yet.</td></tr>';
+        return;
+      }
+
+      const medals = ['🥇 #1', '🥈 #2', '🥉 #3'];
+      users.forEach((u, idx) => {
+        const tr = document.createElement('tr');
+        const rankLabel = idx < 3 ? medals[idx] : '#' + (idx + 1);
+        const nameDisplay = u.first_name || 'Anonymous';
+        const handleDisplay = u.username ? '@' + u.username : '';
+
+        tr.innerHTML = \`
+          <td><strong>\${rankLabel}</strong></td>
+          <td>
+            <strong>\${nameDisplay}</strong>
+            \${handleDisplay ? '<div style="font-size:11px; color:var(--primary);">' + handleDisplay + '</div>' : ''}
+          </td>
+          <td><code>\${u.id}</code></td>
+          <td>\${(u.tests_completed || 0).toLocaleString()}</td>
+          <td><strong style="color:var(--emerald);">\${(u.total_score || 0).toLocaleString()} pts</strong></td>
+          <td>\${u.streak_days > 0 ? '🔥 ' + u.streak_days + ' Days' : '—'}</td>
+          <td>
+            <span class="badge \${u.is_premium ? 'badge-premium' : 'badge-free'}">
+              \${u.is_premium ? '👑 SCHOLAR PASS' : '🟢 FREE TIER'}
+            </span>
+          </td>
+        \`;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function setLbView(view) {
+      currentLbView = view;
+      document.querySelectorAll('.lb-view-btn').forEach(btn => btn.classList.remove('active'));
+      if (view === 'global') {
+        document.getElementById('btn-lb-global').classList.add('active');
+        document.getElementById('lb-view-global').style.display = 'block';
+        document.getElementById('lb-view-quiz').style.display = 'none';
+      } else {
+        document.getElementById('btn-lb-quiz').classList.add('active');
+        document.getElementById('lb-view-global').style.display = 'none';
+        document.getElementById('lb-view-quiz').style.display = 'block';
+        const sel = document.getElementById('lb-quiz-select');
+        if (sel && sel.value) {
+          loadQuizLeaderboard(sel.value);
+        } else if (sel && sel.options.length > 1) {
+          sel.selectedIndex = 1;
+          loadQuizLeaderboard(sel.value);
+        }
+      }
+    }
+
+    function onQuizLeaderboardSelect(quizId) {
+      if (!quizId) {
+        document.getElementById('lb-quiz-table-body').innerHTML = '<tr><td colspan="7" style="text-align:center; color:var(--text-dark);">Select an examination paper above.</td></tr>';
+        document.getElementById('lb-quiz-meta').innerHTML = '';
+        return;
+      }
+      loadQuizLeaderboard(quizId);
+    }
+
+    async function loadQuizLeaderboard(quizId) {
+      const tbody = document.getElementById('lb-quiz-table-body');
+      const metaEl = document.getElementById('lb-quiz-meta');
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">Evaluating examination standings...</td></tr>';
+
+      try {
+        const res = await apiRequest('/api/admin/leaderboard/quiz/' + quizId);
+        if (res.success) {
+          const q = res.quiz;
+          const attempts = res.attempts || [];
+
+          metaEl.innerHTML = \`
+            <span>❓ <strong>\${q.total_questions}</strong> Questions</span>
+            <span>⚡ Marks: <strong style="color:var(--emerald);">+\${q.marks_per_question}</strong> / <strong style="color:var(--rose);">-\${q.negative_marks}</strong></span>
+            <span>🎯 <strong>\${attempts.length}</strong> Candidate Attempts Evaluated</span>
+          \`;
+
+          tbody.innerHTML = '';
+          if (attempts.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:var(--text-dark);">No attempts recorded for this examination paper yet.</td></tr>';
+            return;
+          }
+
+          const medals = ['🥇 #1', '🥈 #2', '🥉 #3'];
+          attempts.forEach((att, idx) => {
+            const tr = document.createElement('tr');
+            const rankLabel = idx < 3 ? medals[idx] : '#' + (idx + 1);
+            const rawName = att.first_name || (att.username ? '@' + att.username : 'Candidate');
+            const handle = att.username ? '@' + att.username : '';
+
+            const totalSec = att.time_taken_seconds || 0;
+            const mins = Math.floor(totalSec / 60);
+            const secs = totalSec % 60;
+            const timeStr = String(mins).padStart(2, '0') + ':' + String(secs).padStart(2, '0');
+
+            tr.innerHTML = \`
+              <td><strong>\${rankLabel}</strong></td>
+              <td>
+                <strong>\${rawName}</strong>
+                \${handle && handle !== rawName ? '<div style="font-size:11px; color:var(--primary);">' + handle + '</div>' : ''}
+              </td>
+              <td><strong style="color:var(--emerald);">\${att.score} pts</strong></td>
+              <td style="color:var(--emerald);">✅ \${att.correct_count ?? 0}</td>
+              <td style="color:var(--rose);">❌ \${att.wrong_count ?? 0}</td>
+              <td>
+                <div style="font-weight:600;">\${att.accuracy_percent ?? 0}%</div>
+                <div style="height:4px; width:70px; background:var(--item-card-border); border-radius:2px; overflow:hidden; margin-top:2px;">
+                  <div style="height:100%; width:\${att.accuracy_percent ?? 0}%; background:var(--primary);"></div>
+                </div>
+              </td>
+              <td>⏱️ \${timeStr}</td>
+            \`;
+            tbody.appendChild(tr);
+          });
+        }
+      } catch {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:var(--rose);">Failed to load examination standings.</td></tr>';
+      }
     }
 
     // 7. SETTINGS LOADER

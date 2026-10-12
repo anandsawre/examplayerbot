@@ -18,6 +18,8 @@ import {
   getAuthorizedGroups,
   authorizeGroup,
   revokeGroup,
+  getGlobalLeaderboard,
+  getQuizLeaderboard,
 } from '../db/queries';
 import {
   getRootAdmins,
@@ -26,6 +28,14 @@ import {
   removeAppointedAdmin,
   syncAdminCache,
 } from '../utils/admin';
+import { executeGroupQuizBattle, activeGroupBattles } from '../handlers/groupQuiz';
+import {
+  registerGroupScheduleDirect,
+  cancelGroupSchedule,
+  scheduledGroupQuizzes,
+  formatISTTime,
+  parseIndianDateTime,
+} from '../handlers/groupSchedule';
 
 // Simple in-memory session token tracking
 const validTokens: Set<string> = new Set();
@@ -684,7 +694,24 @@ export async function handleAdminApiRequest(
     // 8. COMMUNITY GROUPS AUTHORIZATION DESK
     if (path === '/api/admin/groups') {
       if (method === 'GET') {
-        const groups = await getAuthorizedGroups(supabase);
+        const rawGroups = await getAuthorizedGroups(supabase);
+        const groups = (rawGroups || []).map((g: any) => {
+          const sched = scheduledGroupQuizzes.get(g.group_id);
+          const isBattleActive = activeGroupBattles.has(g.group_id);
+          return {
+            ...g,
+            isBattleActive,
+            activeSchedule: sched
+              ? {
+                  quizTitle: sched.quizTitle,
+                  quizId: sched.quizId,
+                  targetTime: sched.targetTime.toISOString(),
+                  timeFormatted: formatISTTime(sched.targetTime),
+                  scheduledBy: sched.scheduledBy,
+                }
+              : null,
+          };
+        });
         sendJson(res, 200, { success: true, groups });
         return true;
       }
@@ -729,6 +756,155 @@ export async function handleAdminApiRequest(
         sendJson(res, 200, { success: ok, groupId, isActive });
         return true;
       }
+
+      // Launch Quiz in Community Group directly from Admin Portal
+      if (parts[1] === 'launch' && method === 'POST') {
+        const body = await parseJsonBody(req);
+        const quizId = String(body.quizId || '').trim();
+        if (!quizId) {
+          sendJson(res, 400, { success: false, error: 'Examination ID required to launch battle.' });
+          return true;
+        }
+
+        const quiz = await getQuizById(supabase, quizId);
+        if (!quiz) {
+          sendJson(res, 404, { success: false, error: 'Examination not found.' });
+          return true;
+        }
+
+        if (activeGroupBattles.has(groupId)) {
+          sendJson(res, 400, { success: false, error: 'An active battle is already running in this group.' });
+          return true;
+        }
+
+        const botUsername = process.env.BOT_USERNAME || 'Examplayer_bot';
+        executeGroupQuizBattle(bot.api, supabase, groupId, quizId, botUsername).catch((err) => {
+          console.error('Error executing group quiz battle from web admin:', err);
+        });
+
+        sendJson(res, 200, {
+          success: true,
+          groupId,
+          quizTitle: quiz.title,
+          message: `Live battle "${quiz.title}" launched successfully!`,
+        });
+        return true;
+      }
+
+      // Schedule Quiz in Community Group directly from Admin Portal
+      if (parts[1] === 'schedule' && method === 'POST') {
+        const body = await parseJsonBody(req);
+        const quizId = String(body.quizId || '').trim();
+        if (!quizId) {
+          sendJson(res, 400, { success: false, error: 'Examination ID required to schedule.' });
+          return true;
+        }
+
+        let delayMs = 0;
+        let targetTime: Date = new Date();
+
+        if (body.delayMinutes !== undefined && Number(body.delayMinutes) > 0) {
+          const mins = Number(body.delayMinutes);
+          delayMs = mins * 60 * 1000;
+          targetTime = new Date(Date.now() + delayMs);
+        } else if (body.timeStr) {
+          const parsed = parseIndianDateTime(String(body.timeStr));
+          if (!parsed) {
+            sendJson(res, 400, {
+              success: false,
+              error: 'Could not parse target time. Try "20:00", "8:30 PM", or minutes delay like "45".',
+            });
+            return true;
+          }
+          delayMs = parsed.delayMs;
+          targetTime = parsed.target;
+        } else {
+          sendJson(res, 400, {
+            success: false,
+            error: 'Specify delayMinutes (e.g. 15, 30) or timeStr (e.g. "20:00").',
+          });
+          return true;
+        }
+
+        if (delayMs < 30 * 1000) {
+          sendJson(res, 400, { success: false, error: 'Scheduled time must be at least 1 minute into the future.' });
+          return true;
+        }
+
+        const botUsername = process.env.BOT_USERNAME || 'Examplayer_bot';
+        const resSched = await registerGroupScheduleDirect(
+          bot.api,
+          supabase,
+          groupId,
+          quizId,
+          targetTime,
+          delayMs,
+          'Web Admin Console',
+          botUsername
+        );
+
+        if (!resSched.success) {
+          sendJson(res, 400, { success: false, error: resSched.error || 'Failed to schedule.' });
+          return true;
+        }
+
+        sendJson(res, 200, {
+          success: true,
+          groupId,
+          quizTitle: resSched.quiz?.title,
+          targetTime: resSched.targetTime.toISOString(),
+          timeFormatted: resSched.timeFormatted,
+          dateFormatted: resSched.dateFormatted,
+        });
+        return true;
+      }
+
+      // Cancel Group Schedule directly from Admin Portal
+      if (parts[1] === 'cancel-schedule' && method === 'POST') {
+        const wasCancelled = cancelGroupSchedule(groupId);
+        if (wasCancelled) {
+          try {
+            await bot.api.sendMessage(
+              groupId,
+              `🛑 *SCHEDULED SESSION CANCELLED*\n━━━━━━━━━━━━━━━━━━━━━\n` +
+              `The scheduled examination battle was cancelled via the Web Administrative Operations Console.`,
+              { parse_mode: 'Markdown' }
+            );
+          } catch {}
+        }
+        sendJson(res, 200, { success: true, wasCancelled, groupId });
+        return true;
+      }
+    }
+
+    // 8B. LEADERBOARD & MERIT DIRECTORY
+    if (path === '/api/admin/leaderboard/global' && method === 'GET') {
+      const { data, error } = await supabase
+        .from('users')
+        .select('id, first_name, username, total_score, tests_completed, streak_days, is_premium, last_active_at')
+        .order('total_score', { ascending: false })
+        .limit(100);
+
+      if (error) {
+        sendJson(res, 500, { success: false, error: error.message });
+        return true;
+      }
+
+      sendJson(res, 200, { success: true, leaderboard: data || [] });
+      return true;
+    }
+
+    if (path.startsWith('/api/admin/leaderboard/quiz/') && method === 'GET') {
+      const quizId = path.replace('/api/admin/leaderboard/quiz/', '').trim();
+      const quiz = await getQuizById(supabase, quizId);
+      if (!quiz) {
+        sendJson(res, 404, { success: false, error: 'Examination not found.' });
+        return true;
+      }
+
+      const attempts = await getQuizLeaderboard(supabase, quizId, 100);
+      sendJson(res, 200, { success: true, quiz, attempts });
+      return true;
     }
 
     // 9. SETTINGS MANAGEMENT

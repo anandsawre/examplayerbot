@@ -3,6 +3,9 @@ import { SupabaseClient } from '@supabase/supabase-js';
 import { getActiveQuizzes, getQuizById, getQuestionsForQuiz, isGroupAuthorized } from '../db/queries';
 import { isGroupAdmin } from '../utils/admin';
 
+// In-memory pending selection for admins launching quiz from DM for a group
+export const pendingGroupQuizSelection = new Map<number, { groupChatId: number; groupTitle: string }>();
+
 export async function handleGroupQuizCommand(ctx: Context, supabase: SupabaseClient) {
   if (!ctx.chat) return;
   const chatType = ctx.chat.type;
@@ -52,16 +55,99 @@ export async function handleGroupQuizCommand(ctx: Context, supabase: SupabaseCli
     return;
   }
 
-  let text = `👥 *GROUP LIVE EXAMINATION BATTLE*\n`;
-  text += `━━━━━━━━━━━━━━━━━━━━━\n`;
-  text += `Select an examination module to launch live for this community group:\n`;
+  const adminId = ctx.from?.id;
+  if (!adminId) return;
+
+  const groupTitle = ctx.chat.title || 'Community Group';
+  pendingGroupQuizSelection.set(adminId, {
+    groupChatId: ctx.chat.id,
+    groupTitle,
+  });
+
+  let botUsername = 'Examplayer_bot';
+  try {
+    const me = await ctx.api.getMe();
+    botUsername = me.username;
+  } catch {}
 
   const keyboard = new InlineKeyboard();
   quizzes.forEach((quiz) => {
     keyboard.text(`🚀 ${quiz.title}`, `launch_grp:${quiz.id}`).row();
   });
 
-  await ctx.reply(text, { parse_mode: 'Markdown', reply_markup: keyboard });
+  const dmText =
+    `👥 *GROUP LIVE BATTLE CONSOLE*\n` +
+    `━━━━━━━━━━━━━━━━━━━━━\n` +
+    `🏛️ *Target Group:* ${escapeMarkdown(groupTitle)}\n\n` +
+    `Select the examination module you wish to launch live for this community:`;
+
+  let sentDm = false;
+  try {
+    await ctx.api.sendMessage(adminId, dmText, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard,
+    });
+    sentDm = true;
+  } catch {
+    sentDm = false;
+  }
+
+  const adminName = ctx.from?.first_name || 'Admin';
+
+  if (sentDm) {
+    await ctx.reply(
+      `🔒 *Admin Console:* Test selection console sent to Administrator [${escapeMarkdown(adminName)}](tg://user?id=${adminId}) in private chat.\n` +
+      `⚡ Group live battle will commence here once selected.`,
+      { parse_mode: 'Markdown' }
+    );
+  } else {
+    const deepLinkKeyboard = new InlineKeyboard().url(
+      '👉 Select Test Paper (Admin Only)',
+      `https://t.me/${botUsername}?start=launch_${ctx.chat.id}`
+    );
+    await ctx.reply(
+      `🔒 *Admin Console:* Administrator [${escapeMarkdown(adminName)}](tg://user?id=${adminId}), please tap the button below to pick the examination paper privately:`,
+      { parse_mode: 'Markdown', reply_markup: deepLinkKeyboard }
+    );
+  }
+}
+
+export async function handleStartGroupQuizFromDm(
+  ctx: Context,
+  supabase: SupabaseClient,
+  groupId: number
+) {
+  if (!ctx.from) return;
+
+  const isAuth = await isGroupAuthorized(supabase, groupId);
+  if (!isAuth) {
+    return ctx.reply('⚠️ The target community group is not authorized to host examination battles.');
+  }
+
+  if (activeGroupBattles.has(groupId)) {
+    return ctx.reply('⚠️ An active examination battle is already running in that group.');
+  }
+
+  const quizzes = await getActiveQuizzes(supabase);
+  if (!quizzes || quizzes.length === 0) {
+    return ctx.reply('⚠️ No active examinations found in the repository.');
+  }
+
+  pendingGroupQuizSelection.set(ctx.from.id, {
+    groupChatId: groupId,
+    groupTitle: 'Community Group',
+  });
+
+  const keyboard = new InlineKeyboard();
+  quizzes.forEach((quiz) => {
+    keyboard.text(`🚀 ${quiz.title}`, `launch_grp:${quiz.id}`).row();
+  });
+
+  await ctx.reply(
+    `👥 *LAUNCH GROUP LIVE BATTLE*\n━━━━━━━━━━━━━━━━━━━━━\n` +
+    `Select an examination module to launch live in your community group:`,
+    { parse_mode: 'Markdown', reply_markup: keyboard }
+  );
 }
 
 export interface GroupParticipant {
@@ -126,10 +212,63 @@ export async function handleLaunchGroupQuiz(
   supabase: SupabaseClient,
   quizId: string
 ) {
-  const chatId = ctx.chat?.id;
-  if (!chatId) return;
+  const isPrivate = ctx.chat?.type === 'private';
+  const callerId = ctx.from?.id;
+  if (!callerId) return;
 
-  // Check if caller is admin
+  let targetChatId = ctx.chat?.id;
+
+  if (isPrivate) {
+    const pending = pendingGroupQuizSelection.get(callerId);
+    if (!pending) {
+      if (ctx.callbackQuery) {
+        await ctx.answerCallbackQuery({
+          text: '⚠️ Selection session expired. Please run /groupquiz in your group.',
+          show_alert: true,
+        });
+      } else {
+        await ctx.reply('⚠️ Selection session expired. Please run /groupquiz in your group.');
+      }
+      return;
+    }
+
+    targetChatId = pending.groupChatId;
+    pendingGroupQuizSelection.delete(callerId);
+
+    if (activeGroupBattles.has(targetChatId)) {
+      if (ctx.callbackQuery) {
+        await ctx.answerCallbackQuery({
+          text: '⚠️ An active battle is already in progress in that group.',
+          show_alert: true,
+        });
+      } else {
+        await ctx.reply('⚠️ An active battle is already in progress in that group.');
+      }
+      return;
+    }
+
+    if (ctx.callbackQuery) {
+      await ctx.answerCallbackQuery({ text: 'Launching group examination...' }).catch(() => {});
+    }
+
+    try {
+      await ctx.editMessageText(
+        `✅ *LIVE BATTLE LAUNCHED!*\n━━━━━━━━━━━━━━━━━━━━━\n` +
+        `The examination battle has been triggered in *${escapeMarkdown(pending.groupTitle)}*.\n` +
+        `Countdown notice is now live in the group! 🚀`,
+        { parse_mode: 'Markdown' }
+      );
+    } catch {}
+
+    const botUsername = ctx.me?.username || 'Examplayer_bot';
+    executeGroupQuizBattle(ctx.api, supabase, targetChatId, quizId, botUsername).catch((err) => {
+      console.error('Error executing group quiz battle:', err);
+    });
+    return;
+  }
+
+  // Fallback: If launched directly inside group
+  if (!targetChatId) return;
   const userIsAdmin = await isGroupAdmin(ctx);
   if (!userIsAdmin) {
     if (ctx.callbackQuery) {
@@ -143,11 +282,10 @@ export async function handleLaunchGroupQuiz(
     return;
   }
 
-  // Prevent duplicate concurrent quizzes in the same group
-  if (activeGroupBattles.has(chatId)) {
+  if (activeGroupBattles.has(targetChatId)) {
     if (ctx.callbackQuery) {
       await ctx.answerCallbackQuery({
-        text: '⚠️ An active examination battle is already in progress in this group.',
+        text: '⚠️ An active examination battle is already in progress.',
         show_alert: true,
       });
     } else {
@@ -158,10 +296,14 @@ export async function handleLaunchGroupQuiz(
 
   if (ctx.callbackQuery) {
     await ctx.answerCallbackQuery({ text: 'Launching group examination...' }).catch(() => {});
+    // Delete the selection message in group to keep group clean
+    try {
+      await ctx.deleteMessage();
+    } catch {}
   }
 
   const botUsername = ctx.me?.username || 'Examplayer_bot';
-  executeGroupQuizBattle(ctx.api, supabase, chatId, quizId, botUsername).catch((err) => {
+  executeGroupQuizBattle(ctx.api, supabase, targetChatId, quizId, botUsername).catch((err) => {
     console.error('Error executing group quiz battle:', err);
   });
 }

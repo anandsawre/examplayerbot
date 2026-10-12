@@ -20,6 +20,16 @@ export const scheduledGroupQuizzes = new Map<number, ScheduledQuiz>();
 // In-memory cache for groups currently picking a custom date/time for a quiz
 export const pendingCustomScheduleQuiz = new Map<number, { quizId: string; adminId: number }>();
 
+function escapeMarkdown(text: string): string {
+  if (!text) return '';
+  return text
+    .replace(/_/g, '\\_')
+    .replace(/\*/g, '\\*')
+    .replace(/\[/g, '\\[')
+    .replace(/\]/g, '\\]')
+    .replace(/`/g, '\\`');
+}
+
 /**
  * Formats a Date object in Indian Standard Time (IST, UTC+5:30)
  */
@@ -138,6 +148,9 @@ export function parseIndianDateTime(input: string): { target: Date; delayMs: num
   return null;
 }
 
+// In-memory cache for admins scheduling a quiz from DM for a group
+export const pendingGroupScheduleAdminMap = new Map<number, { groupChatId: number; groupTitle: string; quizId?: string }>();
+
 /**
  * Handles /schedule command in Telegram Groups
  */
@@ -199,6 +212,84 @@ export async function handleScheduleCommand(ctx: Context, supabase: SupabaseClie
     return ctx.reply('⚠️ No active examinations found in the repository.');
   }
 
+  const adminId = ctx.from?.id;
+  if (!adminId) return;
+
+  const groupTitle = ctx.chat.title || 'Community Group';
+  pendingGroupScheduleAdminMap.set(adminId, {
+    groupChatId: chatId,
+    groupTitle,
+  });
+
+  let botUsername = 'Examplayer_bot';
+  try {
+    const me = await ctx.api.getMe();
+    botUsername = me.username;
+  } catch {}
+
+  const keyboard = new InlineKeyboard();
+  quizzes.forEach((quiz) => {
+    keyboard.text(`📝 ${quiz.title}`, `sch_pick:${quiz.id}`).row();
+  });
+
+  const dmText =
+    `⏰ *SCHEDULE GROUP EXAMINATION*\n━━━━━━━━━━━━━━━━━━━━━\n` +
+    `🏛️ *Target Group:* ${escapeMarkdown(groupTitle)}\n\n` +
+    `Select the examination module you wish to schedule for this community:`;
+
+  let sentDm = false;
+  try {
+    await ctx.api.sendMessage(adminId, dmText, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard,
+    });
+    sentDm = true;
+  } catch {
+    sentDm = false;
+  }
+
+  const adminName = ctx.from?.first_name || 'Admin';
+
+  if (sentDm) {
+    await ctx.reply(
+      `🔒 *Admin Console:* Scheduling console sent to Administrator [${escapeMarkdown(adminName)}](tg://user?id=${adminId}) in private message.\n` +
+      `⚡ Once configured, the official launch schedule notice will be posted here.`,
+      { parse_mode: 'Markdown' }
+    );
+  } else {
+    const deepLinkKeyboard = new InlineKeyboard().url(
+      '👉 Configure Schedule (Admin Only)',
+      `https://t.me/${botUsername}?start=sch_${chatId}`
+    );
+    await ctx.reply(
+      `🔒 *Admin Console:* Administrator [${escapeMarkdown(adminName)}](tg://user?id=${adminId}), please tap the button below to configure the schedule privately:`,
+      { parse_mode: 'Markdown', reply_markup: deepLinkKeyboard }
+    );
+  }
+}
+
+export async function handleStartGroupScheduleFromDm(
+  ctx: Context,
+  supabase: SupabaseClient,
+  groupId: number
+) {
+  if (!ctx.from) return;
+
+  const isAuth = await isGroupAuthorized(supabase, groupId);
+  if (!isAuth) {
+    return ctx.reply('⚠️ Target community group is not authorized.');
+  }
+
+  const quizzes = await getActiveQuizzes(supabase);
+  if (!quizzes || quizzes.length === 0) {
+    return ctx.reply('⚠️ No active examinations found in repository.');
+  }
+
+  pendingGroupScheduleAdminMap.set(ctx.from.id, {
+    groupChatId: groupId,
+    groupTitle: 'Community Group',
+  });
+
   const keyboard = new InlineKeyboard();
   quizzes.forEach((quiz) => {
     keyboard.text(`📝 ${quiz.title}`, `sch_pick:${quiz.id}`).row();
@@ -206,11 +297,8 @@ export async function handleScheduleCommand(ctx: Context, supabase: SupabaseClie
 
   await ctx.reply(
     `⏰ *SCHEDULE GROUP EXAMINATION*\n━━━━━━━━━━━━━━━━━━━━━\n` +
-    `Select the examination module to schedule for this community group:`,
-    {
-      parse_mode: 'Markdown',
-      reply_markup: keyboard,
-    }
+    `Select the examination module you wish to schedule for your community group:`,
+    { parse_mode: 'Markdown', reply_markup: keyboard }
   );
 }
 
@@ -222,12 +310,26 @@ export async function handleSchedulePickQuiz(
   supabase: SupabaseClient,
   quizId: string
 ) {
-  const userIsAdmin = await isGroupAdmin(ctx);
-  if (!userIsAdmin) {
-    return ctx.answerCallbackQuery({
-      text: '⚠️ Action restricted to Group Administrators.',
-      show_alert: true,
-    });
+  const isPrivate = ctx.chat?.type === 'private';
+  const callerId = ctx.from?.id;
+
+  if (isPrivate && callerId) {
+    const pending = pendingGroupScheduleAdminMap.get(callerId);
+    if (!pending) {
+      return ctx.answerCallbackQuery({
+        text: '⚠️ Scheduling session expired. Please run /schedule in your group.',
+        show_alert: true,
+      });
+    }
+    pending.quizId = quizId;
+  } else {
+    const userIsAdmin = await isGroupAdmin(ctx);
+    if (!userIsAdmin) {
+      return ctx.answerCallbackQuery({
+        text: '⚠️ Action restricted to Group Administrators.',
+        show_alert: true,
+      });
+    }
   }
 
   const quiz = await getQuizById(supabase, quizId);
@@ -235,7 +337,7 @@ export async function handleSchedulePickQuiz(
     return ctx.answerCallbackQuery({ text: 'Examination not found.', show_alert: true });
   }
 
-  await ctx.answerCallbackQuery();
+  await ctx.answerCallbackQuery().catch(() => {});
 
   const keyboard = new InlineKeyboard()
     .text('⏱️ 2 Mins (Express)', `sch_set:${quiz.id}:2`)
@@ -423,26 +525,21 @@ export async function handleCustomTimeCommand(ctx: Context, supabase: SupabaseCl
 }
 
 /**
- * Internal shared worker to setup in-memory timers and group announcements
+ * Core execution engine to register a group quiz schedule (used by Telegram DM/Group and Web Admin API)
  */
-async function setupGroupSchedule(
-  ctx: Context,
+export async function registerGroupScheduleDirect(
+  api: import('grammy').Api,
   supabase: SupabaseClient,
+  chatId: number,
   quizId: string,
   targetTime: Date,
-  delayMs: number
-) {
-  const chatId = ctx.chat?.id;
-  if (!chatId) return;
-
+  delayMs: number,
+  scheduledBy: string = 'Admin Console',
+  botUsername: string = 'Examplayer_bot'
+): Promise<{ success: boolean; quiz?: any; targetTime: Date; timeFormatted: string; dateFormatted: string; error?: string }> {
   const quiz = await getQuizById(supabase, quizId);
   if (!quiz) {
-    if (ctx.callbackQuery) {
-      await ctx.answerCallbackQuery({ text: 'Quiz nahi mila!', show_alert: true });
-    } else {
-      await ctx.reply('❌ Quiz nahi mila.');
-    }
-    return;
+    return { success: false, error: 'Examination not found in repository.', targetTime, timeFormatted: '', dateFormatted: '' };
   }
 
   // Cancel any existing schedule for this group
@@ -450,8 +547,6 @@ async function setupGroupSchedule(
 
   const timeFormatted = formatISTTime(targetTime);
   const dateFormatted = formatISTDate(targetTime);
-  const adminName = ctx.from?.first_name || 'Admin';
-  const botUsername = ctx.me?.username || 'Examplayer_bot';
 
   // 1-minute reminder timer if delay >= 2 mins
   let reminderTimer: NodeJS.Timeout | undefined;
@@ -459,7 +554,7 @@ async function setupGroupSchedule(
     const reminderDelayMs = delayMs - 60 * 1000;
     reminderTimer = setTimeout(async () => {
       try {
-        await ctx.api.sendMessage(
+        await api.sendMessage(
           chatId,
           `🚨 *1-MINUTE EXAMINATION NOTICE* 🚨\n━━━━━━━━━━━━━━━━━━━━━\n` +
           `Live assessment battle *${quiz.title}* will commence in exactly 60 seconds!\n` +
@@ -479,17 +574,17 @@ async function setupGroupSchedule(
     // Verify group still authorized
     const isAuth = await isGroupAuthorized(supabase, chatId);
     if (!isAuth) {
-      await ctx.api.sendMessage(chatId, '⚠️ Group authorization has expired. Scheduled examination could not be initiated.');
+      await api.sendMessage(chatId, '⚠️ Group authorization has expired. Scheduled examination could not be initiated.');
       return;
     }
 
     if (activeGroupBattles.has(chatId)) {
-      await ctx.api.sendMessage(chatId, '⚠️ An active assessment is currently running in this group. Scheduled launch skipped.');
+      await api.sendMessage(chatId, '⚠️ An active assessment is currently running in this group. Scheduled launch skipped.');
       return;
     }
 
     // Launch group quiz with pure execution engine
-    executeGroupQuizBattle(ctx.api, supabase, chatId, quizId, botUsername).catch((err) => {
+    executeGroupQuizBattle(api, supabase, chatId, quizId, botUsername).catch((err) => {
       console.error('Error in executeGroupQuizBattle from schedule timer:', err);
     });
   }, delayMs);
@@ -501,7 +596,7 @@ async function setupGroupSchedule(
     targetTime,
     timer,
     reminderTimer,
-    scheduledBy: adminName,
+    scheduledBy,
   });
 
   const remainingMins = Math.max(1, Math.round(delayMs / 60000));
@@ -513,27 +608,115 @@ async function setupGroupSchedule(
     `📅 *Scheduled Date:* ${dateFormatted}\n` +
     `🕒 *Auto-Launch Time:* ${timeFormatted} (IST)\n` +
     `⏳ *Countdown:* ~${remainingMins} Minutes\n` +
-    `👤 *Scheduled By:* ${adminName}\n\n` +
+    `👤 *Scheduled By:* ${scheduledBy}\n\n` +
     `⚡ A 1-minute alert will be dispatched prior to commencement. Group Administrators may cancel at any time via the button below or \`/cancel_schedule\`.`;
 
-  if (ctx.callbackQuery) {
-    await ctx.answerCallbackQuery({ text: `Scheduled for ${timeFormatted} IST!` }).catch(() => {});
-    try {
-      await ctx.editMessageText(announcement, {
-        parse_mode: 'Markdown',
-        reply_markup: cancelKeyboard,
-      });
-    } catch {
-      await ctx.reply(announcement, {
-        parse_mode: 'Markdown',
-        reply_markup: cancelKeyboard,
-      });
+  await api.sendMessage(chatId, announcement, {
+    parse_mode: 'Markdown',
+    reply_markup: cancelKeyboard,
+  }).catch((err) => {
+    console.error('Failed to dispatch schedule announcement in group:', err);
+  });
+
+  return { success: true, quiz, targetTime, timeFormatted, dateFormatted };
+}
+
+/**
+ * Internal shared worker to setup in-memory timers and group announcements
+ */
+async function setupGroupSchedule(
+  ctx: Context,
+  supabase: SupabaseClient,
+  quizId: string,
+  targetTime: Date,
+  delayMs: number
+) {
+  const isPrivate = ctx.chat?.type === 'private';
+  const callerId = ctx.from?.id;
+  const botUsername = ctx.me?.username || 'Examplayer_bot';
+  const adminName = ctx.from?.first_name || 'Admin';
+
+  if (isPrivate && callerId) {
+    const pending = pendingGroupScheduleAdminMap.get(callerId);
+    if (!pending) {
+      if (ctx.callbackQuery) {
+        await ctx.answerCallbackQuery({
+          text: '⚠️ Scheduling session expired. Please re-run /schedule in group.',
+          show_alert: true,
+        });
+      } else {
+        await ctx.reply('⚠️ Scheduling session expired. Please re-run /schedule in group.');
+      }
+      return;
     }
-  } else {
-    await ctx.reply(announcement, {
-      parse_mode: 'Markdown',
-      reply_markup: cancelKeyboard,
-    });
+
+    const targetChatId = pending.groupChatId;
+    const groupTitle = pending.groupTitle;
+    pendingGroupScheduleAdminMap.delete(callerId);
+
+    const res = await registerGroupScheduleDirect(
+      ctx.api,
+      supabase,
+      targetChatId,
+      quizId,
+      targetTime,
+      delayMs,
+      adminName,
+      botUsername
+    );
+
+    if (!res.success) {
+      if (ctx.callbackQuery) {
+        await ctx.answerCallbackQuery({ text: res.error || 'Schedule failed', show_alert: true });
+      } else {
+        await ctx.reply(`❌ ${res.error || 'Schedule failed'}`);
+      }
+      return;
+    }
+
+    if (ctx.callbackQuery) {
+      await ctx.answerCallbackQuery({ text: `Scheduled for ${res.timeFormatted} IST!` }).catch(() => {});
+    }
+
+    try {
+      await ctx.editMessageText(
+        `✅ *EXAMINATION SCHEDULED SUCCESSFULLY!*\n━━━━━━━━━━━━━━━━━━━━━\n` +
+        `📝 *Test:* ${res.quiz.title}\n` +
+        `🏛️ *Community Group:* ${escapeMarkdown(groupTitle)}\n` +
+        `📅 *Scheduled Date:* ${res.dateFormatted}\n` +
+        `🕒 *Auto-Launch Time:* ${res.timeFormatted} (IST)\n\n` +
+        `The official countdown announcement has been dispatched to the group. Group members can also inspect status via /scheduled.`,
+        { parse_mode: 'Markdown' }
+      );
+    } catch {
+      await ctx.reply(
+        `✅ Examination scheduled for *${escapeMarkdown(groupTitle)}* at ${res.timeFormatted} IST.`,
+        { parse_mode: 'Markdown' }
+      );
+    }
+    return;
+  }
+
+  // Fallback: If scheduled directly in group
+  const chatId = ctx.chat?.id;
+  if (!chatId) return;
+
+  const res = await registerGroupScheduleDirect(
+    ctx.api,
+    supabase,
+    chatId,
+    quizId,
+    targetTime,
+    delayMs,
+    adminName,
+    botUsername
+  );
+
+  if (ctx.callbackQuery) {
+    await ctx.answerCallbackQuery({ text: `Scheduled for ${res.timeFormatted} IST!` }).catch(() => {});
+    try {
+      await ctx.deleteMessage();
+    } catch {}
   }
 }
 
