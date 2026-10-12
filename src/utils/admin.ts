@@ -1,23 +1,97 @@
 import { Context } from 'grammy';
+import { SupabaseClient } from '@supabase/supabase-js';
 import { Env } from '../config';
+import { getSetting, setSetting } from '../db/queries';
+
+// In-memory cache of appointed administrators from database
+let appointedAdminsCache: string[] = [];
+let cacheInitialized = false;
+
+/**
+ * Syncs the appointed administrators list from the Supabase bot_settings table.
+ */
+export async function syncAdminCache(supabase: SupabaseClient): Promise<string[]> {
+  try {
+    const rawVal = await getSetting(supabase, 'db_admins', '');
+    if (rawVal) {
+      appointedAdminsCache = rawVal
+        .split(',')
+        .map((id) => id.trim())
+        .filter(Boolean);
+    } else {
+      appointedAdminsCache = [];
+    }
+  } catch (err) {
+    console.error('Failed to sync admin cache:', err);
+  }
+  cacheInitialized = true;
+  return appointedAdminsCache;
+}
+
+export function getAppointedAdmins(): string[] {
+  return [...appointedAdminsCache];
+}
+
+export function getRootAdmins(env?: Env): string[] {
+  const adminIdStr = env?.ADMIN_USER_ID || process.env.ADMIN_USER_ID || '';
+  return adminIdStr
+    .split(',')
+    .map((id) => id.trim())
+    .filter(Boolean);
+}
+
+export function isRootAdmin(ctx: Context, env?: Env): boolean {
+  const userId = ctx.from?.id;
+  if (!userId) return false;
+  return getRootAdmins(env).includes(String(userId));
+}
 
 /**
  * Strict Admin Check:
- * Only returns true if the user's Telegram ID is explicitly listed in ADMIN_USER_ID.
- * Supports single ID or comma-separated list of IDs (e.g. "12345,67890").
- * Returns FALSE for everyone else. Never allows unauthorized users!
+ * Returns true if the user's Telegram ID is in ADMIN_USER_ID (Root) OR in appointed DB admins.
  */
 export function isAdmin(ctx: Context, env?: Env): boolean {
   const userId = ctx.from?.id;
   if (!userId) return false;
 
-  const adminIdStr = env?.ADMIN_USER_ID || process.env.ADMIN_USER_ID;
-  if (!adminIdStr) {
-    return false;
+  const idStr = String(userId);
+  if (getRootAdmins(env).includes(idStr)) {
+    return true;
   }
 
-  const allowedAdmins = adminIdStr.split(',').map((id) => id.trim());
-  return allowedAdmins.includes(String(userId));
+  return appointedAdminsCache.includes(idStr);
+}
+
+/**
+ * Adds a new administrator to the database and refreshes the cache.
+ */
+export async function addAppointedAdmin(
+  supabase: SupabaseClient,
+  userId: string | number
+): Promise<boolean> {
+  const idStr = String(userId).trim();
+  if (!idStr || isNaN(Number(idStr))) return false;
+
+  if (!appointedAdminsCache.includes(idStr)) {
+    appointedAdminsCache.push(idStr);
+  }
+
+  const serialized = appointedAdminsCache.join(',');
+  return await setSetting(supabase, 'db_admins', serialized);
+}
+
+/**
+ * Removes an administrator from the database and refreshes the cache.
+ */
+export async function removeAppointedAdmin(
+  supabase: SupabaseClient,
+  userId: string | number
+): Promise<boolean> {
+  const idStr = String(userId).trim();
+  appointedAdminsCache = appointedAdminsCache.filter((id) => id !== idStr);
+
+  const serialized = appointedAdminsCache.join(',');
+  return await setSetting(supabase, 'db_admins', serialized);
 }
 
 /**
@@ -29,12 +103,8 @@ export async function isGroupAdmin(ctx: Context, env?: Env): Promise<boolean> {
   const userId = ctx.from?.id;
   if (!userId) return false;
 
-  // Bot Super Admin check
-  if (env && isAdmin(ctx, env)) return true;
-  const adminId = process.env.ADMIN_USER_ID;
-  if (adminId && adminId.split(',').map((s) => s.trim()).includes(String(userId))) {
-    return true;
-  }
+  // Bot Admin check (Root or Appointed)
+  if (isAdmin(ctx, env)) return true;
 
   try {
     const member = await ctx.api.getChatMember(ctx.chat.id, userId);

@@ -50,7 +50,12 @@ import {
   handleSetPrice,
   handleSetChannel,
   handleUnsetChannel,
+  handleListAdminsCommand,
+  handleAddAdminCommand,
+  handleRemoveAdminCommand,
+  handleAdminCallbackQuery,
 } from './handlers/adminSettings';
+import { syncAdminCache } from './utils/admin';
 import { handleDownloadPdfScorecard } from './handlers/pdfExport';
 import { handleBroadcastCommand, handleBroadcastCallback } from './handlers/broadcast';
 import {
@@ -107,6 +112,7 @@ export function createBot(env: Env): Bot {
     },
   });
   const supabase = getSupabase(env);
+  syncAdminCache(supabase).catch((err) => console.error('Failed to init admin cache:', err));
 
   // Global Error Handler
   bot.catch((err) => {
@@ -146,6 +152,9 @@ export function createBot(env: Env): Bot {
   bot.command('setprice', (ctx) => handleSetPrice(ctx, supabase, env));
   bot.command('setchannel', (ctx) => handleSetChannel(ctx, supabase, env));
   bot.command('unsetchannel', (ctx) => handleUnsetChannel(ctx, supabase, env));
+  bot.command('admins', (ctx) => handleListAdminsCommand(ctx, supabase, env));
+  bot.command('addadmin', (ctx) => handleAddAdminCommand(ctx, supabase, env));
+  bot.command('removeadmin', (ctx) => handleRemoveAdminCommand(ctx, supabase, env));
 
   // Group Authorization Commands
   bot.command('auth', (ctx) => handleAuthCommand(ctx, supabase, env));
@@ -543,6 +552,9 @@ export function createBot(env: Env): Bot {
     if (data.startsWith('fldr_imp:')) {
       const folderId = data.replace('fldr_imp:', '');
       return handlePromptFolderImport(ctx, supabase, env, folderId);
+    }
+    if (data.startsWith('adm_')) {
+      return handleAdminCallbackQuery(ctx, supabase, env);
     }
     if (data === 'import_help') {
       return handleImportHelp(ctx);
