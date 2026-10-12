@@ -47,6 +47,11 @@ export async function handleQuizzesList(
     text += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
     text += `📁 *Subfolders:* ${subFolders.length} | 📝 *Examination Papers:* ${quizzes.length}\n\n`;
 
+    if (subFolders.length === 0 && quizzes.length === 0) {
+      text += `📋 *Status:* Currently, no papers or sub-categories are listed in this directory.\n`;
+      text += `_(Is folder me filhal koi subfolder ya question paper uplabdh nahi hai.)_\n\n`;
+    }
+
     const keyboard = new InlineKeyboard();
 
     // 1. Subfolders
@@ -104,15 +109,48 @@ export async function handleQuizzesList(
   const allFoldersCount = (await getAllFolders(supabase)).length;
   if (rootFolders.length === 0 && allFoldersCount === 0) {
     if (totalQuizzes.length === 0) {
-      const text = '⚠️ Abhi koi test active nahi hai. Kripya thodi der baad check karein ya admin se contact karein.';
-      const keyboard = new InlineKeyboard().text('🔙 Main Menu', 'menu_start');
-      if (adminMode) keyboard.row().text('📁 Create First Folder', 'fldr_new:root');
+      let text = `🏛️ *EXAMPLAYER — EXAMINATION CATALOG*\n`;
+      text += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+      text += `📋 *Status:* Currently, no active mock tests or question papers are published.\n`;
+      text += `_(Filhal is catalog me koi sakriya test paper uplabdh nahi hai.)_\n\n`;
+      text += `🔹 *Candidates Ke Liye:*\n`;
+      text += `• Naye official mock tests & test series niyamit roop se update kiye jaate hain.\n`;
+      text += `• Tab tak niyamit abhyas ke liye /daily (Daily Challenge), /mistakes (Revision Vault), ya /duel (1v1 Live Battle) explore karein.\n\n`;
+      if (adminMode) {
+        text += `🔹 *Administrator Notice:*\n`;
+        text += `• Pehla examination folder/category create karein ya direct paper import karein.\n`;
+      } else {
+        text += `🔹 *Support & Updates:*\n`;
+        text += `• Naye test schedules aur updates ke liye official channel se jude rahein.\n`;
+      }
+
+      const keyboard = new InlineKeyboard();
+      if (adminMode) {
+        keyboard
+          .text('📁 Create Examination Folder', 'fldr_new:root')
+          .text('📥 Import Question Paper', 'fldr_imp:root')
+          .row();
+      } else {
+        keyboard
+          .text('🔥 Daily Practice (QOTD)', 'menu_daily_qotd')
+          .text('📒 Mistake Vault', 'menu_mistakes')
+          .row();
+      }
+      keyboard.text('🏠 Platform Dashboard', 'menu_start');
 
       if (ctx.callbackQuery) {
-        await ctx.editMessageText(text, { reply_markup: keyboard });
+        try {
+          await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup: keyboard });
+        } catch {
+          await ctx.editMessageText(text.replace(/[*_`\[\]]/g, ''), { reply_markup: keyboard });
+        }
         ctx.answerCallbackQuery().catch(() => {});
       } else {
-        await ctx.reply(text, { reply_markup: keyboard });
+        try {
+          await ctx.reply(text, { parse_mode: 'Markdown', reply_markup: keyboard });
+        } catch {
+          await ctx.reply(text.replace(/[*_`\[\]]/g, ''), { reply_markup: keyboard });
+        }
       }
       return;
     }
