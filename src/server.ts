@@ -46,7 +46,9 @@ async function main() {
 
   // 1. START HTTP SERVER IMMEDIATELY so Render health check always passes on boot!
   const server = http.createServer(async (req, res) => {
-    const urlPath = (req.url || '').split('?')[0].replace(/\/$/, '');
+    const rawUrl = req.url || '';
+    const rawPath = rawUrl.split('?')[0];
+    const urlPath = rawPath.replace(/\/$/, '');
 
     // Health check endpoint for Render & Uptime monitoring
     if (req.method === 'GET' && (urlPath === '' || urlPath === '/health')) {
@@ -80,16 +82,23 @@ async function main() {
     }
 
     // Admin Web Portal Frontend UI (Flutter Web App with SPA routing)
-    if (req.method === 'GET' && (urlPath === '/admin' || urlPath.startsWith('/admin/'))) {
-      if (urlPath === '/admin') {
-        res.writeHead(301, { 'Location': '/admin/' });
+    if (req.method === 'GET' && (rawPath === '/admin' || rawPath.startsWith('/admin/'))) {
+      if (rawPath === '/admin') {
+        const query = rawUrl.includes('?') ? '?' + rawUrl.split('?')[1] : '';
+        res.writeHead(301, { 'Location': `/admin/${query}` });
         res.end();
         return;
       }
 
       const distDir = path.join(process.cwd(), 'portal', 'dist');
-      const relPath = urlPath.replace(/^\/admin\//, '');
+      const relPath = rawPath.replace(/^\/admin\//, '');
       let filePath = path.join(distDir, relPath);
+
+      // Security: Prevent directory traversal outside distDir
+      const resolvedDist = path.resolve(distDir);
+      if (!path.resolve(filePath).startsWith(resolvedDist)) {
+        filePath = path.join(distDir, 'index.html');
+      }
 
       if (fs.existsSync(filePath) && fs.statSync(filePath).isDirectory()) {
         filePath = path.join(filePath, 'index.html');
