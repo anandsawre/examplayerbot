@@ -1,13 +1,8 @@
-import { Context, InlineKeyboard } from 'grammy';
+import { Context, InlineKeyboard, InputFile } from 'grammy';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { getGlobalLeaderboard, getQuizLeaderboard, getQuizById } from '../db/queries';
 import { formatTime } from '../services/scoring';
-import {
-  buildLeaderboardBoxTable,
-  LeaderboardTableEntry,
-  formatTableTime,
-  escapeHtml,
-} from '../services/leaderboardTable';
+import { generateLeaderboardImage, LeaderboardCardEntry } from '../services/leaderboardImage';
 
 const MEDALS = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
 
@@ -107,24 +102,24 @@ export async function handleQuizLeaderboard(
 
   if (!attempts || attempts.length === 0) {
     const emptyText =
-      `🏆 <b>OFFICIAL EXAMINATION MERIT LIST</b>\n` +
+      `🏆 *OFFICIAL EXAMINATION MERIT LIST*\n` +
       `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-      `📚 <b>Examination:</b> ${escapeHtml(quiz?.title || 'Quiz')}\n` +
-      `⚠️ <b>Marking Scheme:</b> +${quiz?.marks_per_question || 1} / -${negativeMarkPerWrong} per incorrect response\n\n` +
-      `<i>No attempts recorded yet for this examination module.</i>\n` +
-      `<i>Be the first candidate to attempt and lead the standings!</i>`;
+      `📚 *Examination:* ${escapeMarkdown(quiz?.title || 'Quiz')}\n` +
+      `⚠️ *Marking Scheme:* +${quiz?.marks_per_question || 1} / -${negativeMarkPerWrong} per incorrect response\n\n` +
+      `_No attempts recorded yet for this examination module._\n` +
+      `_Be the first candidate to attempt and lead the standings!_`;
 
     if (ctx.callbackQuery) {
-      await ctx.editMessageText(emptyText, { parse_mode: 'HTML', reply_markup: keyboard }).catch(() => {});
+      await ctx.editMessageText(emptyText, { parse_mode: 'Markdown', reply_markup: keyboard }).catch(() => {});
       await ctx.answerCallbackQuery().catch(() => {});
     } else {
-      await ctx.reply(emptyText, { parse_mode: 'HTML', reply_markup: keyboard });
+      await ctx.reply(emptyText, { parse_mode: 'Markdown', reply_markup: keyboard });
     }
     return;
   }
 
-  // Map all candidate attempts to LeaderboardTableEntry format
-  const tableEntries: LeaderboardTableEntry[] = attempts.map((att, idx) => {
+  // Map all candidate attempts to LeaderboardCardEntry format
+  const cardEntries: LeaderboardCardEntry[] = attempts.map((att, idx) => {
     const rawName = att.first_name || (att.username ? `@${att.username}` : 'Student');
     const attempted = (att.correct_count ?? 0) + (att.wrong_count ?? 0);
     const accuracy = att.accuracy_percent ?? (
@@ -139,45 +134,34 @@ export async function handleQuizLeaderboard(
       wrongCount: wrong,
       negPenalty,
       score: Number(att.score) || 0,
-      timeSeconds: att.time_taken_seconds || 0,
+      timeTakenSeconds: att.time_taken_seconds || 0,
       accuracy,
     };
   });
 
-  // Top 3 Podium Highlights
-  const medals = ['🥇', '🥈', '🥉'];
-  let podiumHtml = '';
-  tableEntries.slice(0, 3).forEach((e, idx) => {
-    podiumHtml += `${medals[idx]} <b>${escapeHtml(e.name)}</b> — <code>${e.score.toFixed(2)} pts</code> (✅ ${e.correctCount} | ❌ ${e.wrongCount} | ⏱️ ${formatTableTime(e.timeSeconds)})\n`;
-  });
+  const imgBuffer = generateLeaderboardImage(quiz?.title || 'Official Merit List', cardEntries);
 
-  // Monospace Box Table (Show up to 40 candidates in message table)
-  const displayEntries = tableEntries.slice(0, 40);
-  const tableString = buildLeaderboardBoxTable(displayEntries);
-
-  let messageHtml =
-    `🏆 <b>OFFICIAL EXAMINATION MERIT LIST</b>\n` +
+  const caption =
+    `🏆 *OFFICIAL EXAMINATION MERIT LIST*\n` +
     `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-    `📚 <b>Examination:</b> ${escapeHtml(quiz?.title || 'Quiz')}\n` +
-    `👥 <b>Total Candidates Ranked:</b> <code>${attempts.length}</code> Aspirants\n` +
-    `🎯 <b>Marking Scheme:</b> <code>+${quiz?.marks_per_question || 1}</code> / <code>-${negativeMarkPerWrong}</code> Negative Penalty\n\n` +
-    (podiumHtml ? `${podiumHtml}\n` : '') +
-    `📊 <b>SCOREBOARD TABLE:</b>\n` +
-    `<pre>\n${tableString}\n</pre>\n`;
-
-  if (tableEntries.length > 40) {
-    messageHtml += `<i>ℹ️ Displaying Top 40 of ${tableEntries.length} candidates. Download official PDF for complete roster.</i>\n\n`;
-  }
-
-  messageHtml += `Tap the button below to download your personal scorecard & solutions PDF directly in DM.`;
+    `📚 *Examination:* ${escapeMarkdown(quiz?.title || 'Quiz')}\n` +
+    `👥 *Total Candidates Ranked:* \`${attempts.length}\` Aspirants\n` +
+    `🎯 *Marking Scheme:* +${quiz?.marks_per_question || 1} / -${negativeMarkPerWrong} per incorrect response\n\n` +
+    `Tap the button below to download your personal scorecard & solutions PDF directly in DM.`;
 
   if (ctx.callbackQuery) {
-    await ctx.editMessageText(messageHtml, { parse_mode: 'HTML', reply_markup: keyboard }).catch(async () => {
-      await ctx.reply(messageHtml, { parse_mode: 'HTML', reply_markup: keyboard });
-    });
     await ctx.answerCallbackQuery().catch(() => {});
+    await ctx.replyWithPhoto(new InputFile(imgBuffer, 'leaderboard.png'), {
+      caption,
+      parse_mode: 'Markdown',
+      reply_markup: keyboard,
+    });
   } else {
-    await ctx.reply(messageHtml, { parse_mode: 'HTML', reply_markup: keyboard });
+    await ctx.replyWithPhoto(new InputFile(imgBuffer, 'leaderboard.png'), {
+      caption,
+      parse_mode: 'Markdown',
+      reply_markup: keyboard,
+    });
   }
 }
 
@@ -190,4 +174,3 @@ function escapeMarkdown(text: string): string {
     .replace(/\]/g, '\\]')
     .replace(/`/g, '\\`');
 }
-

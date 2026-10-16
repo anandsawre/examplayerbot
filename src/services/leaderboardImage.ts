@@ -23,26 +23,28 @@ export interface LeaderboardCardEntry {
   name: string;
   correctCount: number;
   wrongCount: number;
+  negPenalty?: number;
   score: number;
   timeTakenSeconds: number;
   accuracy: number;
 }
 
 export function formatDisplayTime(seconds: number): string {
+  if (!seconds || seconds <= 0) return '0s';
   if (seconds < 60) return `${Math.max(1, Math.round(seconds))}s`;
   const m = Math.floor(seconds / 60);
   const s = Math.round(seconds % 60);
   return s > 0 ? `${m}m ${s}s` : `${m}m`;
 }
 
-function cleanDisplayName(name: string): string {
+export function cleanDisplayName(name: string): string {
   if (!name) return 'Candidate';
-  let s = name.normalize('NFKD');
-  s = s.replace(/[\uE000-\uF8FF]/g, '');
-  s = s.replace(/[➳🏹➜➔➤]/g, '');
-  s = s.replace(/[\u{1F300}-\u{1FAFF}]/gu, '');
-  s = s.trim();
-  return s.length > 22 ? s.slice(0, 21) + '…' : (s || 'Candidate');
+  let s = name.normalize('NFKD')
+    .replace(/[\uE000-\uF8FF]/g, '')
+    .replace(/[^\p{L}\p{N}\s._\-@()]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return s.length > 20 ? s.slice(0, 19) + '…' : (s || 'Candidate');
 }
 
 // 1. Vector Golden Trophy for Card Header
@@ -81,7 +83,7 @@ function drawTitleTrophy(ctx: any, x: number, y: number) {
 }
 
 // 2. Vector Green Checkmark Box (✅)
-function drawGreenCheckmark(ctx: any, cx: number, cy: number, size = 20) {
+function drawGreenCheckmark(ctx: any, cx: number, cy: number, size = 19) {
   ctx.save();
   const half = size / 2;
   const x = cx - half;
@@ -103,24 +105,24 @@ function drawGreenCheckmark(ctx: any, cx: number, cy: number, size = 20) {
   ctx.fill();
 
   ctx.strokeStyle = '#FFFFFF';
-  ctx.lineWidth = 2.5;
+  ctx.lineWidth = 2.4;
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
   ctx.beginPath();
-  ctx.moveTo(x + 5, y + 10);
-  ctx.lineTo(x + 8.5, y + 14);
-  ctx.lineTo(x + 15, y + 6.5);
+  ctx.moveTo(x + 4.5, y + 9.5);
+  ctx.lineTo(x + 8, y + 13.5);
+  ctx.lineTo(x + 14.5, y + 6);
   ctx.stroke();
 
   ctx.restore();
 }
 
 // 3. Vector Red Cross (❌)
-function drawRedCross(ctx: any, cx: number, cy: number, size = 18) {
+function drawRedCross(ctx: any, cx: number, cy: number, size = 17) {
   ctx.save();
   const half = size / 2;
   ctx.strokeStyle = '#DC2626';
-  ctx.lineWidth = 3.5;
+  ctx.lineWidth = 3.2;
   ctx.lineCap = 'round';
 
   ctx.beginPath();
@@ -189,25 +191,43 @@ function drawMedalBadge(ctx: any, cx: number, cy: number, rank: number) {
   ctx.restore();
 }
 
+function wrapTitle(title: string, maxCharsPerLine = 42): string[] {
+  if (title.length <= maxCharsPerLine) return [title];
+  const words = title.split(' ');
+  const lines: string[] = [];
+  let current = '';
+  for (const w of words) {
+    if ((current + ' ' + w).trim().length <= maxCharsPerLine) {
+      current = (current + ' ' + w).trim();
+    } else {
+      if (current) lines.push(current);
+      current = w;
+    }
+  }
+  if (current) lines.push(current);
+  return lines.slice(0, 2);
+}
+
 /**
- * Generates a high-resolution, professional Telegram-compatible Leaderboard Card PNG image.
- * Matches official quiz bot scoreboard tables with 7 columns:
- * [# (Medal) | Name | ✅ | ❌ | Score | Time | %]
+ * Generates the official Telegram Leaderboard Card Image.
+ * Matches user's exact reference sample with 8 complete performance columns:
+ * [# (Ribbon Medal) | Name | ✅ (Sahi) | ❌ (Galt) | -Neg (Negative) | Score (Obtained) | Time (Time Taken) | % (Accuracy)]
  */
 export function generateLeaderboardImage(
   title: string,
   entries: LeaderboardCardEntry[]
 ): Buffer {
-  const width = 680;
-  const paddingX = 24;
-  const tableWidth = width - paddingX * 2; // 632px
+  const width = 640;
+  const paddingX = 18;
+  const tableWidth = width - paddingX * 2; // 604px
 
-  const titleHeight = 50;
-  const headerHeight = 42;
-  const rowHeight = 44;
-  const bottomPadding = 24;
+  const titleLines = wrapTitle(title, 42);
+  const titleHeight = titleLines.length > 1 ? 62 : 44;
+  const headerHeight = 40;
+  const rowHeight = 42;
+  const bottomPadding = 18;
 
-  // Show up to 50 entries cleanly on the image
+  // Show up to 50 participants cleanly on the card
   const displayEntries = entries.slice(0, 50);
   const tableHeight = headerHeight + Math.max(1, displayEntries.length) * rowHeight;
   const height = paddingX + titleHeight + tableHeight + bottomPadding;
@@ -215,24 +235,27 @@ export function generateLeaderboardImage(
   const canvas = createCanvas(width, height);
   const ctx = canvas.getContext('2d');
 
-  // 1. Background - Clean white card
+  // 1. Pure White Card Background
   ctx.fillStyle = '#FFFFFF';
   ctx.fillRect(0, 0, width, height);
 
-  // 2. Title with Vector Golden Trophy
+  // 2. Title with Golden Trophy
   drawTitleTrophy(ctx, paddingX, paddingX + 2);
-
   ctx.fillStyle = '#0F172A';
-  ctx.font = 'bold 18px DevaBold, -apple-system, sans-serif';
+  ctx.font = 'bold 16px DevaBold, sans-serif';
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
 
-  const cleanTitle = title.length > 50 ? title.slice(0, 48) + '…' : title;
-  ctx.fillText(cleanTitle, paddingX + 32, paddingX + 16);
+  if (titleLines.length === 1) {
+    ctx.fillText(titleLines[0], paddingX + 28, paddingX + 14);
+  } else {
+    ctx.fillText(titleLines[0], paddingX + 28, paddingX + 12);
+    ctx.fillText(titleLines[1], paddingX + 28, paddingX + 34);
+  }
 
-  // 3. Table Column Dimensions: [#, Name, ✅, ❌, Score, Time, %]
-  // Total = 48 + 230 + 54 + 54 + 82 + 90 + 74 = 632
-  const colWidths = [48, 230, 54, 54, 82, 90, 74];
+  // 3. Table Column Widths: [#, Name, ✅, ❌, -Neg, Score, Time, %]
+  // Total: 42 + 190 + 48 + 48 + 56 + 74 + 84 + 62 = 604px
+  const colWidths = [42, 190, 48, 48, 56, 74, 84, 62];
   const colX: number[] = [];
   let curX = paddingX;
   for (const w of colWidths) {
@@ -243,21 +266,22 @@ export function generateLeaderboardImage(
   const tableTop = paddingX + titleHeight;
 
   // Outer Border
-  ctx.strokeStyle = '#E5E7EB';
+  ctx.strokeStyle = '#D1D5DB';
   ctx.lineWidth = 1;
   ctx.strokeRect(paddingX, tableTop, tableWidth, tableHeight);
 
-  // Header Row Background
-  ctx.fillStyle = '#F8FAFC';
+  // Header Row Background (Subtle light grey)
+  ctx.fillStyle = '#F3F4F6';
   ctx.fillRect(paddingX, tableTop, tableWidth, headerHeight);
 
   // Header Bottom Line
+  ctx.strokeStyle = '#D1D5DB';
   ctx.beginPath();
   ctx.moveTo(paddingX, tableTop + headerHeight);
   ctx.lineTo(paddingX + tableWidth, tableTop + headerHeight);
   ctx.stroke();
 
-  // Vertical Column Dividers in Table
+  // Vertical Dividers
   for (let c = 1; c < colX.length; c++) {
     ctx.beginPath();
     ctx.moveTo(colX[c], tableTop);
@@ -265,37 +289,40 @@ export function generateLeaderboardImage(
     ctx.stroke();
   }
 
-  // Draw Header Labels
+  // Header Labels
   const headerY = tableTop + headerHeight / 2;
+  ctx.font = 'bold 14px DevaBold, sans-serif';
+  ctx.fillStyle = '#374151';
+  ctx.textBaseline = 'middle';
 
   // #
-  ctx.font = 'bold 15px DevaBold, sans-serif';
-  ctx.fillStyle = '#374151';
   ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
   ctx.fillText('#', colX[0] + colWidths[0] / 2, headerY);
 
   // Name
   ctx.textAlign = 'left';
-  ctx.fillText('Name', colX[1] + 12, headerY);
+  ctx.fillText('Name', colX[1] + 10, headerY);
 
   // ✅ (Vector Green Box)
-  drawGreenCheckmark(ctx, colX[2] + colWidths[2] / 2, headerY, 20);
+  drawGreenCheckmark(ctx, colX[2] + colWidths[2] / 2, headerY, 19);
 
   // ❌ (Vector Red Cross)
   drawRedCross(ctx, colX[3] + colWidths[3] / 2, headerY, 17);
 
+  // -Neg
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#DC2626';
+  ctx.fillText('-Neg', colX[4] + colWidths[4] / 2, headerY);
+
   // Score
   ctx.fillStyle = '#374151';
-  ctx.font = 'bold 15px DevaBold, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.fillText('Score', colX[4] + colWidths[4] / 2, headerY);
+  ctx.fillText('Score', colX[5] + colWidths[5] / 2, headerY);
 
   // Time
-  ctx.fillText('Time', colX[5] + colWidths[5] / 2, headerY);
+  ctx.fillText('Time', colX[6] + colWidths[6] / 2, headerY);
 
   // %
-  ctx.fillText('%', colX[6] + colWidths[6] / 2, headerY);
+  ctx.fillText('%', colX[7] + colWidths[7] / 2, headerY);
 
   // If no entries, draw empty state
   if (displayEntries.length === 0) {
@@ -307,16 +334,10 @@ export function generateLeaderboardImage(
     return canvas.toBuffer('image/png');
   }
 
-  // 4. Draw Data Rows
+  // 4. Data Rows
   displayEntries.forEach((entry, idx) => {
     const rowTop = tableTop + headerHeight + idx * rowHeight;
     const rowCenterY = rowTop + rowHeight / 2;
-
-    // Alternating row background
-    if (idx % 2 === 1) {
-      ctx.fillStyle = '#F9FAFB';
-      ctx.fillRect(paddingX + 1, rowTop, tableWidth - 2, rowHeight);
-    }
 
     // Horizontal Row Divider
     ctx.strokeStyle = '#E5E7EB';
@@ -325,47 +346,51 @@ export function generateLeaderboardImage(
     ctx.lineTo(paddingX + tableWidth, rowTop + rowHeight);
     ctx.stroke();
 
-    // Col 0: Rank / Medal
+    // Col 0: Rank / Ribbon Medal Badge
     if (entry.rank >= 1 && entry.rank <= 3) {
       drawMedalBadge(ctx, colX[0] + colWidths[0] / 2, rowCenterY, entry.rank);
     } else {
-      ctx.font = 'bold 14px sans-serif';
-      ctx.fillStyle = '#374151';
+      ctx.font = 'bold 14px DevaBold, sans-serif';
+      ctx.fillStyle = '#4B5563';
       ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
       ctx.fillText(String(entry.rank), colX[0] + colWidths[0] / 2, rowCenterY);
     }
 
     // Col 1: Name
     ctx.textAlign = 'left';
-    ctx.textBaseline = 'middle';
     ctx.fillStyle = '#111827';
     ctx.font = 'bold 14px DevaBold, sans-serif';
-    ctx.fillText(cleanDisplayName(entry.name), colX[1] + 12, rowCenterY);
+    ctx.fillText(cleanDisplayName(entry.name), colX[1] + 10, rowCenterY);
 
-    // Col 2: ✅ Correct
+    // Col 2: ✅ (Kitna Sahi)
     ctx.textAlign = 'center';
+    ctx.font = 'bold 14px DevaBold, sans-serif';
     ctx.fillStyle = '#1F2937';
-    ctx.font = '14px sans-serif';
     ctx.fillText(String(entry.correctCount), colX[2] + colWidths[2] / 2, rowCenterY);
 
-    // Col 3: ❌ Wrong
+    // Col 3: ❌ (Kitna Galt)
     ctx.fillText(String(entry.wrongCount), colX[3] + colWidths[3] / 2, rowCenterY);
 
-    // Col 4: Score
-    ctx.font = 'bold 14px sans-serif';
-    ctx.fillStyle = '#111827';
-    ctx.fillText(entry.score.toFixed(2), colX[4] + colWidths[4] / 2, rowCenterY);
+    // Col 4: -Neg (Kitna Negative)
+    const negVal = entry.negPenalty || 0;
+    ctx.fillStyle = negVal > 0 ? '#DC2626' : '#6B7280';
+    const negText = negVal > 0 ? ('-' + negVal.toFixed(1)) : '0.0';
+    ctx.fillText(negText, colX[4] + colWidths[4] / 2, rowCenterY);
 
-    // Col 5: Time
-    ctx.font = '13.5px sans-serif';
+    // Col 5: Score (Obtained Marks)
+    ctx.font = 'bold 14px DevaBold, sans-serif';
+    ctx.fillStyle = '#111827';
+    ctx.fillText(entry.score.toFixed(2), colX[5] + colWidths[5] / 2, rowCenterY);
+
+    // Col 6: Time (Time Taken)
+    ctx.font = 'bold 13.5px DevaBold, sans-serif';
     ctx.fillStyle = '#374151';
-    ctx.fillText(formatDisplayTime(entry.timeTakenSeconds), colX[5] + colWidths[5] / 2, rowCenterY);
+    ctx.fillText(formatDisplayTime(entry.timeTakenSeconds), colX[6] + colWidths[6] / 2, rowCenterY);
 
-    // Col 6: %
-    ctx.font = '14px sans-serif';
+    // Col 7: % (Accuracy)
+    ctx.font = 'bold 13.5px DevaBold, sans-serif';
     ctx.fillStyle = '#111827';
-    ctx.fillText(`${Math.round(entry.accuracy)}%`, colX[6] + colWidths[6] / 2, rowCenterY);
+    ctx.fillText(Math.round(entry.accuracy) + '%', colX[7] + colWidths[7] / 2, rowCenterY);
   });
 
   return canvas.toBuffer('image/png');

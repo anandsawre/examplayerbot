@@ -1,15 +1,10 @@
-import { Context, InlineKeyboard } from 'grammy';
+import { Context, InlineKeyboard, InputFile } from 'grammy';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { getActiveQuizzes, getQuizById, getQuestionsForQuiz, isGroupAuthorized, recordQuizAttempt } from '../db/queries';
 import { isGroupAdmin } from '../utils/admin';
 import { recentUserAttempts } from './pdfExport';
 import { UserAnswerRecord } from '../services/pdfGenerator';
-import {
-  buildLeaderboardBoxTable,
-  LeaderboardTableEntry,
-  formatTableTime,
-  escapeHtml,
-} from '../services/leaderboardTable';
+import { generateLeaderboardImage, LeaderboardCardEntry } from '../services/leaderboardImage';
 
 // In-memory pending selection for admins launching quiz from DM for a group
 export const pendingGroupQuizSelection = new Map<number, { groupChatId: number; groupTitle: string }>();
@@ -456,13 +451,15 @@ export async function executeGroupQuizBattle(
   const negMarksPerWrong = Number(quiz.negative_marks) || 0.5;
   const contestantsCount = finalBattle ? finalBattle.participants.size : 0;
 
-  let podiumHtml = '';
-  let tableString = '';
-  let participantsList: LeaderboardTableEntry[] = [];
+  const finishKeyboard = new InlineKeyboard()
+    .url('📄 Download Official PDF (in DM)', `https://t.me/${botUsername}?start=pdf_${quiz.id}`)
+    .row()
+    .url('👤 Candidate Profile & Analytics', `https://t.me/${botUsername}?start=profile`)
+    .url('📝 Attempt Solo in Direct Message', `https://t.me/${botUsername}?start=quiz_${quiz.id}`);
 
   if (finalBattle && contestantsCount > 0) {
     // 1. Calculate detailed scores with positive marks and negative penalty
-    participantsList = Array.from(finalBattle.participants.values()).map((p) => {
+    const participantsList = Array.from(finalBattle.participants.values()).map((p) => {
       const positive = p.correctCount * marksPerQ;
       const negative = p.wrongCount * negMarksPerWrong;
       const score = Math.max(0, Math.round((positive - negative) * 100) / 100);
@@ -470,49 +467,38 @@ export async function executeGroupQuizBattle(
       const accuracy = totalAnswered > 0 ? Math.round((p.correctCount / totalAnswered) * 100) : 0;
       const timeSeconds = Math.round((p.totalTimeMs || (timeLimit * totalAnswered * 1000)) / 1000);
       return {
-        rank: 0,
-        name: p.name || 'Candidate',
-        correctCount: p.correctCount,
-        wrongCount: p.wrongCount,
-        negPenalty: Math.round(negative * 100) / 100,
+        ...p,
         score,
-        timeSeconds,
         accuracy,
+        negPenalty: Math.round(negative * 100) / 100,
+        timeSeconds,
       };
     });
 
     // 2. Rank all participants: highest score first, then highest correct, then fastest time
     participantsList.sort((a, b) => b.score - a.score || b.correctCount - a.correctCount || a.timeSeconds - b.timeSeconds);
-    participantsList.forEach((p, idx) => {
-      p.rank = idx + 1;
-    });
 
-    // 3. Top 3 Podium Highlights
-    const medals = ['🥇', '🥈', '🥉'];
-    participantsList.slice(0, 3).forEach((p, idx) => {
-      podiumHtml += `${medals[idx]} <b>${escapeHtml(p.name)}</b> — <code>${p.score.toFixed(2)} pts</code> (✅ ${p.correctCount}/${questions.length} | ❌ ${p.wrongCount} | ⏱️ ${formatTableTime(p.timeSeconds)})\n`;
-    });
+    const cardEntries: LeaderboardCardEntry[] = participantsList.map((p, idx) => ({
+      rank: idx + 1,
+      name: p.name || 'Candidate',
+      correctCount: p.correctCount,
+      wrongCount: p.wrongCount,
+      negPenalty: p.negPenalty,
+      score: p.score,
+      timeTakenSeconds: p.timeSeconds,
+      accuracy: p.accuracy,
+    }));
 
-    // 4. Generate Monospace Box Table (up to 40 candidates in message table)
-    const displayEntries = participantsList.slice(0, 40);
-    tableString = buildLeaderboardBoxTable(displayEntries);
-
-    // 5. Cache candidate attempt results for instant personal PDF generation and record in database
+    // Cache candidate attempt results for instant personal PDF generation and record in database
     const maxScore = questions.length * marksPerQ;
-    for (const p of Array.from(finalBattle.participants.values())) {
-      const positive = p.correctCount * marksPerQ;
-      const negative = p.wrongCount * negMarksPerWrong;
-      const score = Math.max(0, Math.round((positive - negative) * 100) / 100);
-      const totalAnswered = p.correctCount + p.wrongCount;
-      const accuracy = totalAnswered > 0 ? Math.round((p.correctCount / totalAnswered) * 100) : 0;
-      const timeSeconds = Math.round((p.totalTimeMs || (timeLimit * totalAnswered * 1000)) / 1000);
-      const skippedCount = Math.max(0, questions.length - totalAnswered);
-      const percentage = maxScore > 0 ? Math.round((score / maxScore) * 100) : 0;
+    for (const p of participantsList) {
+      const skippedCount = Math.max(0, questions.length - (p.correctCount + p.wrongCount));
+      const percentage = maxScore > 0 ? Math.round((p.score / maxScore) * 100) : 0;
 
       let remark = 'Completed';
-      if (accuracy >= 90) remark = 'Outstanding Mastery';
-      else if (accuracy >= 75) remark = 'Excellent Performance';
-      else if (accuracy >= 50) remark = 'Good Attempt';
+      if (p.accuracy >= 90) remark = 'Outstanding Mastery';
+      else if (p.accuracy >= 75) remark = 'Excellent Performance';
+      else if (p.accuracy >= 50) remark = 'Good Attempt';
       else remark = 'Needs Thorough Revision';
 
       recentUserAttempts.set(p.userId, {
@@ -522,18 +508,17 @@ export async function executeGroupQuizBattle(
           correctCount: p.correctCount,
           wrongCount: p.wrongCount,
           skippedCount,
-          finalScore: score,
+          finalScore: p.score,
           maxScore,
           percentage,
-          accuracy,
-          timeTakenSeconds: timeSeconds,
+          accuracy: p.accuracy,
+          timeTakenSeconds: p.timeSeconds,
           remark,
         },
         answers: p.answers || [],
         completedAt: new Date(),
       });
 
-      // Save attempt to Supabase quiz_attempts asynchronously
       recordQuizAttempt(supabase, {
         user_id: p.userId,
         quiz_id: quiz.id,
@@ -541,49 +526,47 @@ export async function executeGroupQuizBattle(
         correct_count: p.correctCount,
         wrong_count: p.wrongCount,
         skipped_count: skippedCount,
-        score,
-        accuracy_percent: accuracy,
-        time_taken_seconds: timeSeconds,
+        score: p.score,
+        accuracy_percent: p.accuracy,
+        time_taken_seconds: p.timeSeconds,
       }).catch((err) => console.error('Error recording battle attempt:', err));
     }
-  }
 
-  const finishKeyboard = new InlineKeyboard()
-    .url('📄 Download Official PDF (in DM)', `https://t.me/${botUsername}?start=pdf_${quiz.id}`)
-    .row()
-    .url('👤 Candidate Profile & Analytics', `https://t.me/${botUsername}?start=profile`)
-    .url('📝 Attempt Solo in Direct Message', `https://t.me/${botUsername}?start=quiz_${quiz.id}`);
+    const imgBuffer = generateLeaderboardImage(quiz.title, cardEntries);
 
-  let completionMessage =
-    `🎓 <b>EXAMPLAYER LIVE BATTLE — OFFICIAL RESULT</b>\n` +
-    `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-    `📚 <b>Exam:</b> ${escapeHtml(quiz.title)}\n` +
-    `❓ <b>Questions:</b> <code>${questions.length}</code> | ⏱️ <b>Time Limit:</b> <code>${timeLimit}s</code>\n` +
-    `🎯 <b>Marking Scheme:</b> <code>+${marksPerQ}</code> / <code>-${negMarksPerWrong}</code> Negative Penalty\n` +
-    `👥 <b>Total Participants Ranked:</b> <code>${contestantsCount}</code> Aspirants\n\n`;
+    const completionMessage =
+      `🎓 *EXAMPLAYER LIVE BATTLE — OFFICIAL RESULT*\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+      `📚 *Exam:* ${escapeMarkdown(quiz.title)}\n` +
+      `❓ *Questions:* \`${questions.length}\` | ⏱️ *Time Limit:* \`${timeLimit}s\`\n` +
+      `🎯 *Marking Scheme:* \`+${marksPerQ}\` / \`-${negMarksPerWrong}\` Negative Penalty\n` +
+      `👥 *Total Participants Ranked:* \`${contestantsCount}\` Aspirants\n\n` +
+      `Tap the button below to download your personal scorecard & solutions PDF directly in DM.`;
 
-  if (contestantsCount === 0) {
-    completionMessage += `<i>No candidate attempts were recorded during this session.</i>`;
+    await api.sendPhoto(chatId, new InputFile(imgBuffer, 'leaderboard.png'), {
+      caption: completionMessage,
+      parse_mode: 'Markdown',
+      reply_markup: finishKeyboard,
+    }).catch(async (err) => {
+      console.error('Failed to send leaderboard photo, falling back to text:', err);
+      await api.sendMessage(chatId, completionMessage, {
+        parse_mode: 'Markdown',
+        reply_markup: finishKeyboard,
+      });
+    });
   } else {
-    if (podiumHtml) {
-      completionMessage += `${podiumHtml}\n`;
-    }
-    completionMessage +=
-      `📊 <b>OFFICIAL BATTLE SCOREBOARD:</b>\n` +
-      `<pre>\n${tableString}\n</pre>\n`;
-
-    if (participantsList.length > 40) {
-      completionMessage += `<i>ℹ️ Displaying Top 40 of ${participantsList.length} candidates. Download official PDF for complete roster.</i>\n\n`;
-    }
-    completionMessage += `Tap the button below to download your personal scorecard & solutions PDF directly in DM.`;
+    const emptyMsg =
+      `🎓 *EXAMPLAYER LIVE BATTLE — OFFICIAL RESULT*\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+      `📚 *Exam:* ${escapeMarkdown(quiz.title)}\n\n` +
+      `_No candidate attempts were recorded during this session._`;
+    await api.sendMessage(chatId, emptyMsg, {
+      parse_mode: 'Markdown',
+      reply_markup: finishKeyboard,
+    }).catch((err) => {
+      console.error('Failed to send group completion message:', err);
+    });
   }
-
-  await api.sendMessage(chatId, completionMessage, {
-    parse_mode: 'HTML',
-    reply_markup: finishKeyboard,
-  }).catch((err) => {
-    console.error('Failed to send group completion message:', err);
-  });
 }
 
 /**
