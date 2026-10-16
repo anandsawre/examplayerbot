@@ -261,6 +261,24 @@ export async function recordQuizAttempt(
   return data;
 }
 
+export async function getUserLatestAttempt(
+  supabase: SupabaseClient,
+  userId: number,
+  quizId: string
+): Promise<QuizAttempt | null> {
+  const { data, error } = await supabase
+    .from('quiz_attempts')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('quiz_id', quizId)
+    .order('completed_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error || !data) return null;
+  return data;
+}
+
 export async function getQuizLeaderboard(
   supabase: SupabaseClient,
   quizId: string,

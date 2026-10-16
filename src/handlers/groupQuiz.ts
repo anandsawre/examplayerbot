@@ -1,7 +1,9 @@
 import { Context, InlineKeyboard } from 'grammy';
 import { SupabaseClient } from '@supabase/supabase-js';
-import { getActiveQuizzes, getQuizById, getQuestionsForQuiz, isGroupAuthorized } from '../db/queries';
+import { getActiveQuizzes, getQuizById, getQuestionsForQuiz, isGroupAuthorized, recordQuizAttempt } from '../db/queries';
 import { isGroupAdmin } from '../utils/admin';
+import { recentUserAttempts } from './pdfExport';
+import { UserAnswerRecord } from '../services/pdfGenerator';
 
 // In-memory pending selection for admins launching quiz from DM for a group
 export const pendingGroupQuizSelection = new Map<number, { groupChatId: number; groupTitle: string }>();
@@ -156,6 +158,7 @@ export interface GroupParticipant {
   username?: string;
   correctCount: number;
   wrongCount: number;
+  answers: UserAnswerRecord[];
 }
 
 export interface GroupQuizBattle {
@@ -163,6 +166,7 @@ export interface GroupQuizBattle {
   quizId: string;
   currentPollId?: string;
   currentCorrectIndex: number;
+  currentQuestionId?: string;
   participants: Map<number, GroupParticipant>;
   isCancelled?: boolean;
 }
@@ -196,7 +200,7 @@ export function handleGroupPollAnswer(pollAnswer: any) {
 
   let participant = battle.participants.get(userId);
   if (!participant) {
-    participant = { userId, name, username, correctCount: 0, wrongCount: 0 };
+    participant = { userId, name, username, correctCount: 0, wrongCount: 0, answers: [] };
     battle.participants.set(userId, participant);
   }
 
@@ -204,6 +208,14 @@ export function handleGroupPollAnswer(pollAnswer: any) {
     participant.correctCount++;
   } else if (selectedOption !== -1) {
     participant.wrongCount++;
+  }
+
+  if (battle.currentQuestionId) {
+    participant.answers.push({
+      question_id: battle.currentQuestionId,
+      selected_option_index: selectedOption,
+      is_correct: isCorrect,
+    });
   }
 }
 
@@ -374,6 +386,7 @@ export async function executeGroupQuizBattle(
     let sentPollMessage: any = null;
     try {
       battle.currentCorrectIndex = q.correct_option_index;
+      battle.currentQuestionId = q.id;
 
       sentPollMessage = await api.sendPoll(chatId, pollQuestion, cleanOptions, {
         type: 'quiz',
@@ -475,12 +488,55 @@ export async function executeGroupQuizBattle(
     });
 
     meritListSection = `\n\n${podiumText}\n📊 *OFFICIAL BATTLE SCOREBOARD:*\n\`\`\`\n${table}\`\`\``;
+
+    // Cache candidate attempt results for instant personal PDF generation and record in database
+    const maxScore = questions.length * marksPerQ;
+    for (const p of participantsList) {
+      const skippedCount = Math.max(0, questions.length - (p.correctCount + p.wrongCount));
+      const percentage = maxScore > 0 ? Math.round((p.score / maxScore) * 100) : 0;
+      let remark = 'Completed';
+      if (p.accuracy >= 90) remark = 'Outstanding Mastery';
+      else if (p.accuracy >= 75) remark = 'Excellent Performance';
+      else if (p.accuracy >= 50) remark = 'Good Attempt';
+      else remark = 'Needs Thorough Revision';
+
+      recentUserAttempts.set(p.userId, {
+        quizId: quiz.id,
+        result: {
+          totalQuestions: questions.length,
+          correctCount: p.correctCount,
+          wrongCount: p.wrongCount,
+          skippedCount,
+          finalScore: p.score,
+          maxScore,
+          percentage,
+          accuracy: p.accuracy,
+          timeTakenSeconds: timeLimit * questions.length,
+          remark,
+        },
+        answers: p.answers || [],
+        completedAt: new Date(),
+      });
+
+      // Save attempt to Supabase quiz_attempts asynchronously
+      recordQuizAttempt(supabase, {
+        user_id: p.userId,
+        quiz_id: quiz.id,
+        total_questions: questions.length,
+        correct_count: p.correctCount,
+        wrong_count: p.wrongCount,
+        skipped_count: skippedCount,
+        score: p.score,
+        accuracy_percent: p.accuracy,
+        time_taken_seconds: timeLimit * questions.length,
+      }).catch((err) => console.error('Error recording battle attempt:', err));
+    }
   } else {
     meritListSection = `\n\n_No candidate attempts were recorded during this session._`;
   }
 
   const finishKeyboard = new InlineKeyboard()
-    .text('📄 Download Official PDF Report & Solutions', `pdf_scorecard:${quiz.id}`)
+    .url('📄 Download Official PDF (in DM)', `https://t.me/${botUsername}?start=pdf_${quiz.id}`)
     .row()
     .url('👤 Candidate Profile & Analytics', `https://t.me/${botUsername}?start=profile`)
     .url('📝 Attempt Solo in Direct Message', `https://t.me/${botUsername}?start=quiz_${quiz.id}`);

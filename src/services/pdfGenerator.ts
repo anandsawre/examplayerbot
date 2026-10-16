@@ -278,40 +278,112 @@ export async function generateScorecardPdf(
 
       doc.y = infoBoxY + 66;
 
-      // ================= 3. PERFORMANCE SUMMARY (IF RESULT PROVIDED) =================
+      // ================= 3. PERFORMANCE SUMMARY (SCORECARD & MARKS BREAKDOWN) =================
       if (result) {
         const perfBoxY = doc.y;
-        doc.rect(36, perfBoxY, contentWidth, 50)
-          .fillAndStroke('#EEF2FF', '#C7D2FE');
+        const perfBoxH = 58;
+        doc.roundedRect(36, perfBoxY, contentWidth, perfBoxH, 4)
+          .fillAndStroke('#F8FAFC', '#94A3B8');
+
+        // Sub-header bar for Performance Summary
+        doc.roundedRect(36, perfBoxY, contentWidth, 16, 4).fill('#1E293B');
+        doc.fillColor('#FFFFFF').font(boldFont).fontSize(8)
+          .text('OFFICIAL CANDIDATE SCORECARD & EVALUATION DOSSIER', 46, perfBoxY + 4);
+
+        const colW = contentWidth / 5;
+        const metricY = perfBoxY + 18;
+
+        // Vertical separators
+        for (let c = 1; c < 5; c++) {
+          const divX = 36 + colW * c;
+          doc.moveTo(divX, metricY).lineTo(divX, perfBoxY + perfBoxH - 4)
+            .strokeColor('#E2E8F0').lineWidth(0.75).stroke();
+        }
+
+        // Col 1: Correct Responses
+        const posMarks = (result.correctCount * Number(quiz.marks_per_question)).toFixed(1);
+        doc.fillColor('#15803D').font(boldFont).fontSize(7)
+          .text('CORRECT (सही)', 36, metricY + 2, { width: colW, align: 'center' });
+        doc.fillColor('#16A34A').font(boldFont).fontSize(13)
+          .text(`+${result.correctCount}`, 36, metricY + 11, { width: colW, align: 'center' });
+        doc.fillColor('#15803D').font(regularFont).fontSize(6.5)
+          .text(`+${posMarks} Marks`, 36, metricY + 26, { width: colW, align: 'center' });
+
+        // Col 2: Incorrect Responses
+        const negPenalty = (result.wrongCount * Number(quiz.negative_marks)).toFixed(1);
+        doc.fillColor('#B91C1C').font(boldFont).fontSize(7)
+          .text('INCORRECT (गलत)', 36 + colW, metricY + 2, { width: colW, align: 'center' });
+        doc.fillColor('#DC2626').font(boldFont).fontSize(13)
+          .text(`-${result.wrongCount}`, 36 + colW, metricY + 11, { width: colW, align: 'center' });
+        doc.fillColor('#B91C1C').font(regularFont).fontSize(6.5)
+          .text(`-${negPenalty} Negative`, 36 + colW, metricY + 26, { width: colW, align: 'center' });
+
+        // Col 3: Skipped / Unattempted
+        doc.fillColor('#475569').font(boldFont).fontSize(7)
+          .text('SKIPPED (छोड़े)', 36 + colW * 2, metricY + 2, { width: colW, align: 'center' });
+        doc.fillColor('#64748B').font(boldFont).fontSize(13)
+          .text(`${result.skippedCount}`, 36 + colW * 2, metricY + 11, { width: colW, align: 'center' });
+        doc.fillColor('#64748B').font(regularFont).fontSize(6.5)
+          .text('0.0 Penalty', 36 + colW * 2, metricY + 26, { width: colW, align: 'center' });
+
+        // Col 4: Obtained Marks (प्राप्तांक) & Total Marks (पूर्णांक)
+        doc.fillColor('#1E3A8A').font(boldFont).fontSize(7)
+          .text('OBTAINED MARKS (प्राप्तांक)', 36 + colW * 3, metricY + 2, { width: colW, align: 'center' });
+        doc.fillColor('#1E40AF').font(boldFont).fontSize(12)
+          .text(`${result.finalScore} / ${result.maxScore}`, 36 + colW * 3, metricY + 12, { width: colW, align: 'center' });
+        doc.fillColor('#1E3A8A').font(boldFont).fontSize(6.5)
+          .text(`${result.percentage}% Total Marks`, 36 + colW * 3, metricY + 26, { width: colW, align: 'center' });
+
+        // Col 5: Accuracy & Status
+        doc.fillColor('#0F766E').font(boldFont).fontSize(7)
+          .text('ACCURACY & STATUS', 36 + colW * 4, metricY + 2, { width: colW, align: 'center' });
+        doc.fillColor('#0D9488').font(boldFont).fontSize(13)
+          .text(`${result.accuracy}%`, 36 + colW * 4, metricY + 11, { width: colW, align: 'center' });
+        const cleanRemark = cleanPdfText(result.remark.replace(/^[^\w\s]+/, '').trim()).slice(0, 18);
+        doc.fillColor('#0F766E').font(regularFont).fontSize(6.5)
+          .text(cleanRemark || 'Qualified', 36 + colW * 4, metricY + 26, { width: colW, align: 'center' });
+
+        doc.y = perfBoxY + perfBoxH + 6;
+      } else {
+        // Standard Examination Paper Scheme Box if no individual attempt recorded
+        const perfBoxY = doc.y;
+        const perfBoxH = 46;
+        doc.roundedRect(36, perfBoxY, contentWidth, perfBoxH, 4)
+          .fillAndStroke('#F1F5F9', '#CBD5E1');
+
+        doc.roundedRect(36, perfBoxY, contentWidth, 14, 4).fill('#334155');
+        doc.fillColor('#FFFFFF').font(boldFont).fontSize(7.5)
+          .text('EXAMINATION PAPER STRUCTURE & MARKING SCHEME', 46, perfBoxY + 3);
 
         const colW = contentWidth / 4;
+        const metricY = perfBoxY + 17;
 
-        // Card 1: Score
-        doc.fillColor('#1E3A8A').font(boldFont).fontSize(12)
-          .text(`${result.finalScore} / ${result.maxScore}`, 36, perfBoxY + 9, { width: colW, align: 'center' });
-        doc.fillColor('#4B5563').font(regularFont).fontSize(7.5)
-          .text('TOTAL SCORE', 36, perfBoxY + 27, { width: colW, align: 'center' });
+        // Col 1: Total Questions
+        doc.fillColor('#334155').font(boldFont).fontSize(7)
+          .text('TOTAL QUESTIONS', 36, metricY + 2, { width: colW, align: 'center' });
+        doc.fillColor('#0F172A').font(boldFont).fontSize(12)
+          .text(`${questions.length}`, 36, metricY + 11, { width: colW, align: 'center' });
 
-        // Card 2: Accuracy
-        doc.fillColor('#0D9488').font(boldFont).fontSize(12)
-          .text(`${result.accuracy}%`, 36 + colW, perfBoxY + 9, { width: colW, align: 'center' });
-        doc.fillColor('#4B5563').font(regularFont).fontSize(7.5)
-          .text('ACCURACY', 36 + colW, perfBoxY + 27, { width: colW, align: 'center' });
+        // Col 2: Marks per Question
+        doc.fillColor('#15803D').font(boldFont).fontSize(7)
+          .text('CORRECT RESPONSE', 36 + colW, metricY + 2, { width: colW, align: 'center' });
+        doc.fillColor('#16A34A').font(boldFont).fontSize(12)
+          .text(`+${quiz.marks_per_question} Marks`, 36 + colW, metricY + 11, { width: colW, align: 'center' });
 
-        // Card 3: Breakdown
-        doc.fillColor('#15803D').font(boldFont).fontSize(10)
-          .text(`✅ ${result.correctCount}  ❌ ${result.wrongCount}  ⏭️ ${result.skippedCount}`, 36 + colW * 2, perfBoxY + 11, { width: colW, align: 'center' });
-        doc.fillColor('#4B5563').font(regularFont).fontSize(7.5)
-          .text('BREAKDOWN', 36 + colW * 2, perfBoxY + 27, { width: colW, align: 'center' });
+        // Col 3: Negative Penalty
+        doc.fillColor('#B91C1C').font(boldFont).fontSize(7)
+          .text('NEGATIVE MARKING', 36 + colW * 2, metricY + 2, { width: colW, align: 'center' });
+        doc.fillColor('#DC2626').font(boldFont).fontSize(12)
+          .text(`-${quiz.negative_marks} per Wrong`, 36 + colW * 2, metricY + 11, { width: colW, align: 'center' });
 
-        // Card 4: Time & Remark
-        const timeStr = formatTime(result.timeTakenSeconds);
-        doc.fillColor('#6366F1').font(boldFont).fontSize(10)
-          .text(`${timeStr}`, 36 + colW * 3, perfBoxY + 9, { width: colW, align: 'center' });
-        doc.fillColor('#4338CA').font(boldFont).fontSize(7.5)
-          .text(`${result.remark}`, 36 + colW * 3, perfBoxY + 25, { width: colW, align: 'center' });
+        // Col 4: Maximum Marks
+        const maxMarks = questions.length * Number(quiz.marks_per_question);
+        doc.fillColor('#1E3A8A').font(boldFont).fontSize(7)
+          .text('MAXIMUM MARKS', 36 + colW * 3, metricY + 2, { width: colW, align: 'center' });
+        doc.fillColor('#1E40AF').font(boldFont).fontSize(12)
+          .text(`${maxMarks} Marks`, 36 + colW * 3, metricY + 11, { width: colW, align: 'center' });
 
-        doc.y = perfBoxY + 56;
+        doc.y = perfBoxY + perfBoxH + 6;
       }
 
       // ================= 4. SECTION BANNER: SOLUTIONS =================

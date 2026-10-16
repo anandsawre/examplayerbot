@@ -10,6 +10,7 @@ import { handleDailyQotdCommand, handleStreakCommand } from './streak';
 import { handleDuelCommand, handleIncomingDuelInvite } from './duel';
 import { handleStartGroupQuizFromDm } from './groupQuiz';
 import { handleStartGroupScheduleFromDm } from './groupSchedule';
+import { handleDownloadPdfScorecard } from './pdfExport';
 
 export async function handleStart(ctx: Context, supabase: SupabaseClient, env?: Env) {
   const from = ctx.from;
@@ -58,6 +59,9 @@ export async function handleStart(ctx: Context, supabase: SupabaseClient, env?: 
       if (!isNaN(groupId)) {
         return handleStartGroupScheduleFromDm(ctx, supabase, groupId);
       }
+    } else if (payload.startsWith('pdf_')) {
+      const qId = payload.replace('pdf_', '');
+      return handleDownloadPdfScorecard(ctx, supabase, qId);
     }
   }
 

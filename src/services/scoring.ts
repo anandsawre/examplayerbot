@@ -11,6 +11,8 @@ export interface ScoreResult {
   accuracy: number;
   timeTakenSeconds: number;
   remark: string;
+  marksPerQuestion?: number;
+  negativeMarksPerWrong?: number;
 }
 
 export function calculateQuizResult(
