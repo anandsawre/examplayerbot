@@ -1,9 +1,10 @@
-import { Context, InlineKeyboard } from 'grammy';
+import { Context, InlineKeyboard, InputFile } from 'grammy';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { getActiveQuizzes, getQuizById, getQuestionsForQuiz, isGroupAuthorized, recordQuizAttempt } from '../db/queries';
 import { isGroupAdmin } from '../utils/admin';
 import { recentUserAttempts } from './pdfExport';
 import { UserAnswerRecord } from '../services/pdfGenerator';
+import { generateLeaderboardImage, LeaderboardCardEntry } from '../services/leaderboardImage';
 
 // In-memory pending selection for admins launching quiz from DM for a group
 export const pendingGroupQuizSelection = new Map<number, { groupChatId: number; groupTitle: string }>();
@@ -460,22 +461,20 @@ export async function executeGroupQuizBattle(
       };
     });
 
-    // Rank participants: highest score first, then highest correct answers
-    const ranked = participantsList
-      .sort((a, b) => b.score - a.score || b.correctCount - a.correctCount)
-      .slice(0, 15);
+    // Rank all participants: highest score first, then highest correct answers
+    const ranked = participantsList.sort((a, b) => b.score - a.score || b.correctCount - a.correctCount);
 
     // Top 3 Podium Highlights
-    const medals = ['🥇', '🥈', '🥉', '🎖️', '🎖️'];
+    const medals = ['🥇', '🥈', '🥉'];
     let podiumText = `🏆 *TOP BATTLE PERFORMERS:*\n`;
     ranked.slice(0, 3).forEach((p, idx) => {
       podiumText += `${medals[idx]} *${escapeMarkdown(p.name)}* — \`${p.score} pts\` (✅ ${p.correctCount}/${questions.length} | 🎯 ${p.accuracy}% Acc)\n`;
     });
 
-    // Monospace Aligned Merit List Table
+    // Monospace Aligned Merit List Table (for fallback or text rendering)
     let table = `Rank Candidate   ✅  ❌  -Neg   Score\n`;
     table += `─────────────────────────────────────\n`;
-    ranked.forEach((p, idx) => {
+    ranked.slice(0, 15).forEach((p, idx) => {
       const rankStr = `${idx + 1}.`.padEnd(5, ' ');
       const rawName = p.name || 'Candidate';
       const nameStr = rawName.length > 10 ? rawName.slice(0, 9) + '…' : rawName;
@@ -541,23 +540,66 @@ export async function executeGroupQuizBattle(
     .url('👤 Candidate Profile & Analytics', `https://t.me/${botUsername}?start=profile`)
     .url('📝 Attempt Solo in Direct Message', `https://t.me/${botUsername}?start=quiz_${quiz.id}`);
 
+  // Build card entries for visual leaderboard image
+  let leaderboardImgBuffer: Buffer | null = null;
+  if (finalBattle && contestantsCount > 0) {
+    try {
+      const cardEntries: LeaderboardCardEntry[] = Array.from(finalBattle.participants.values())
+        .sort((a, b) => b.correctCount - a.correctCount || a.wrongCount - b.wrongCount)
+        .map((p, idx) => {
+          const positive = p.correctCount * marksPerQ;
+          const negative = p.wrongCount * negMarksPerWrong;
+          const score = Math.max(0, Math.round((positive - negative) * 100) / 100);
+          const totalAnswered = p.correctCount + p.wrongCount;
+          const accuracy = totalAnswered > 0 ? Math.round((p.correctCount / totalAnswered) * 100) : 0;
+          return {
+            rank: idx + 1,
+            name: p.name || 'Candidate',
+            correctCount: p.correctCount,
+            wrongCount: p.wrongCount,
+            score,
+            timeTakenSeconds: timeLimit * questions.length,
+            accuracy,
+          };
+        });
+
+      leaderboardImgBuffer = generateLeaderboardImage(quiz.title, cardEntries);
+    } catch (err) {
+      console.error('Error generating battle leaderboard image:', err);
+    }
+  }
+
   const completionMessage =
     `🎓 *EXAMPLAYER LIVE BATTLE — OFFICIAL RESULT*\n` +
     `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
     `📚 *Exam:* ${escapeMarkdown(quiz.title)}\n` +
     `❓ *Questions:* \`${questions.length}\` | ⏱️ *Time Limit:* \`${timeLimit}s\`\n` +
     `🎯 *Marking Scheme:* \`+${marksPerQ}\` / \`-${negMarksPerWrong}\` Negative Penalty\n` +
-    `👥 *Total Participants:* \`${contestantsCount}\` Aspirants\n` +
-    `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━` +
-    meritListSection +
-    `\n\n✨ *Examination session concluded.* Select the button below to download the official PDF solutions booklet and comprehensive analysis:`;
+    `👥 *Total Participants Ranked:* \`${contestantsCount}\` Aspirants\n` +
+    `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+    `✨ *Examination session concluded.* Official scoreboard table card generated above!\n\n` +
+    `Tap the button below to download your personal scorecard & solutions PDF directly in DM.`;
 
-  await api.sendMessage(chatId, completionMessage, {
-    parse_mode: 'Markdown',
-    reply_markup: finishKeyboard,
-  }).catch((err) => {
-    console.error('Failed to send group completion message:', err);
-  });
+  if (leaderboardImgBuffer) {
+    await api.sendPhoto(chatId, new InputFile(leaderboardImgBuffer, 'leaderboard.png'), {
+      caption: completionMessage,
+      parse_mode: 'Markdown',
+      reply_markup: finishKeyboard,
+    }).catch(async (err) => {
+      console.error('Failed to send leaderboard photo, falling back to text:', err);
+      await api.sendMessage(chatId, completionMessage + meritListSection, {
+        parse_mode: 'Markdown',
+        reply_markup: finishKeyboard,
+      });
+    });
+  } else {
+    await api.sendMessage(chatId, completionMessage + meritListSection, {
+      parse_mode: 'Markdown',
+      reply_markup: finishKeyboard,
+    }).catch((err) => {
+      console.error('Failed to send group completion message:', err);
+    });
+  }
 }
 
 /**

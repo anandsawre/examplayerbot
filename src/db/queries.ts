@@ -282,7 +282,7 @@ export async function getUserLatestAttempt(
 export async function getQuizLeaderboard(
   supabase: SupabaseClient,
   quizId: string,
-  limit = 10
+  limit = 100
 ): Promise<LeaderboardEntry[]> {
   const { data, error } = await supabase
     .from('quiz_attempts')
@@ -304,18 +304,30 @@ export async function getQuizLeaderboard(
 
   if (error || !data) return [];
 
-  return data.map((item: any) => ({
-    user_id: item.user_id,
-    first_name: item.users?.first_name || 'Anonymous',
-    username: item.users?.username,
-    score: item.score,
-    total_questions: item.total_questions,
-    correct_count: item.correct_count ?? 0,
-    wrong_count: item.wrong_count ?? 0,
-    skipped_count: item.skipped_count ?? 0,
-    accuracy_percent: item.accuracy_percent,
-    time_taken_seconds: item.time_taken_seconds,
-  }));
+  // Deduplicate by user_id, keeping the user's best attempt
+  const seenUsers = new Set<number>();
+  const uniqueEntries: LeaderboardEntry[] = [];
+
+  for (const item of (data as any[])) {
+    if (!seenUsers.has(item.user_id)) {
+      seenUsers.add(item.user_id);
+      const userObj = Array.isArray(item.users) ? item.users[0] : item.users;
+      uniqueEntries.push({
+        user_id: item.user_id,
+        first_name: userObj?.first_name || 'Anonymous',
+        username: userObj?.username,
+        score: item.score,
+        total_questions: item.total_questions,
+        correct_count: item.correct_count ?? 0,
+        wrong_count: item.wrong_count ?? 0,
+        skipped_count: item.skipped_count ?? 0,
+        accuracy_percent: item.accuracy_percent,
+        time_taken_seconds: item.time_taken_seconds,
+      });
+    }
+  }
+
+  return uniqueEntries;
 }
 
 export async function getGlobalLeaderboard(

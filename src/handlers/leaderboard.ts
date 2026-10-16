@@ -1,12 +1,13 @@
-import { Context, InlineKeyboard } from 'grammy';
+import { Context, InlineKeyboard, InputFile } from 'grammy';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { getGlobalLeaderboard, getQuizLeaderboard, getQuizById } from '../db/queries';
 import { formatTime } from '../services/scoring';
+import { generateLeaderboardImage, LeaderboardCardEntry } from '../services/leaderboardImage';
 
 const MEDALS = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
 
 export async function handleGlobalLeaderboard(ctx: Context, supabase: SupabaseClient) {
-  const topUsers = await getGlobalLeaderboard(supabase, 10);
+  const topUsers = await getGlobalLeaderboard(supabase, 20);
   const isGroup = ctx.chat?.type === 'group' || ctx.chat?.type === 'supergroup';
 
   let botUsername = 'Examplayer_bot';
@@ -55,8 +56,8 @@ export async function handleGlobalLeaderboard(ctx: Context, supabase: SupabaseCl
   }
 
   if (ctx.callbackQuery) {
-    await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup: keyboard });
-    await ctx.answerCallbackQuery();
+    await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup: keyboard }).catch(() => {});
+    await ctx.answerCallbackQuery().catch(() => {});
   } else {
     await ctx.reply(text, { parse_mode: 'Markdown', reply_markup: keyboard });
   }
@@ -68,7 +69,7 @@ export async function handleQuizLeaderboard(
   quizId: string
 ) {
   const quiz = await getQuizById(supabase, quizId);
-  const attempts = await getQuizLeaderboard(supabase, quizId, 15);
+  const attempts = await getQuizLeaderboard(supabase, quizId, 100);
   const negativeMarkPerWrong = Number(quiz?.negative_marks) || 0;
   const isGroup = ctx.chat?.type === 'group' || ctx.chat?.type === 'supergroup';
 
@@ -78,67 +79,81 @@ export async function handleQuizLeaderboard(
     botUsername = me.username;
   } catch {}
 
-  let text = `🏆 *OFFICIAL EXAMINATION MERIT LIST*\n`;
-  text += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-  text += `📚 *Examination:* ${escapeMarkdown(quiz?.title || 'Quiz')}\n`;
-  text += `⚠️ *Marking Scheme:* +${quiz?.marks_per_question || 1} / -${negativeMarkPerWrong} per incorrect response\n\n`;
-
-  if (attempts.length === 0) {
-    text += `_No attempts recorded yet for this examination module._\n_Be the first candidate to attempt and lead the standings!_`;
-  } else {
-    // Generate ASCII/Monospace Aligned Table with Correct, Wrong, -Neg, Score
-    let table = `Rank Candidate   ✅  ❌  -Neg   Score\n`;
-    table += `─────────────────────────────────────\n`;
-
-    attempts.forEach((att, idx) => {
-      const rankStr = `${idx + 1}.`.padEnd(5, ' ');
-      const rawName = att.first_name || (att.username ? `@${att.username}` : 'Student');
-      // Truncate name to 10 chars for clean alignment
-      const nameStr = rawName.length > 10 ? rawName.slice(0, 9) + '…' : rawName;
-      const paddedName = nameStr.padEnd(11, ' ');
-
-      const correctStr = String(att.correct_count ?? 0).padStart(3, ' ');
-      const wrongStr = String(att.wrong_count ?? 0).padStart(3, ' ');
-
-      const negPenalty = Math.round((att.wrong_count ?? 0) * negativeMarkPerWrong * 100) / 100;
-      const negStr = (negPenalty > 0 ? `-${negPenalty}` : ' 0.0').padStart(6, ' ');
-      const scoreStr = String(att.score).padStart(7, ' ');
-
-      table += `${rankStr}${paddedName}${correctStr} ${wrongStr} ${negStr} ${scoreStr}\n`;
-    });
-
-    text += `\`\`\`\n${table}\`\`\`\n`;
-
-    // Detailed highlights for Top 3 Toppers
-    text += `🎖️ *Top Performers Breakdown:*\n`;
-    attempts.slice(0, 3).forEach((att, idx) => {
-      const name = att.username ? `@${att.username}` : att.first_name;
-      const timeStr = formatTime(att.time_taken_seconds || 0);
-      const acc = att.accuracy_percent ?? 0;
-      text += `${MEDALS[idx]} *${escapeMarkdown(name)}* — \`${att.score} pts\` (${acc}% acc | ⏱️ ${timeStr})\n`;
-    });
-  }
-
   const keyboard = new InlineKeyboard();
   if (isGroup) {
     keyboard
-      .url('📝 Attempt Solo in Direct Message', `https://t.me/${botUsername}?start=quiz_${quizId}`)
+      .url('📄 Download Official PDF (in DM)', `https://t.me/${botUsername}?start=pdf_${quizId}`)
       .row()
-      .text('🌍 Cumulative Merit Standings', 'menu_global_lb')
-      .url('📖 Examination Catalog in DM', `https://t.me/${botUsername}?start=quizzes`);
+      .url('📝 Attempt Solo in DM', `https://t.me/${botUsername}?start=quiz_${quizId}`)
+      .text('🌍 Cumulative Standings', 'menu_global_lb');
   } else {
     keyboard
+      .url('📄 Download Official PDF', `https://t.me/${botUsername}?start=pdf_${quizId}`)
+      .row()
       .text('🚀 Attempt This Examination', `start_quiz:${quizId}`)
       .row()
-      .text('🌍 Cumulative Merit Standings', 'menu_global_lb')
+      .text('🌍 Cumulative Standings', 'menu_global_lb')
       .text('🔙 Return to Catalog', 'menu_quizzes');
   }
 
+  if (!attempts || attempts.length === 0) {
+    const emptyText =
+      `🏆 *OFFICIAL EXAMINATION MERIT LIST*\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+      `📚 *Examination:* ${escapeMarkdown(quiz?.title || 'Quiz')}\n` +
+      `⚠️ *Marking Scheme:* +${quiz?.marks_per_question || 1} / -${negativeMarkPerWrong} per incorrect response\n\n` +
+      `_No attempts recorded yet for this examination module._\n` +
+      `_Be the first candidate to attempt and lead the standings!_`;
+
+    if (ctx.callbackQuery) {
+      await ctx.editMessageText(emptyText, { parse_mode: 'Markdown', reply_markup: keyboard }).catch(() => {});
+      await ctx.answerCallbackQuery().catch(() => {});
+    } else {
+      await ctx.reply(emptyText, { parse_mode: 'Markdown', reply_markup: keyboard });
+    }
+    return;
+  }
+
+  // Map all candidate attempts to LeaderboardCardEntry format
+  const cardEntries: LeaderboardCardEntry[] = attempts.map((att, idx) => {
+    const rawName = att.first_name || (att.username ? `@${att.username}` : 'Student');
+    const attempted = (att.correct_count ?? 0) + (att.wrong_count ?? 0);
+    const accuracy = att.accuracy_percent ?? (
+      attempted > 0 ? Math.round(((att.correct_count ?? 0) / attempted) * 100) : 0
+    );
+    return {
+      rank: idx + 1,
+      name: rawName,
+      correctCount: att.correct_count ?? 0,
+      wrongCount: att.wrong_count ?? 0,
+      score: Number(att.score) || 0,
+      timeTakenSeconds: att.time_taken_seconds || 0,
+      accuracy,
+    };
+  });
+
+  const imgBuffer = generateLeaderboardImage(quiz?.title || 'Official Merit List', cardEntries);
+
+  const caption =
+    `🏆 *OFFICIAL EXAMINATION MERIT LIST*\n` +
+    `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+    `📚 *Examination:* ${escapeMarkdown(quiz?.title || 'Quiz')}\n` +
+    `👥 *Total Candidates Ranked:* \`${attempts.length}\` Aspirants\n` +
+    `🎯 *Marking Scheme:* +${quiz?.marks_per_question || 1} / -${negativeMarkPerWrong} per incorrect response`;
+
   if (ctx.callbackQuery) {
-    await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup: keyboard });
-    await ctx.answerCallbackQuery();
+    await ctx.answerCallbackQuery().catch(() => {});
+    await ctx.replyWithPhoto(new InputFile(imgBuffer, 'leaderboard.png'), {
+      caption,
+      parse_mode: 'Markdown',
+      reply_markup: keyboard,
+    });
   } else {
-    await ctx.reply(text, { parse_mode: 'Markdown', reply_markup: keyboard });
+    await ctx.replyWithPhoto(new InputFile(imgBuffer, 'leaderboard.png'), {
+      caption,
+      parse_mode: 'Markdown',
+      reply_markup: keyboard,
+    });
   }
 }
 
