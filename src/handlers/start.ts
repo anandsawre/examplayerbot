@@ -11,6 +11,7 @@ import { handleDuelCommand, handleIncomingDuelInvite } from './duel';
 import { handleStartGroupQuizFromDm } from './groupQuiz';
 import { handleStartGroupScheduleFromDm } from './groupSchedule';
 import { handleDownloadPdfScorecard } from './pdfExport';
+import { handleQuizLeaderboard } from './leaderboard';
 
 export async function handleStart(ctx: Context, supabase: SupabaseClient, env?: Env) {
   const from = ctx.from;
@@ -62,6 +63,9 @@ export async function handleStart(ctx: Context, supabase: SupabaseClient, env?: 
     } else if (payload.startsWith('pdf_')) {
       const qId = payload.replace('pdf_', '');
       return handleDownloadPdfScorecard(ctx, supabase, qId);
+    } else if (payload.startsWith('lb_')) {
+      const qId = payload.replace('lb_', '');
+      return handleQuizLeaderboard(ctx, supabase, qId);
     }
   }
 
