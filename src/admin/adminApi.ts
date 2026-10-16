@@ -280,11 +280,57 @@ export async function handleAdminApiRequest(
     }
   }
 
-  // Authenticate all other /api/admin endpoints
-  if (!verifyAuth(req, env)) {
-    sendJson(res, 401, { success: false, error: 'Unauthorized: Valid admin token required.' });
-    return true;
-  }
+  // USER TELEGRAM AVATAR PROXY (Public GET for <img> / Image.network tags)
+  if (path.startsWith('/api/admin/users/') && path.endsWith('/avatar') && method === 'GET') {
+      const parts = path.split('/');
+      const userId = Number(parts[4]);
+      if (!isNaN(userId) && userId > 0) {
+        try {
+          const photos = await bot.api.getUserProfilePhotos(userId, { limit: 1 });
+          if (photos && photos.total_count > 0 && photos.photos.length > 0 && photos.photos[0].length > 0) {
+            const photoArr = photos.photos[0];
+            const largest = photoArr[photoArr.length - 1];
+            const file = await bot.api.getFile(largest.file_id);
+            if (file && file.file_path) {
+              const tgFileUrl = `https://api.telegram.org/file/bot${env.BOT_TOKEN}/${file.file_path}`;
+              res.writeHead(302, {
+                'Location': tgFileUrl,
+                'Access-Control-Allow-Origin': '*',
+                'Cache-Control': 'public, max-age=86400',
+              });
+              res.end();
+              return true;
+            }
+          }
+        } catch (_) {
+          // Fallback if telegram privacy blocks or user has no photo
+        }
+      }
+
+      // Fallback: high-res UI Avatar with name initials
+      let name = 'Student';
+      try {
+        if (!isNaN(userId) && userId > 0) {
+          const user = await getUser(supabase, userId);
+          if (user?.first_name) name = user.first_name;
+        }
+      } catch (_) {}
+
+      const uiAvatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=6366F1&color=fff&bold=true&rounded=true&size=128`;
+      res.writeHead(302, {
+        'Location': uiAvatarUrl,
+        'Access-Control-Allow-Origin': '*',
+        'Cache-Control': 'public, max-age=86400',
+      });
+      res.end();
+      return true;
+    }
+
+    // Authenticate all other /api/admin endpoints
+    if (!verifyAuth(req, env)) {
+      sendJson(res, 401, { success: false, error: 'Unauthorized: Valid admin token required.' });
+      return true;
+    }
 
   try {
     // 2. DASHBOARD KPI STATS
