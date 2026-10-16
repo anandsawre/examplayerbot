@@ -7,8 +7,9 @@ node_modules/
 .env.*.local
 
 # Build output
-dist/
+/dist/
 .wrangler/
+!portal/dist/
 
 # Logs
 *.log

@@ -1,4 +1,6 @@
 import http from 'node:http';
+import fs from 'node:fs';
+import path from 'node:path';
 import dns from 'node:dns';
 
 try {
@@ -67,8 +69,66 @@ async function main() {
       return;
     }
 
-    // Admin Web Portal Frontend UI
-    if (req.method === 'GET' && (urlPath === '/admin' || urlPath === '/admin/index.html')) {
+    // Legacy HTML portal direct access
+    if (req.method === 'GET' && (urlPath === '/admin/legacy' || urlPath === '/admin/legacy/index.html')) {
+      res.writeHead(200, {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'no-cache',
+      });
+      res.end(getAdminHtml());
+      return;
+    }
+
+    // Admin Web Portal Frontend UI (Flutter Web App with SPA routing)
+    if (req.method === 'GET' && (urlPath === '/admin' || urlPath.startsWith('/admin/'))) {
+      if (urlPath === '/admin') {
+        res.writeHead(301, { 'Location': '/admin/' });
+        res.end();
+        return;
+      }
+
+      const distDir = path.join(process.cwd(), 'portal', 'dist');
+      const relPath = urlPath.replace(/^\/admin\//, '');
+      let filePath = path.join(distDir, relPath);
+
+      if (fs.existsSync(filePath) && fs.statSync(filePath).isDirectory()) {
+        filePath = path.join(filePath, 'index.html');
+      }
+
+      // SPA fallback to index.html if specific file not found
+      if (!fs.existsSync(filePath)) {
+        filePath = path.join(distDir, 'index.html');
+      }
+
+      if (fs.existsSync(filePath)) {
+        const ext = path.extname(filePath).toLowerCase();
+        const mimeTypes: Record<string, string> = {
+          '.html': 'text/html; charset=utf-8',
+          '.js': 'text/javascript; charset=utf-8',
+          '.css': 'text/css; charset=utf-8',
+          '.json': 'application/json',
+          '.png': 'image/png',
+          '.jpg': 'image/jpeg',
+          '.jpeg': 'image/jpeg',
+          '.gif': 'image/gif',
+          '.svg': 'image/svg+xml',
+          '.wasm': 'application/wasm',
+          '.ttf': 'font/ttf',
+          '.otf': 'font/otf',
+          '.woff': 'font/woff',
+          '.woff2': 'font/woff2',
+          '.ico': 'image/x-icon',
+        };
+        const contentType = mimeTypes[ext] || 'application/octet-stream';
+        res.writeHead(200, {
+          'Content-Type': contentType,
+          'Cache-Control': ext === '.html' ? 'no-cache' : 'public, max-age=86400',
+        });
+        fs.createReadStream(filePath).pipe(res);
+        return;
+      }
+
+      // Fallback to legacy HTML if portal/dist doesn't exist
       res.writeHead(200, {
         'Content-Type': 'text/html; charset=utf-8',
         'Cache-Control': 'no-cache',

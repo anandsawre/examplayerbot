@@ -4,7 +4,14 @@ import 'package:http/http.dart' as http;
 class ApiService {
   static final ApiService _instance = ApiService._internal();
   factory ApiService() => _instance;
-  ApiService._internal();
+  ApiService._internal() {
+    try {
+      final origin = Uri.base.origin;
+      if (origin.startsWith('https://') || origin.contains(':3000')) {
+        baseUrl = '$origin/api/admin';
+      }
+    } catch (_) {}
+  }
 
   String baseUrl = 'https://examplayerbot.onrender.com/api/admin';
 

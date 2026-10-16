@@ -28,7 +28,7 @@ export async function handleSettingsCommand(
 
   const channelText = channel ? channel : '❌ Disabled (No subscription required)';
 
-  const portalUrl = (process.env.RENDER_EXTERNAL_URL || 'https://examplayer-bot.onrender.com').replace(/\/$/, '') + '/admin';
+  const portalUrl = (process.env.RENDER_EXTERNAL_URL || 'https://examplayer-bot.onrender.com').replace(/\/$/, '') + '/admin/';
 
   const text =
     `⚙️ *ADMINISTRATIVE CONFIGURATION DASHBOARD*\n` +
@@ -61,7 +61,8 @@ export async function handleSettingsCommand(
     `  Dispatch platform-wide announcements.`;
 
   const keyboard = new InlineKeyboard()
-    .url('🖥️ Open Web Admin Portal (UI)', portalUrl)
+    .webApp('🖥️ Open Web Admin Portal (App)', portalUrl)
+    .url('🌐 Open in Browser', portalUrl)
     .row()
     .text('🛡️ View Admins Directory', 'adm_list');
 
