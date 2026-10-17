@@ -118,11 +118,13 @@ class ApiService {
     return jsonDecode(res.body);
   }
 
-  Future<Map<String, dynamic>> updateFolder(String folderId, String newName) async {
+  Future<Map<String, dynamic>> updateFolder(String folderId, String newName, {String? parentId}) async {
+    final body = <String, dynamic>{'name': newName};
+    if (parentId != null) body['parentId'] = parentId;
     final res = await http.put(
       Uri.parse('$baseUrl/folders/$folderId'),
       headers: _headers,
-      body: jsonEncode({'name': newName}),
+      body: jsonEncode(body),
     );
     return jsonDecode(res.body);
   }
@@ -250,6 +252,23 @@ class ApiService {
     return jsonDecode(res.body);
   }
 
+  Future<Map<String, dynamic>> duplicateQuiz(String quizId) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/quizzes/$quizId/duplicate'),
+      headers: _headers,
+    );
+    return jsonDecode(res.body);
+  }
+
+  Future<Map<String, dynamic>> importQuestionsBulk(String quizId, List<Map<String, dynamic>> questions) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/quizzes/$quizId/bulk-questions'),
+      headers: _headers,
+      body: jsonEncode(questions),
+    );
+    return jsonDecode(res.body);
+  }
+
   // 6. STUDENTS & USERS DIRECTORY
   Future<List<dynamic>> getUsers({String query = '', String tier = 'all'}) async {
     final uri = Uri.parse('$baseUrl/users').replace(queryParameters: {
@@ -268,6 +287,88 @@ class ApiService {
       body: jsonEncode({'is_premium': isPremium}),
     );
     return jsonDecode(res.body);
+  }
+
+  Future<Map<String, dynamic>> sendUserMessage(dynamic userId, String message) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/users/$userId/message'),
+      headers: _headers,
+      body: jsonEncode({'message': message}),
+    );
+    return jsonDecode(res.body);
+  }
+
+  Future<Map<String, dynamic>> resetUserProgress(dynamic userId) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/users/$userId/reset-progress'),
+      headers: _headers,
+    );
+    return jsonDecode(res.body);
+  }
+
+  Future<Map<String, dynamic>> toggleUserBlock(dynamic userId, {bool? isBlocked}) async {
+    final body = <String, dynamic>{};
+    if (isBlocked != null) {
+      body['is_blocked'] = isBlocked;
+    }
+    final res = await http.post(
+      Uri.parse('$baseUrl/users/$userId/toggle-block'),
+      headers: _headers,
+      body: jsonEncode(body),
+    );
+    return jsonDecode(res.body);
+  }
+
+  Future<Map<String, dynamic>> deleteUser(dynamic userId) async {
+    final res = await http.delete(
+      Uri.parse('$baseUrl/users/$userId'),
+      headers: _headers,
+    );
+    return jsonDecode(res.body);
+  }
+
+  Future<Map<String, dynamic>> createUser({
+    required String id,
+    required String firstName,
+    String? username,
+    String plan = 'Free',
+  }) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/users/create'),
+      headers: _headers,
+      body: jsonEncode({
+        'id': id,
+        'first_name': firstName,
+        'username': username,
+        'plan': plan,
+      }),
+    );
+    return jsonDecode(res.body);
+  }
+
+  Future<Map<String, dynamic>> importUsers(List<Map<String, dynamic>> users) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/users/import'),
+      headers: _headers,
+      body: jsonEncode({'users': users}),
+    );
+    return jsonDecode(res.body);
+  }
+
+  Future<List<dynamic>> getUserAttempts(dynamic userId) async {
+    try {
+      final res = await http.get(
+        Uri.parse('$baseUrl/users/$userId/attempts'),
+        headers: _headers,
+      );
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        return (data['attempts'] as List?) ?? [];
+      }
+      return [];
+    } catch (_) {
+      return [];
+    }
   }
 
   // 7. ADMINISTRATORS MANAGEMENT
@@ -403,16 +504,102 @@ class ApiService {
     return jsonDecode(res.body);
   }
 
-  // 11. BROADCAST TOOL (MULTI-TARGET BLAST)
+  // 11. BROADCAST TOOL & STUDIO SUITE
   Future<Map<String, dynamic>> broadcastMessage(String message, {String target = 'all'}) async {
-    final res = await http.post(
-      Uri.parse('$baseUrl/broadcast'),
-      headers: _headers,
-      body: jsonEncode({
+    return sendBroadcast(message: message, target: target);
+  }
+
+  Future<Map<String, dynamic>> sendBroadcast({
+    required String message,
+    String? title,
+    String type = 'text',
+    String? mediaUrl,
+    List<Map<String, dynamic>>? buttons,
+    String target = 'all',
+    String? planType,
+    List<int>? specificUserIds,
+    bool isTest = false,
+    String? testChatId,
+  }) async {
+    try {
+      final payload = <String, dynamic>{
         'message': message,
-        'target': target, // 'users' | 'groups' | 'all'
-      }),
-    );
-    return jsonDecode(res.body);
+        'title': title ?? (message.length > 30 ? '${message.substring(0, 30)}...' : message),
+        'type': type,
+        'target': target,
+        'isTest': isTest,
+      };
+      if (mediaUrl != null && mediaUrl.isNotEmpty) payload['mediaUrl'] = mediaUrl;
+      if (buttons != null && buttons.isNotEmpty) payload['buttons'] = buttons;
+      if (planType != null) payload['planType'] = planType;
+      if (specificUserIds != null && specificUserIds.isNotEmpty) payload['specificUserIds'] = specificUserIds;
+      if (testChatId != null && testChatId.isNotEmpty) payload['testChatId'] = testChatId;
+
+      final res = await http.post(
+        Uri.parse('$baseUrl/broadcast'),
+        headers: _headers,
+        body: jsonEncode(payload),
+      );
+      return jsonDecode(res.body);
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  Future<Map<String, dynamic>> sendTestBroadcast({
+    required String message,
+    String type = 'text',
+    String? mediaUrl,
+    List<Map<String, dynamic>>? buttons,
+    String? testChatId,
+  }) async {
+    try {
+      final payload = <String, dynamic>{
+        'message': message,
+        'type': type,
+        'testChatId': testChatId,
+      };
+      if (mediaUrl != null && mediaUrl.isNotEmpty) payload['mediaUrl'] = mediaUrl;
+      if (buttons != null && buttons.isNotEmpty) payload['buttons'] = buttons;
+
+      final res = await http.post(
+        Uri.parse('$baseUrl/broadcast/test'),
+        headers: _headers,
+        body: jsonEncode(payload),
+      );
+      return jsonDecode(res.body);
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  Future<List<dynamic>> getBroadcastHistory() async {
+    try {
+      final res = await http.get(Uri.parse('$baseUrl/broadcast/history'), headers: _headers);
+      final data = jsonDecode(res.body);
+      return data['history'] ?? [];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<Map<String, dynamic>> getBroadcastStats() async {
+    try {
+      final res = await http.get(Uri.parse('$baseUrl/broadcast/stats'), headers: _headers);
+      final data = jsonDecode(res.body);
+      return data['stats'] ?? {};
+    } catch (_) {
+      return {};
+    }
+  }
+
+  Future<Map<String, dynamic>> deleteBroadcast(String id) async {
+    try {
+      final res = await http.delete(Uri.parse('$baseUrl/broadcast/$id'), headers: _headers);
+      return jsonDecode(res.body);
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
   }
 }
+

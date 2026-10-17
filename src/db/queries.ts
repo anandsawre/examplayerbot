@@ -947,18 +947,24 @@ export async function createFolder(
 export async function updateFolder(
   supabase: SupabaseClient,
   folderId: string,
-  name: string
+  name?: string,
+  parentId?: string | null
 ): Promise<boolean> {
   const now = new Date().toISOString();
   try {
+    const updateObj: Record<string, any> = { updated_at: now };
+    if (name) updateObj.name = name.trim();
+    if (parentId !== undefined) updateObj.parent_id = parentId;
+
     const { error } = await supabase
       .from('quiz_folders')
-      .update({ name: name.trim(), updated_at: now })
+      .update(updateObj)
       .eq('id', folderId);
     if (!error) {
       const cur = memoryFolders.get(folderId);
       if (cur) {
-        cur.name = name.trim();
+        if (name) cur.name = name.trim();
+        if (parentId !== undefined) cur.parent_id = parentId;
         cur.updated_at = now;
       }
       return true;
@@ -967,7 +973,8 @@ export async function updateFolder(
 
   const cur = memoryFolders.get(folderId);
   if (cur) {
-    cur.name = name.trim();
+    if (name) cur.name = name.trim();
+    if (parentId !== undefined) cur.parent_id = parentId;
     cur.updated_at = now;
     return true;
   }

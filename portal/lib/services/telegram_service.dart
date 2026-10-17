@@ -64,4 +64,14 @@ class TelegramService {
       (web.window as dynamic).Telegram?.WebApp?.HapticFeedback?.notificationOccurred?.call(type.toJS);
     } catch (_) {}
   }
+
+  void openTelegramLink(String url) {
+    try {
+      (web.window as dynamic).Telegram?.WebApp?.openTelegramLink?.call(url.toJS);
+    } catch (_) {
+      try {
+        web.window.open(url, '_blank');
+      } catch (_) {}
+    }
+  }
 }

@@ -71,6 +71,15 @@ class AppTheme {
         bodyColor: darkTextMain,
         displayColor: darkTextMain,
       ),
+      dividerColor: Colors.transparent,
+      dividerTheme: const DividerThemeData(
+        color: Colors.transparent,
+        thickness: 0,
+        space: 0,
+      ),
+      dataTableTheme: const DataTableThemeData(
+        dividerThickness: 0,
+      ),
       cardTheme: CardThemeData(
         color: darkCard,
         elevation: 0,
@@ -142,6 +151,15 @@ class AppTheme {
       textTheme: GoogleFonts.interTextTheme(base.textTheme).apply(
         bodyColor: lightTextMain,
         displayColor: lightTextMain,
+      ),
+      dividerColor: Colors.transparent,
+      dividerTheme: const DividerThemeData(
+        color: Colors.transparent,
+        thickness: 0,
+        space: 0,
+      ),
+      dataTableTheme: const DataTableThemeData(
+        dividerThickness: 0,
       ),
       cardTheme: CardThemeData(
         color: lightCard,
