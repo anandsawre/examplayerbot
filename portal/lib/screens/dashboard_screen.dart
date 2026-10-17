@@ -10,6 +10,7 @@ import 'dashboard/tabs/admins_tab.dart';
 import 'dashboard/tabs/battles_tab.dart';
 import 'dashboard/tabs/broadcast_tab.dart';
 import 'dashboard/tabs/settings_tab.dart';
+import 'dashboard/tabs/payments_tab.dart';
 import 'dashboard/dialogs/dashboard_dialogs.dart';
 import 'dashboard/components/dashboard_sidebar.dart';
 import 'dashboard/components/dashboard_top_navbar.dart';
@@ -640,6 +641,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   // ==========================================
+  // TAB 9: PAYMENTS & PLANS (MODULAR TAB)
+  // ==========================================
+
+  Widget _buildPaymentsTab() {
+    return PaymentsTab(
+      api: _api,
+      tg: _tg,
+      isDark: widget.isDark,
+      onRefreshAll: _loadAllData,
+      onShowToast: (msg, {isError = false}) => _showToast(msg, isError: isError),
+    );
+  }
+
+  // ==========================================
   // ROOT BUILD
   // ==========================================
 
@@ -674,6 +689,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 _buildBattlesTab(),
                                 _buildBroadcastTab(),
                                 _buildSettingsTab(),
+                                _buildPaymentsTab(),
                               ],
                             ),
                     ),

@@ -7,8 +7,6 @@ import '../../../services/api_service.dart';
 import '../../../services/telegram_service.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/kpi_card.dart';
-import '../../../widgets/status_badge.dart';
-import '../../../widgets/user_avatar.dart';
 
 class UsersTab extends StatefulWidget {
   final List<dynamic> users;

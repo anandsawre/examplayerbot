@@ -601,5 +601,227 @@ class ApiService {
       return {'success': false, 'error': e.toString()};
     }
   }
+
+  // 12. LEADERBOARDS & MERIT ANALYTICS
+  Future<Map<String, dynamic>> getLeaderboardAnalytics() async {
+    try {
+      final res = await http.get(Uri.parse('$baseUrl/leaderboard/analytics'), headers: _headers);
+      if (res.statusCode == 200) {
+        return jsonDecode(res.body) as Map<String, dynamic>;
+      }
+      return {};
+    } catch (_) {
+      return {};
+    }
+  }
+
+  // 13. PAYMENTS & PLANS MANAGEMENT
+  Future<List<dynamic>> getSubscriptionPlans() async {
+    try {
+      final res = await http.get(Uri.parse('$baseUrl/plans'), headers: _headers);
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        return (data['plans'] as List?) ?? [];
+      }
+      return [];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<Map<String, dynamic>> saveSubscriptionPlan(Map<String, dynamic> plan) async {
+    try {
+      final res = await http.post(
+        Uri.parse('$baseUrl/plans'),
+        headers: _headers,
+        body: jsonEncode(plan),
+      );
+      return jsonDecode(res.body);
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  Future<List<dynamic>> getPaymentTransactions() async {
+    try {
+      final res = await http.get(Uri.parse('$baseUrl/transactions'), headers: _headers);
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        return (data['transactions'] as List?) ?? [];
+      }
+      return [];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<Map<String, dynamic>> refundTransaction(String transactionId) async {
+    try {
+      final res = await http.post(
+        Uri.parse('$baseUrl/transactions/refund'),
+        headers: _headers,
+        body: jsonEncode({'transactionId': transactionId}),
+      );
+      return jsonDecode(res.body);
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  Future<Map<String, dynamic>> getPaymentStats() async {
+    try {
+      final res = await http.get(Uri.parse('$baseUrl/payments/stats'), headers: _headers);
+      if (res.statusCode == 200) {
+        return jsonDecode(res.body) as Map<String, dynamic>;
+      }
+      return {};
+    } catch (_) {
+      return {};
+    }
+  }
+
+  Future<List<dynamic>> getPaymentGateways() async {
+    try {
+      final res = await http.get(Uri.parse('$baseUrl/payment-methods'), headers: _headers);
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        return (data['gateways'] as List?) ?? [];
+      }
+      return [];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<Map<String, dynamic>> savePaymentGateways(List<dynamic> gateways) async {
+    try {
+      final res = await http.post(
+        Uri.parse('$baseUrl/payment-methods'),
+        headers: _headers,
+        body: jsonEncode({'gateways': gateways}),
+      );
+      return jsonDecode(res.body);
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  // 14. ADMINS HUB
+  Future<Map<String, dynamic>> getAdminsHubData() async {
+    try {
+      final res = await http.get(Uri.parse('$baseUrl/admins/hub'), headers: _headers);
+      if (res.statusCode == 200) {
+        return jsonDecode(res.body) as Map<String, dynamic>;
+      }
+      return {};
+    } catch (_) {
+      return {};
+    }
+  }
+
+  Future<Map<String, dynamic>> updateAdminRole(Map<String, dynamic> admin) async {
+    try {
+      final res = await http.post(
+        Uri.parse('$baseUrl/admins/update-role'),
+        headers: _headers,
+        body: jsonEncode(admin),
+      );
+      return jsonDecode(res.body);
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  // 15. GROUPS & COMMUNITY
+  Future<Map<String, dynamic>> getGroupsHubData() async {
+    try {
+      final res = await http.get(Uri.parse('$baseUrl/groups/hub'), headers: _headers);
+      if (res.statusCode == 200) {
+        return jsonDecode(res.body) as Map<String, dynamic>;
+      }
+      return {};
+    } catch (_) {
+      return {};
+    }
+  }
+
+  Future<Map<String, dynamic>> createGroupInviteLink(String groupId) async {
+    try {
+      final res = await http.post(
+        Uri.parse('$baseUrl/groups/invite-link'),
+        headers: _headers,
+        body: jsonEncode({'groupId': groupId}),
+      );
+      return jsonDecode(res.body);
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  // 16. BOT MANAGEMENT & SETTINGS
+  Future<Map<String, dynamic>> getBotStatus() async {
+    try {
+      final res = await http.get(Uri.parse('$baseUrl/bot/status'), headers: _headers);
+      if (res.statusCode == 200) {
+        return jsonDecode(res.body) as Map<String, dynamic>;
+      }
+      return {};
+    } catch (_) {
+      return {};
+    }
+  }
+
+  Future<Map<String, dynamic>> triggerBotControl(String action) async {
+    try {
+      final res = await http.post(
+        Uri.parse('$baseUrl/bot/controls'),
+        headers: _headers,
+        body: jsonEncode({'action': action}),
+      );
+      return jsonDecode(res.body);
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  Future<Map<String, dynamic>> configureBotWebhook({String? url, bool testOnly = false}) async {
+    try {
+      final res = await http.post(
+        Uri.parse('$baseUrl/bot/webhook'),
+        headers: _headers,
+        body: jsonEncode({'url': url, 'testOnly': testOnly}),
+      );
+      return jsonDecode(res.body);
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  Future<Map<String, dynamic>> saveBotOperationalSettings(Map<String, dynamic> settings) async {
+    try {
+      final res = await http.post(
+        Uri.parse('$baseUrl/bot/operational-settings'),
+        headers: _headers,
+        body: jsonEncode({'settings': settings}),
+      );
+      return jsonDecode(res.body);
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  Future<Map<String, dynamic>> updateBotProfile({String? name, String? description}) async {
+    try {
+      final res = await http.post(
+        Uri.parse('$baseUrl/bot/profile'),
+        headers: _headers,
+        body: jsonEncode({'name': name, 'description': description}),
+      );
+      return jsonDecode(res.body);
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
 }
+
 
