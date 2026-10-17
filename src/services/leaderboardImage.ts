@@ -44,7 +44,7 @@ export function cleanDisplayName(name: string): string {
     .replace(/[^\p{L}\p{N}\s._\-@()]/gu, ' ')
     .replace(/\s+/g, ' ')
     .trim();
-  return s.length > 20 ? s.slice(0, 19) + '…' : (s || 'Candidate');
+  return s.length > 22 ? s.slice(0, 21) + '…' : (s || 'Candidate');
 }
 
 // 1. Vector Golden Trophy for Card Header
@@ -64,31 +64,31 @@ function drawTitleTrophy(ctx: any, x: number, y: number) {
 
   // Handles
   ctx.strokeStyle = '#D97706';
-  ctx.lineWidth = 2;
+  ctx.lineWidth = 2.2;
   ctx.beginPath();
   // Left handle
   ctx.moveTo(4, 6);
-  ctx.bezierCurveTo(-2, 6, -2, 14, 6, 14);
+  ctx.bezierCurveTo(-2.5, 6, -2.5, 14, 6, 14);
   // Right handle
   ctx.moveTo(20, 6);
-  ctx.bezierCurveTo(26, 6, 26, 14, 18, 14);
+  ctx.bezierCurveTo(26.5, 6, 26.5, 14, 18, 14);
   ctx.stroke();
 
   // Stem & Base
   ctx.fillStyle = '#D97706';
   ctx.fillRect(10.5, 17, 3, 5);
-  ctx.fillRect(6, 21, 12, 3);
+  ctx.fillRect(5.5, 21, 13, 3);
 
   ctx.restore();
 }
 
 // 2. Vector Green Checkmark Box (✅)
-function drawGreenCheckmark(ctx: any, cx: number, cy: number, size = 19) {
+function drawGreenCheckmark(ctx: any, cx: number, cy: number, size = 20) {
   ctx.save();
   const half = size / 2;
   const x = cx - half;
   const y = cy - half;
-  const r = 4;
+  const r = 4.5;
 
   ctx.fillStyle = '#16A34A';
   ctx.beginPath();
@@ -105,20 +105,20 @@ function drawGreenCheckmark(ctx: any, cx: number, cy: number, size = 19) {
   ctx.fill();
 
   ctx.strokeStyle = '#FFFFFF';
-  ctx.lineWidth = 2.4;
+  ctx.lineWidth = 2.5;
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
   ctx.beginPath();
-  ctx.moveTo(x + 4.5, y + 9.5);
-  ctx.lineTo(x + 8, y + 13.5);
-  ctx.lineTo(x + 14.5, y + 6);
+  ctx.moveTo(x + 5, y + 10);
+  ctx.lineTo(x + 8.5, y + 14);
+  ctx.lineTo(x + 15, y + 6.5);
   ctx.stroke();
 
   ctx.restore();
 }
 
 // 3. Vector Red Cross (❌)
-function drawRedCross(ctx: any, cx: number, cy: number, size = 17) {
+function drawRedCross(ctx: any, cx: number, cy: number, size = 18) {
   ctx.save();
   const half = size / 2;
   ctx.strokeStyle = '#DC2626';
@@ -142,17 +142,17 @@ function drawMedalBadge(ctx: any, cx: number, cy: number, rank: number) {
   // Ribbon straps at top
   ctx.fillStyle = '#3B82F6'; // Blue left
   ctx.beginPath();
-  ctx.moveTo(cx - 5, cy - 14);
+  ctx.moveTo(cx - 5.5, cy - 15);
   ctx.lineTo(cx - 1, cy - 8);
-  ctx.lineTo(cx - 7, cy - 6);
+  ctx.lineTo(cx - 7.5, cy - 6);
   ctx.closePath();
   ctx.fill();
 
   ctx.fillStyle = '#EF4444'; // Red right
   ctx.beginPath();
-  ctx.moveTo(cx + 5, cy - 14);
+  ctx.moveTo(cx + 5.5, cy - 15);
   ctx.lineTo(cx + 1, cy - 8);
-  ctx.lineTo(cx + 7, cy - 6);
+  ctx.lineTo(cx + 7.5, cy - 6);
   ctx.closePath();
   ctx.fill();
 
@@ -162,19 +162,19 @@ function drawMedalBadge(ctx: any, cx: number, cy: number, rank: number) {
   let textColor = '#78350F';
 
   if (rank === 2) {
-    fillColor = '#CBD5E1'; // Silver
+    fillColor = '#E2E8F0'; // Silver
     strokeColor = '#64748B';
-    textColor = '#334155';
+    textColor = '#1E293B';
   } else if (rank === 3) {
     fillColor = '#FDBA74'; // Bronze
     strokeColor = '#C2410C';
     textColor = '#7C2D12';
   }
 
-  const radius = 9.5;
+  const radius = 10;
   ctx.fillStyle = fillColor;
   ctx.strokeStyle = strokeColor;
-  ctx.lineWidth = 1.2;
+  ctx.lineWidth = 1.3;
 
   ctx.beginPath();
   ctx.arc(cx, cy + 1, radius, 0, Math.PI * 2);
@@ -183,7 +183,7 @@ function drawMedalBadge(ctx: any, cx: number, cy: number, rank: number) {
 
   // Number inside medal
   ctx.fillStyle = textColor;
-  ctx.font = 'bold 11px sans-serif';
+  ctx.font = 'bold 11.5px DevaBold, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(String(rank), cx, cy + 1.5);
@@ -191,7 +191,7 @@ function drawMedalBadge(ctx: any, cx: number, cy: number, rank: number) {
   ctx.restore();
 }
 
-function wrapTitle(title: string, maxCharsPerLine = 42): string[] {
+function wrapTitle(title: string, maxCharsPerLine = 44): string[] {
   if (title.length <= maxCharsPerLine) return [title];
   const words = title.split(' ');
   const lines: string[] = [];
@@ -209,7 +209,7 @@ function wrapTitle(title: string, maxCharsPerLine = 42): string[] {
 }
 
 /**
- * Generates the official Telegram Leaderboard Card Image.
+ * Generates an Ultra HD (Retina 2x resolution) Telegram Leaderboard Card Image.
  * Matches user's exact reference sample with 8 complete performance columns:
  * [# (Ribbon Medal) | Name | ✅ (Sahi) | ❌ (Galt) | -Neg (Negative) | Score (Obtained) | Time (Time Taken) | % (Accuracy)]
  */
@@ -217,45 +217,48 @@ export function generateLeaderboardImage(
   title: string,
   entries: LeaderboardCardEntry[]
 ): Buffer {
-  const width = 640;
-  const paddingX = 18;
-  const tableWidth = width - paddingX * 2; // 604px
+  const scale = 2; // 2x Retina Ultra-HD Resolution (1440px wide canvas)
+  const logicalWidth = 720;
+  const paddingX = 20;
+  const tableWidth = logicalWidth - paddingX * 2; // 680px
 
-  const titleLines = wrapTitle(title, 42);
-  const titleHeight = titleLines.length > 1 ? 62 : 44;
-  const headerHeight = 40;
-  const rowHeight = 42;
-  const bottomPadding = 18;
+  const titleLines = wrapTitle(title, 44);
+  const titleHeight = titleLines.length > 1 ? 64 : 46;
+  const headerHeight = 42;
+  const rowHeight = 44;
+  const bottomPadding = 20;
 
   // Show up to 50 participants cleanly on the card
   const displayEntries = entries.slice(0, 50);
   const tableHeight = headerHeight + Math.max(1, displayEntries.length) * rowHeight;
-  const height = paddingX + titleHeight + tableHeight + bottomPadding;
+  const logicalHeight = paddingX + titleHeight + tableHeight + bottomPadding;
 
-  const canvas = createCanvas(width, height);
+  const canvas = createCanvas(logicalWidth * scale, logicalHeight * scale);
   const ctx = canvas.getContext('2d');
+  ctx.scale(scale, scale);
+  ctx.imageSmoothingEnabled = true;
 
   // 1. Pure White Card Background
   ctx.fillStyle = '#FFFFFF';
-  ctx.fillRect(0, 0, width, height);
+  ctx.fillRect(0, 0, logicalWidth, logicalHeight);
 
   // 2. Title with Golden Trophy
   drawTitleTrophy(ctx, paddingX, paddingX + 2);
   ctx.fillStyle = '#0F172A';
-  ctx.font = 'bold 16px DevaBold, sans-serif';
+  ctx.font = 'bold 17px DevaBold, sans-serif';
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
 
   if (titleLines.length === 1) {
-    ctx.fillText(titleLines[0], paddingX + 28, paddingX + 14);
+    ctx.fillText(titleLines[0], paddingX + 30, paddingX + 15);
   } else {
-    ctx.fillText(titleLines[0], paddingX + 28, paddingX + 12);
-    ctx.fillText(titleLines[1], paddingX + 28, paddingX + 34);
+    ctx.fillText(titleLines[0], paddingX + 30, paddingX + 13);
+    ctx.fillText(titleLines[1], paddingX + 30, paddingX + 37);
   }
 
   // 3. Table Column Widths: [#, Name, ✅, ❌, -Neg, Score, Time, %]
-  // Total: 42 + 190 + 48 + 48 + 56 + 74 + 84 + 62 = 604px
-  const colWidths = [42, 190, 48, 48, 56, 74, 84, 62];
+  // Total: 46 + 224 + 52 + 52 + 64 + 80 + 96 + 66 = 680px
+  const colWidths = [46, 224, 52, 52, 64, 80, 96, 66];
   const colX: number[] = [];
   let curX = paddingX;
   for (const w of colWidths) {
@@ -291,7 +294,7 @@ export function generateLeaderboardImage(
 
   // Header Labels
   const headerY = tableTop + headerHeight / 2;
-  ctx.font = 'bold 14px DevaBold, sans-serif';
+  ctx.font = 'bold 14.5px DevaBold, sans-serif';
   ctx.fillStyle = '#374151';
   ctx.textBaseline = 'middle';
 
@@ -301,13 +304,13 @@ export function generateLeaderboardImage(
 
   // Name
   ctx.textAlign = 'left';
-  ctx.fillText('Name', colX[1] + 10, headerY);
+  ctx.fillText('Name', colX[1] + 12, headerY);
 
   // ✅ (Vector Green Box)
-  drawGreenCheckmark(ctx, colX[2] + colWidths[2] / 2, headerY, 19);
+  drawGreenCheckmark(ctx, colX[2] + colWidths[2] / 2, headerY, 20);
 
   // ❌ (Vector Red Cross)
-  drawRedCross(ctx, colX[3] + colWidths[3] / 2, headerY, 17);
+  drawRedCross(ctx, colX[3] + colWidths[3] / 2, headerY, 18);
 
   // -Neg
   ctx.textAlign = 'center';
@@ -339,6 +342,12 @@ export function generateLeaderboardImage(
     const rowTop = tableTop + headerHeight + idx * rowHeight;
     const rowCenterY = rowTop + rowHeight / 2;
 
+    // Subtle alternating row background for clean readability
+    if (idx % 2 === 1) {
+      ctx.fillStyle = '#F9FAFB';
+      ctx.fillRect(paddingX + 1, rowTop, tableWidth - 2, rowHeight);
+    }
+
     // Horizontal Row Divider
     ctx.strokeStyle = '#E5E7EB';
     ctx.beginPath();
@@ -359,12 +368,12 @@ export function generateLeaderboardImage(
     // Col 1: Name
     ctx.textAlign = 'left';
     ctx.fillStyle = '#111827';
-    ctx.font = 'bold 14px DevaBold, sans-serif';
-    ctx.fillText(cleanDisplayName(entry.name), colX[1] + 10, rowCenterY);
+    ctx.font = 'bold 14.5px DevaBold, sans-serif';
+    ctx.fillText(cleanDisplayName(entry.name), colX[1] + 12, rowCenterY);
 
     // Col 2: ✅ (Kitna Sahi)
     ctx.textAlign = 'center';
-    ctx.font = 'bold 14px DevaBold, sans-serif';
+    ctx.font = 'bold 14.5px DevaBold, sans-serif';
     ctx.fillStyle = '#1F2937';
     ctx.fillText(String(entry.correctCount), colX[2] + colWidths[2] / 2, rowCenterY);
 
@@ -378,17 +387,17 @@ export function generateLeaderboardImage(
     ctx.fillText(negText, colX[4] + colWidths[4] / 2, rowCenterY);
 
     // Col 5: Score (Obtained Marks)
-    ctx.font = 'bold 14px DevaBold, sans-serif';
+    ctx.font = 'bold 14.5px DevaBold, sans-serif';
     ctx.fillStyle = '#111827';
     ctx.fillText(entry.score.toFixed(2), colX[5] + colWidths[5] / 2, rowCenterY);
 
     // Col 6: Time (Time Taken)
-    ctx.font = 'bold 13.5px DevaBold, sans-serif';
+    ctx.font = 'bold 14px DevaBold, sans-serif';
     ctx.fillStyle = '#374151';
     ctx.fillText(formatDisplayTime(entry.timeTakenSeconds), colX[6] + colWidths[6] / 2, rowCenterY);
 
     // Col 7: % (Accuracy)
-    ctx.font = 'bold 13.5px DevaBold, sans-serif';
+    ctx.font = 'bold 14px DevaBold, sans-serif';
     ctx.fillStyle = '#111827';
     ctx.fillText(Math.round(entry.accuracy) + '%', colX[7] + colWidths[7] / 2, rowCenterY);
   });
