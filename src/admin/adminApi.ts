@@ -37,6 +37,7 @@ import {
   formatISTTime,
   parseIndianDateTime,
 } from '../handlers/groupSchedule';
+import { registerBotCommands } from '../utils/setCommands';
 
 // Simple in-memory session token tracking with HMAC persistence
 const validTokens: Set<string> = new Set();
@@ -2316,8 +2317,17 @@ export async function handleAdminApiRequest(
           sendJson(res, 200, { success: true, message: 'Bot cache and OTP store cleared successfully! 🧹' });
           return true;
         } else if (action === 'restart') {
+          otpStore.clear();
           await syncAdminCache(supabase);
-          sendJson(res, 200, { success: true, message: 'Bot core services restarted successfully! 🔄' });
+          try {
+            await registerBotCommands(bot.api);
+          } catch (cmdErr) {
+            console.error('Failed to re-register bot commands on restart:', cmdErr);
+          }
+          sendJson(res, 200, {
+            success: true,
+            message: 'Bot core services, admin cache, and Telegram command menus re-synced successfully! 🔄',
+          });
           return true;
         } else if (action === 'stop') {
           sendJson(res, 200, { success: true, message: 'Bot put into suspended mode. (Maintenance mode activated) 🛑' });
