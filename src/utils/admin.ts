@@ -115,3 +115,42 @@ export async function isGroupAdmin(ctx: Context, env?: Env): Promise<boolean> {
   }
 }
 
+// In-memory cache of operational settings
+export interface OperationalSettings {
+  maintenanceMode: boolean;
+  allowNewUsers: boolean;
+  enablePayments: boolean;
+  enableLeaderboards: boolean;
+  enableBroadcast: boolean;
+  logAllUpdates: boolean;
+}
+
+let operationalSettingsCache: OperationalSettings = {
+  maintenanceMode: false,
+  allowNewUsers: true,
+  enablePayments: true,
+  enableLeaderboards: true,
+  enableBroadcast: true,
+  logAllUpdates: true,
+};
+
+export async function syncOperationalSettings(supabase: SupabaseClient): Promise<OperationalSettings> {
+  try {
+    const rawVal = await getSetting(supabase, 'operational_settings', '');
+    if (rawVal) {
+      operationalSettingsCache = { ...operationalSettingsCache, ...JSON.parse(rawVal) };
+    }
+  } catch (err) {
+    console.error('Failed to sync operational settings cache:', err);
+  }
+  return operationalSettingsCache;
+}
+
+export function getOperationalSettings(): OperationalSettings {
+  return { ...operationalSettingsCache };
+}
+
+export function setOperationalSettingsCache(newSettings: Partial<OperationalSettings>): void {
+  operationalSettingsCache = { ...operationalSettingsCache, ...newSettings };
+}
+

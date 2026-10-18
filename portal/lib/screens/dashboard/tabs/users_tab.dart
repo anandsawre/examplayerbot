@@ -46,6 +46,34 @@ class UsersTabState extends State<UsersTab> {
   Map<String, dynamic>? _selectedUser;
   final List<Map<String, dynamic>> _customAddedUsers = [];
 
+  bool _isLoadingUserAttempts = false;
+  List<dynamic> _loadedUserAttempts = [];
+  String? _loadedAttemptsUserId;
+
+  Future<void> _fetchUserAttempts(String userId) async {
+    if (_loadedAttemptsUserId == userId && _loadedUserAttempts.isNotEmpty) return;
+    setState(() {
+      _isLoadingUserAttempts = true;
+      _loadedAttemptsUserId = userId;
+      _loadedUserAttempts = [];
+    });
+    try {
+      final attempts = await _api.getUserAttempts(userId);
+      if (mounted) {
+        setState(() {
+          _loadedUserAttempts = attempts;
+          _isLoadingUserAttempts = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _isLoadingUserAttempts = false;
+        });
+      }
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -55,7 +83,10 @@ class UsersTabState extends State<UsersTab> {
   }
 
   void setSearch(String search) {
-    setState(() => _userSearch = search);
+    setState(() {
+      _userSearch = search;
+      _userCurrentPage = 1;
+    });
   }
 
   void _showToast(String msg, {bool isError = false}) {
@@ -195,7 +226,7 @@ class UsersTabState extends State<UsersTab> {
         if (combined.any((e) => e['id'] == id)) continue;
 
         final isPrem = u['is_premium'] == true;
-        final isBlocked = u['is_blocked'] == true;
+        final isBlocked = u['is_blocked'] == true || u['is_active'] == false;
         final rawName = u['first_name']?.toString() ?? '';
         final rawUser = u['username']?.toString() ?? '';
         final name = rawName.isNotEmpty
@@ -280,6 +311,7 @@ class UsersTabState extends State<UsersTab> {
           'referrals': referrals,
           'language': u['language_code'] ?? 'Hindi',
           'color': color,
+          'created_at_dt': createdDt,
           'real_user': u,
         });
       }
@@ -312,6 +344,24 @@ class UsersTabState extends State<UsersTab> {
     // Plan dropdown filter
     if (_userPlanFilter != 'all') {
       list = list.where((u) => u['plan'] == _userPlanFilter).toList();
+    }
+
+    // Join Date dropdown filter
+    if (_userDateFilter != 'all') {
+      final now = DateTime.now();
+      list = list.where((u) {
+        final dt = u['created_at_dt'] as DateTime?;
+        if (dt == null) return false;
+        final diff = now.difference(dt);
+        if (_userDateFilter == 'today') {
+          return diff.inHours < 24;
+        } else if (_userDateFilter == 'week') {
+          return diff.inDays <= 7;
+        } else if (_userDateFilter == 'month') {
+          return diff.inDays <= 30;
+        }
+        return true;
+      }).toList();
     }
 
     // Query search
@@ -605,6 +655,15 @@ class UsersTabState extends State<UsersTab> {
     final vipCount = all.where((u) => u['plan'] == 'VIP' || u['plan'] == 'Premium').length;
     final recentCount = all.where((u) => u['is_recent'] == true).length;
 
+    // Pagination calculations
+    const pageSize = 15;
+    final filteredCount = users.length;
+    final totalPages = (filteredCount / pageSize).ceil().clamp(1, 9999);
+    final currentPage = _userCurrentPage.clamp(1, totalPages);
+    final startIndex = filteredCount == 0 ? 0 : (currentPage - 1) * pageSize;
+    final endIndex = min(startIndex + pageSize, filteredCount);
+    final pageUsers = filteredCount > 0 ? users.sublist(startIndex, endIndex) : <Map<String, dynamic>>[];
+
     return Container(
       decoration: BoxDecoration(
         color: isDark ? AppTheme.darkCard : Colors.white,
@@ -661,7 +720,10 @@ class UsersTabState extends State<UsersTab> {
                   child: SizedBox(
                     height: 38,
                     child: TextField(
-                      onChanged: (val) => setState(() => _userSearch = val),
+                      onChanged: (val) => setState(() {
+                        _userSearch = val;
+                        _userCurrentPage = 1;
+                      }),
                       style: GoogleFonts.inter(fontSize: 13),
                       decoration: InputDecoration(
                         filled: true,
@@ -672,7 +734,10 @@ class UsersTabState extends State<UsersTab> {
                         suffixIcon: _userSearch.isNotEmpty
                             ? IconButton(
                                 icon: const Icon(Icons.close_rounded, size: 16),
-                                onPressed: () => setState(() => _userSearch = ''),
+                                onPressed: () => setState(() {
+                                  _userSearch = '';
+                                  _userCurrentPage = 1;
+                                }),
                               )
                             : null,
                         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
@@ -702,7 +767,10 @@ class UsersTabState extends State<UsersTab> {
                     DropdownMenuItem(value: 'Inactive', child: Text('Inactive')),
                     DropdownMenuItem(value: 'Blocked', child: Text('Blocked')),
                   ],
-                  onChanged: (val) => setState(() => _userStatusFilter = val ?? 'all'),
+                  onChanged: (val) => setState(() {
+                    _userStatusFilter = val ?? 'all';
+                    _userCurrentPage = 1;
+                  }),
                 ),
 
                 // Plans Dropdown
@@ -714,7 +782,10 @@ class UsersTabState extends State<UsersTab> {
                     DropdownMenuItem(value: 'VIP', child: Text('VIP Pass')),
                     DropdownMenuItem(value: 'Premium', child: Text('Premium')),
                   ],
-                  onChanged: (val) => setState(() => _userPlanFilter = val ?? 'all'),
+                  onChanged: (val) => setState(() {
+                    _userPlanFilter = val ?? 'all';
+                    _userCurrentPage = 1;
+                  }),
                 ),
 
                 // Join Date Dropdown
@@ -726,7 +797,10 @@ class UsersTabState extends State<UsersTab> {
                     DropdownMenuItem(value: 'week', child: Text('This Week')),
                     DropdownMenuItem(value: 'month', child: Text('This Month')),
                   ],
-                  onChanged: (val) => setState(() => _userDateFilter = val ?? 'all'),
+                  onChanged: (val) => setState(() {
+                    _userDateFilter = val ?? 'all';
+                    _userCurrentPage = 1;
+                  }),
                 ),
 
                 // Reset Button
@@ -738,6 +812,7 @@ class UsersTabState extends State<UsersTab> {
                       _userStatusFilter = 'all';
                       _userPlanFilter = 'all';
                       _userDateFilter = 'all';
+                      _userCurrentPage = 1;
                     });
                   },
                   icon: const Icon(Icons.refresh_rounded, size: 14, color: Color(0xFF64748B)),
@@ -820,7 +895,7 @@ class UsersTabState extends State<UsersTab> {
                       Divider(height: 1, color: isDark ? AppTheme.darkBorderSubtle : const Color(0xFFF1F5F9)),
 
                       // Table Data Rows
-                      if (users.isEmpty)
+                      if (pageUsers.isEmpty)
                         Padding(
                           padding: const EdgeInsets.symmetric(vertical: 48),
                           child: Center(
@@ -842,8 +917,8 @@ class UsersTabState extends State<UsersTab> {
                           ),
                         )
                       else
-                        ...users.asMap().entries.map((entry) {
-                          final idx = entry.key + 1;
+                        ...pageUsers.asMap().entries.map((entry) {
+                          final idx = startIndex + entry.key + 1;
                           final u = entry.value;
                           final id = u['id'].toString();
                           final isSelected = _selectedUser != null && _selectedUser!['id'] == id;
@@ -872,6 +947,9 @@ class UsersTabState extends State<UsersTab> {
                                   _selectedUser = u;
                                   _isUserDetailsPanelOpen = true;
                                 });
+                                if (_userDetailsSubTab == 'tests') {
+                                  _fetchUserAttempts(u['id'].toString());
+                                }
                               },
                               hoverColor: isDark ? Colors.white.withValues(alpha: 0.03) : const Color(0xFFF8FAFC),
                               child: Container(
@@ -1051,6 +1129,9 @@ class UsersTabState extends State<UsersTab> {
                                                 _selectedUser = u;
                                                 _isUserDetailsPanelOpen = true;
                                               });
+                                              if (_userDetailsSubTab == 'tests') {
+                                                _fetchUserAttempts(u['id'].toString());
+                                              }
                                             },
                                             borderRadius: BorderRadius.circular(6),
                                             child: Container(
@@ -1116,20 +1197,44 @@ class UsersTabState extends State<UsersTab> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  'Showing 1 to ${users.length} of ${_allDisplayUsers.length} users',
+                  filteredCount == 0
+                      ? 'No users found'
+                      : 'Showing ${startIndex + 1} to $endIndex of $filteredCount users',
                   style: GoogleFonts.inter(
                     fontSize: 12.5,
                     color: isDark ? AppTheme.darkTextMuted : const Color(0xFF64748B),
                   ),
                 ),
                 Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    _buildPageBtn('1', isSelected: _userCurrentPage == 1),
-                    if (users.length > 20) ...[
-                      _buildPageBtn('2', isSelected: _userCurrentPage == 2),
-                      if (users.length > 40)
-                        _buildPageBtn('3', isSelected: _userCurrentPage == 3),
-                    ],
+                    if (currentPage > 1)
+                      IconButton(
+                        icon: const Icon(Icons.chevron_left_rounded, size: 20),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                        onPressed: () => setState(() => _userCurrentPage = currentPage - 1),
+                      ),
+                    ...List.generate(min(5, totalPages), (i) {
+                      int pNum;
+                      if (totalPages <= 5) {
+                        pNum = i + 1;
+                      } else if (currentPage <= 3) {
+                        pNum = i + 1;
+                      } else if (currentPage >= totalPages - 2) {
+                        pNum = totalPages - 4 + i;
+                      } else {
+                        pNum = currentPage - 2 + i;
+                      }
+                      return _buildPageBtn('$pNum', isSelected: currentPage == pNum);
+                    }),
+                    if (currentPage < totalPages)
+                      IconButton(
+                        icon: const Icon(Icons.chevron_right_rounded, size: 20),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                        onPressed: () => setState(() => _userCurrentPage = currentPage + 1),
+                      ),
                   ],
                 ),
               ],
@@ -1171,7 +1276,10 @@ class UsersTabState extends State<UsersTab> {
     final isDark = widget.isDark;
 
     return InkWell(
-      onTap: () => setState(() => _userSubTab = key),
+      onTap: () => setState(() {
+        _userSubTab = key;
+        _userCurrentPage = 1;
+      }),
       borderRadius: BorderRadius.circular(8),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 160),
@@ -1479,7 +1587,50 @@ class UsersTabState extends State<UsersTab> {
             _buildTimelineItem('Daily Quiz Streak', '${u['streak_days'] ?? 1} Days Active Practice Streak', 'Current streak'),
             _buildTimelineItem('Last Active Timestamp', 'Last recorded activity on bot', u['last_active'] ?? 'Just now'),
           ] else if (_userDetailsSubTab == 'tests') ...[
-            if ((u['tests'] ?? 0) > 0) ...[
+            if (_isLoadingUserAttempts)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 24),
+                child: Center(
+                  child: SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF2563EB)),
+                  ),
+                ),
+              )
+            else if (_loadedUserAttempts.isNotEmpty) ...[
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Recent Test Attempts (${_loadedUserAttempts.length})',
+                      style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: const Color(0xFF64748B)),
+                    ),
+                    Text(
+                      'Total: ${u['tests']} tests',
+                      style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w500, color: const Color(0xFF94A3B8)),
+                    ),
+                  ],
+                ),
+              ),
+              ..._loadedUserAttempts.map((att) {
+                final score = att['score'] ?? 0;
+                final acc = att['accuracy_percent'] ?? 0;
+                final dateStr = _formatDate(att['completed_at']);
+                final numScore = num.tryParse(score.toString()) ?? 0;
+                final isPassed = numScore > 0;
+                final status = isPassed ? 'Passed' : 'Attempted';
+                final statusColor = isPassed ? const Color(0xFF10B981) : const Color(0xFFF59E0B);
+                return _buildTestAttemptItem(
+                  'Score: $score pts ($acc% acc)',
+                  dateStr,
+                  status,
+                  statusColor,
+                );
+              }),
+            ] else if ((u['tests'] ?? 0) > 0) ...[
               _buildTestAttemptItem('Total Completed Tests', '${u['tests']} Finished', 'Passed', const Color(0xFF10B981)),
               _buildTestAttemptItem('Cumulative Merit Score', '${u['total_score']} / ${u['max_score']}', 'Active', const Color(0xFF2563EB)),
               _buildTestAttemptItem('Battle Duel Rating', '${u['duel_rating'] ?? 1000} ELO', 'Ranked', const Color(0xFF8B5CF6)),
@@ -1603,7 +1754,12 @@ class UsersTabState extends State<UsersTab> {
 
     return Expanded(
       child: InkWell(
-        onTap: () => setState(() => _userDetailsSubTab = key),
+        onTap: () {
+          setState(() => _userDetailsSubTab = key);
+          if (key == 'tests' && _selectedUser != null) {
+            _fetchUserAttempts(_selectedUser!['id'].toString());
+          }
+        },
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 8),
           decoration: BoxDecoration(

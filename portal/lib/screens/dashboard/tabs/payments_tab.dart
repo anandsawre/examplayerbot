@@ -1,5 +1,6 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../services/api_service.dart';
 import '../../../services/telegram_service.dart';
@@ -242,6 +243,78 @@ class _PaymentsTabState extends State<PaymentsTab> {
         ],
       ),
     );
+  }
+
+  void _openGatewayConfigDialog(Map<String, dynamic> gw) {
+    _tg.hapticImpact('light');
+    final name = gw['name']?.toString() ?? 'Gateway';
+    final keyCtrl = TextEditingController(text: gw['keyId']?.toString() ?? '');
+    bool isEnabled = gw['status'] == 'Enabled';
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDlgState) => AlertDialog(
+          backgroundColor: widget.isDark ? AppTheme.darkSurface : Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          title: Text('Configure $name', style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 16)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SwitchListTile(
+                title: Text('Gateway Status', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600)),
+                subtitle: Text(isEnabled ? 'Active and processing transactions' : 'Disabled (Hidden from users)', style: const TextStyle(fontSize: 11, color: Color(0xFF64748B))),
+                value: isEnabled,
+                onChanged: (val) => setDlgState(() => isEnabled = val),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: keyCtrl,
+                decoration: InputDecoration(
+                  labelText: name.contains('UPI') ? 'UPI ID (VPA)' : 'API Key / Merchant ID',
+                  hintText: name.contains('UPI') ? 'e.g. merchant@okhdfcbank' : 'e.g. rzp_live_xxxxxxxx',
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF5B3DF5)),
+              onPressed: () async {
+                Navigator.pop(ctx);
+                gw['status'] = isEnabled ? 'Enabled' : 'Disabled';
+                gw['keyId'] = keyCtrl.text.trim();
+                final res = await _api.savePaymentGateways(_gateways);
+                if (res['success'] == true) {
+                  widget.onShowToast('$name configuration saved successfully! 💳');
+                  _loadAllPaymentData();
+                } else {
+                  widget.onShowToast(res['error'] ?? 'Failed to save gateway', isError: true);
+                }
+              },
+              child: const Text('Save Gateway', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _exportTransactionsToCsv() {
+    _tg.hapticImpact('light');
+    if (_transactions.isEmpty) {
+      widget.onShowToast('No transactions available to export', isError: true);
+      return;
+    }
+    final buffer = StringBuffer();
+    buffer.writeln('ID,TransactionID,User,Username,Plan,Amount,Gateway,Status,Date');
+    for (final t in _transactions) {
+      buffer.writeln('"${t['id']}","${t['transactionId']}","${t['user']}","${t['username']}","${t['plan']}","${t['amount']}","${t['paymentMethod']}","${t['status']}","${t['dateTime']}"');
+    }
+    Clipboard.setData(ClipboardData(text: buffer.toString()));
+    widget.onShowToast('Exported ${_transactions.length} records! CSV copied to clipboard 📋');
   }
 
   // Date range picker
@@ -939,197 +1012,214 @@ class _PaymentsTabState extends State<PaymentsTab> {
           const Divider(height: 1, color: Color(0xFFE2E8F0)),
 
           // Table Rows
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: SizedBox(
-              width: 820,
-              child: Column(
-                children: [
-                  // Table Header
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                    color: isDark ? AppTheme.darkSurface : const Color(0xFFF8FAFC),
-                    child: Row(
-                      children: [
-                        _colHeader('#', 30),
-                        _colHeader('User', 180),
-                        _colHeader('Plan', 90),
-                        _colHeader('Amount', 70),
-                        _colHeader('Payment Method', 120),
-                        _colHeader('Transaction ID', 130),
-                        _colHeader('Status', 80),
-                        _colHeader('Date & Time', 120, alignment: Alignment.centerRight),
-                      ],
-                    ),
-                  ),
-                  const Divider(height: 1, color: Color(0xFFE2E8F0)),
-
-                  // Transactions Rows
-                  if (list.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.all(40),
-                      child: Center(child: Text('No transactions match the selected filters')),
-                    )
-                  else
-                    ...list.asMap().entries.map((entry) {
-                      final idx = entry.key + 1;
-                      final t = entry.value;
-                      final status = t['status'] ?? 'Success';
-                      final plan = t['plan'] ?? 'Monthly';
-                      final method = t['paymentMethod'] ?? 'Razorpay';
-
-                      Color statusBg = const Color(0xFFECFDF5);
-                      Color statusText = const Color(0xFF10B981);
-                      if (status == 'Pending') {
-                        statusBg = const Color(0xFFFFFBEB);
-                        statusText = const Color(0xFFF59E0B);
-                      } else if (status == 'Failed' || status == 'Refunded') {
-                        statusBg = const Color(0xFFFEF2F2);
-                        statusText = const Color(0xFFEF4444);
-                      }
-
-                      Color planBg = const Color(0xFFEFF6FF);
-                      Color planText = const Color(0xFF2563EB);
-                      if (plan == 'Yearly') {
-                        planBg = const Color(0xFFF5F3FF);
-                        planText = const Color(0xFF7C3AED);
-                      } else if (plan == 'Quarterly') {
-                        planBg = const Color(0xFFFFFBEB);
-                        planText = const Color(0xFFD97706);
-                      }
-
-                      return Container(
+          // Table Rows
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final tableWidth = max(constraints.maxWidth, 920.0);
+              return SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: SizedBox(
+                  width: tableWidth,
+                  child: Column(
+                    children: [
+                      // Table Header
+                      Container(
                         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                        decoration: BoxDecoration(
-                          border: Border(bottom: BorderSide(color: isDark ? AppTheme.darkBorderSubtle : const Color(0xFFF1F5F9))),
-                        ),
+                        color: isDark ? AppTheme.darkSurface : const Color(0xFFF8FAFC),
                         child: Row(
                           children: [
-                            // #
-                            SizedBox(
-                              width: 30,
-                              child: Text('$idx', style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF94A3B8))),
-                            ),
-                            // User
-                            SizedBox(
-                              width: 180,
-                              child: Row(
-                                children: [
-                                  CircleAvatar(
-                                    radius: 14,
-                                    backgroundColor: const Color(0xFF2563EB),
-                                    child: Text(
-                                      (t['user'] ?? 'U')[0].toUpperCase(),
-                                      style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(t['user'] ?? 'User', style: GoogleFonts.inter(fontSize: 12.5, fontWeight: FontWeight.w700), maxLines: 1, overflow: TextOverflow.ellipsis),
-                                        Text('@${t['username'] ?? 'user'}', style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)), maxLines: 1, overflow: TextOverflow.ellipsis),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            // Plan
-                            SizedBox(
-                              width: 90,
-                              child: Align(
-                                alignment: Alignment.centerLeft,
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                  decoration: BoxDecoration(color: planBg, borderRadius: BorderRadius.circular(6)),
-                                  child: Text(plan, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: planText)),
-                                ),
-                              ),
-                            ),
-                            // Amount
-                            SizedBox(
-                              width: 70,
-                              child: Text('₹${t['amount']}', style: GoogleFonts.inter(fontSize: 12.5, fontWeight: FontWeight.w700)),
-                            ),
-                            // Method
-                            SizedBox(
-                              width: 120,
-                              child: Row(
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.all(4),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFF0F172A),
-                                      borderRadius: BorderRadius.circular(6),
-                                    ),
-                                    child: const Icon(Icons.flash_on_rounded, size: 10, color: Colors.white),
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Text(method, style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600)),
-                                ],
-                              ),
-                            ),
-                            // Transaction ID
-                            SizedBox(
-                              width: 130,
+                            _colHeader('#', 30),
+                            Expanded(
                               child: Text(
-                                t['transactionId'] ?? 'pay_xxxx',
-                                style: GoogleFonts.robotoMono(fontSize: 11.5, color: const Color(0xFF64748B)),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            // Status
-                            SizedBox(
-                              width: 80,
-                              child: Align(
-                                alignment: Alignment.centerLeft,
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                  decoration: BoxDecoration(color: statusBg, borderRadius: BorderRadius.circular(6)),
-                                  child: Text(status, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: statusText)),
+                                'User',
+                                style: GoogleFonts.inter(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: const Color(0xFF64748B),
+                                  letterSpacing: 0.3,
                                 ),
                               ),
                             ),
-                            // Date & Actions
-                            SizedBox(
-                              width: 120,
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.end,
-                                children: [
-                                  Text(
-                                    t['dateTime'] ?? 'Today',
-                                    style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF94A3B8)),
+                            _colHeader('Plan', 90),
+                            _colHeader('Amount', 75),
+                            _colHeader('Payment Method', 125),
+                            _colHeader('Transaction ID', 135),
+                            _colHeader('Status', 85),
+                            _colHeader('Date & Time', 125, alignment: Alignment.centerRight),
+                          ],
+                        ),
+                      ),
+                      const Divider(height: 1, color: Color(0xFFE2E8F0)),
+
+                      // Transactions Rows
+                      if (list.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.all(40),
+                          child: Center(child: Text('No transactions match the selected filters')),
+                        )
+                      else
+                        ...list.asMap().entries.map((entry) {
+                          final idx = entry.key + 1;
+                          final t = entry.value;
+                          final status = t['status'] ?? 'Success';
+                          final plan = t['plan'] ?? 'Monthly';
+                          final method = t['paymentMethod'] ?? 'Razorpay';
+
+                          Color statusBg = const Color(0xFFECFDF5);
+                          Color statusText = const Color(0xFF10B981);
+                          if (status == 'Pending') {
+                            statusBg = const Color(0xFFFFFBEB);
+                            statusText = const Color(0xFFF59E0B);
+                          } else if (status == 'Failed' || status == 'Refunded') {
+                            statusBg = const Color(0xFFFEF2F2);
+                            statusText = const Color(0xFFEF4444);
+                          }
+
+                          Color planBg = const Color(0xFFEFF6FF);
+                          Color planText = const Color(0xFF2563EB);
+                          if (plan == 'Yearly') {
+                            planBg = const Color(0xFFF5F3FF);
+                            planText = const Color(0xFF7C3AED);
+                          } else if (plan == 'Quarterly') {
+                            planBg = const Color(0xFFFFFBEB);
+                            planText = const Color(0xFFD97706);
+                          }
+
+                          return Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                            decoration: BoxDecoration(
+                              border: Border(bottom: BorderSide(color: isDark ? AppTheme.darkBorderSubtle : const Color(0xFFF1F5F9))),
+                            ),
+                            child: Row(
+                              children: [
+                                // #
+                                SizedBox(
+                                  width: 30,
+                                  child: Text('$idx', style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF94A3B8))),
+                                ),
+                                // User (Expanded)
+                                Expanded(
+                                  child: Row(
+                                    children: [
+                                      CircleAvatar(
+                                        radius: 14,
+                                        backgroundColor: const Color(0xFF2563EB),
+                                        child: Text(
+                                          (t['user'] ?? 'U')[0].toUpperCase(),
+                                          style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(t['user'] ?? 'User', style: GoogleFonts.inter(fontSize: 12.5, fontWeight: FontWeight.w700), maxLines: 1, overflow: TextOverflow.ellipsis),
+                                            Text('@${t['username'] ?? 'user'}', style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)), maxLines: 1, overflow: TextOverflow.ellipsis),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                // Plan
+                                SizedBox(
+                                  width: 90,
+                                  child: Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                      decoration: BoxDecoration(color: planBg, borderRadius: BorderRadius.circular(6)),
+                                      child: Text(plan, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: planText)),
+                                    ),
+                                  ),
+                                ),
+                                // Amount
+                                SizedBox(
+                                  width: 75,
+                                  child: Text('₹${t['amount']}', style: GoogleFonts.inter(fontSize: 12.5, fontWeight: FontWeight.w700)),
+                                ),
+                                // Method
+                                SizedBox(
+                                  width: 125,
+                                  child: Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.all(4),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF0F172A),
+                                          borderRadius: BorderRadius.circular(6),
+                                        ),
+                                        child: const Icon(Icons.flash_on_rounded, size: 10, color: Colors.white),
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Expanded(
+                                        child: Text(method, style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                // Transaction ID
+                                SizedBox(
+                                  width: 135,
+                                  child: Text(
+                                    t['transactionId'] ?? 'pay_xxxx',
+                                    style: GoogleFonts.robotoMono(fontSize: 11.5, color: const Color(0xFF64748B)),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                   ),
-                                  const SizedBox(width: 6),
-                                  InkWell(
-                                    onTap: () => _openTransactionDialog(t),
+                                ),
+                                // Status
+                                SizedBox(
+                                  width: 85,
+                                  child: Align(
+                                    alignment: Alignment.centerLeft,
                                     child: Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFFEFF6FF),
-                                        borderRadius: BorderRadius.circular(6),
-                                      ),
-                                      child: Text(
-                                        'View',
-                                        style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF2563EB)),
-                                      ),
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                      decoration: BoxDecoration(color: statusBg, borderRadius: BorderRadius.circular(6)),
+                                      child: Text(status, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: statusText)),
                                     ),
                                   ),
-                                ],
-                              ),
+                                ),
+                                // Date & Actions
+                                SizedBox(
+                                  width: 125,
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.end,
+                                    children: [
+                                      Text(
+                                        t['dateTime'] ?? 'Today',
+                                        style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF94A3B8)),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      const SizedBox(width: 6),
+                                      InkWell(
+                                        onTap: () => _openTransactionDialog(t),
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFFEFF6FF),
+                                            borderRadius: BorderRadius.circular(6),
+                                          ),
+                                          child: Text(
+                                            'View',
+                                            style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF2563EB)),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ),
-                          ],
-                        ),
-                      );
-                    }),
-                ],
-              ),
-            ),
+                          );
+                        }),
+                    ],
+                  ),
+                ),
+              );
+            },
           ),
         ],
       ),
@@ -1315,19 +1405,20 @@ class _PaymentsTabState extends State<PaymentsTab> {
           const SizedBox(height: 14),
 
           ...list.map((gw) {
-            final name = gw['name']?.toString() ?? 'Gateway';
-            final isEnabled = gw['status'] == 'Enabled';
+            final m = gw is Map<String, dynamic> ? gw : Map<String, dynamic>.from(gw);
+            final name = m['name']?.toString() ?? 'Gateway';
+            final isEnabled = m['status'] == 'Enabled';
             Color bg = const Color(0xFF0F172A);
             if (name.contains('Cashfree')) bg = const Color(0xFF047857);
             if (name.contains('PayU')) bg = const Color(0xFF84CC16);
-            return _gatewayRow(name, bg, isEnabled, isDark);
+            return _gatewayRow(m, name, bg, isEnabled, isDark);
           }),
         ],
       ),
     );
   }
 
-  Widget _gatewayRow(String name, Color iconBg, bool isEnabled, bool isDark) {
+  Widget _gatewayRow(Map<String, dynamic> gw, String name, Color iconBg, bool isEnabled, bool isDark) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
@@ -1372,7 +1463,7 @@ class _PaymentsTabState extends State<PaymentsTab> {
               minimumSize: const Size(40, 28),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
             ),
-            onPressed: () => widget.onShowToast('Gateway configuration for $name updated'),
+            onPressed: () => _openGatewayConfigDialog(gw),
             child: Text('Edit', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600)),
           ),
         ],
@@ -1415,7 +1506,7 @@ class _PaymentsTabState extends State<PaymentsTab> {
                   const Color(0xFF2563EB),
                   () {
                     setState(() => _filterStatus = 'Pending');
-                    widget.onShowToast('Filtering 12 pending transactions');
+                    widget.onShowToast('Filtering pending transactions');
                   },
                 ),
               ),
@@ -1425,7 +1516,10 @@ class _PaymentsTabState extends State<PaymentsTab> {
                   'Process Refund',
                   Icons.undo_rounded,
                   const Color(0xFF7C3AED),
-                  () => widget.onShowToast('Select a transaction below to issue a refund'),
+                  () {
+                    setState(() => _filterStatus = 'Success');
+                    widget.onShowToast('Showing successful payments. Click View on any row to process refund ↩️');
+                  },
                 ),
               ),
             ],
@@ -1438,7 +1532,7 @@ class _PaymentsTabState extends State<PaymentsTab> {
                   'Export Transactions',
                   Icons.download_rounded,
                   const Color(0xFF059669),
-                  () => widget.onShowToast('Exporting transaction records to CSV... 📥'),
+                  () => _exportTransactionsToCsv(),
                 ),
               ),
               const SizedBox(width: 10),
@@ -1447,7 +1541,7 @@ class _PaymentsTabState extends State<PaymentsTab> {
                   'Payment Reports',
                   Icons.analytics_outlined,
                   const Color(0xFF4F46E5),
-                  () => widget.onShowToast('Financial overview reconciled for Oct 2026 📊'),
+                  () => widget.onShowToast('Financial overview reconciled for ${_transactions.length} transactions 📊'),
                 ),
               ),
             ],

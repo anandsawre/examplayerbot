@@ -42,6 +42,7 @@ class TestsQuestionsTabState extends State<TestsQuestionsTab> {
   List<Map<String, dynamic>> _selectedQuizQuestions = [];
   bool _isLoadingQuestions = false;
   String _quizTableSearch = '';
+  String _questionBankSearch = '';
   String _quizTableCategoryFilter = 'all';
   String _quizTableStatusFilter = 'all'; // 'all', 'published', 'draft'
   String _quizTableSort = 'newest'; // 'newest', 'oldest', 'questions', 'title'
@@ -51,7 +52,7 @@ class TestsQuestionsTabState extends State<TestsQuestionsTab> {
 
   final TextEditingController _editTestTitleCtrl = TextEditingController();
   final TextEditingController _editTestDescCtrl = TextEditingController();
-  String _editTestCategory = 'GK • Bihar';
+  String _editTestCategory = 'General';
   int _editTestTimeLimit = 30;
   double _editTestNegativeMark = 0.25;
   bool _editTestShuffleQuestions = true;
@@ -225,163 +226,6 @@ class TestsQuestionsTabState extends State<TestsQuestionsTab> {
       }
     }
 
-    // 2. If database has no quizzes yet, provide standard competitive exam mock tests
-    if (list.isEmpty) {
-      final sampleTests = [
-        {
-          'id': 'mock-1',
-          'title': 'Bihar Special',
-          'subtitle': 'Ghatna Chakra • BPSC TRE 4.0',
-          'description': 'Ghatna Chakra • BPSC TRE 4.0 के लिए महत्वपूर्ण प्रश्न',
-          'category': 'GK • Bihar',
-          'questions': 50,
-          'status': 'Published',
-          'is_draft': false,
-          'created': '15 Oct 2026',
-          'time_limit_seconds': 30,
-          'negative_marks': 0.25,
-          'marks_per_question': 2.0,
-          'is_premium': true,
-        },
-        {
-          'id': 'mock-2',
-          'title': 'विज्ञान मॉक टेस्ट – 10 प्रश्न',
-          'subtitle': 'Science • Basic',
-          'description': 'General Science foundational questions for competitive exams',
-          'category': 'Science',
-          'questions': 10,
-          'status': 'Published',
-          'is_draft': false,
-          'created': '14 Oct 2026',
-          'time_limit_seconds': 20,
-          'negative_marks': 0.25,
-          'marks_per_question': 2.0,
-          'is_premium': false,
-        },
-        {
-          'id': 'mock-3',
-          'title': 'विज्ञान मॉक टेस्ट – 50 प्रश्न',
-          'subtitle': 'Science • Practice',
-          'description': 'Advanced Physics, Chemistry and Biology comprehensive test',
-          'category': 'Science',
-          'questions': 50,
-          'status': 'Draft',
-          'is_draft': true,
-          'created': '14 Oct 2026',
-          'time_limit_seconds': 30,
-          'negative_marks': 0.33,
-          'marks_per_question': 2.0,
-          'is_premium': false,
-        },
-        {
-          'id': 'mock-4',
-          'title': 'Current Affairs – October',
-          'subtitle': 'Daily Current Affairs',
-          'description': 'National and International October 2026 current affairs quiz',
-          'category': 'Current Affairs',
-          'questions': 50,
-          'status': 'Published',
-          'is_draft': false,
-          'created': '12 Oct 2026',
-          'time_limit_seconds': 25,
-          'negative_marks': 0.25,
-          'marks_per_question': 2.0,
-          'is_premium': true,
-        },
-        {
-          'id': 'mock-5',
-          'title': 'Maths Practice Set – 1',
-          'subtitle': 'Basic to Advanced',
-          'description': 'Quantitative aptitude, percentages, ratios and algebra',
-          'category': 'Mathematics',
-          'questions': 25,
-          'status': 'Published',
-          'is_draft': false,
-          'created': '10 Oct 2026',
-          'time_limit_seconds': 45,
-          'negative_marks': 0.5,
-          'marks_per_question': 2.0,
-          'is_premium': false,
-        },
-        {
-          'id': 'mock-6',
-          'title': 'Reasoning – Syllogism',
-          'subtitle': 'Practice Questions',
-          'description': 'Logical reasoning, Venn diagrams and analytical problems',
-          'category': 'Reasoning',
-          'questions': 30,
-          'status': 'Published',
-          'is_draft': false,
-          'created': '08 Oct 2026',
-          'time_limit_seconds': 30,
-          'negative_marks': 0.25,
-          'marks_per_question': 2.0,
-          'is_premium': false,
-        },
-        {
-          'id': 'mock-7',
-          'title': 'General Awareness – Mix',
-          'subtitle': 'Static + Current',
-          'description': 'Indian Polity, History, Geography and Economics mix paper',
-          'category': 'General Awareness',
-          'questions': 40,
-          'status': 'Published',
-          'is_draft': false,
-          'created': '05 Oct 2026',
-          'time_limit_seconds': 30,
-          'negative_marks': 0.25,
-          'marks_per_question': 2.0,
-          'is_premium': true,
-        },
-        {
-          'id': 'mock-8',
-          'title': 'RRB Technician – Model Test',
-          'subtitle': 'Full Syllabus',
-          'description': 'Railway Recruitment Board Technician Grade III mock exam',
-          'category': 'Railway',
-          'questions': 100,
-          'status': 'Published',
-          'is_draft': false,
-          'created': '01 Oct 2026',
-          'time_limit_seconds': 90,
-          'negative_marks': 0.33,
-          'marks_per_question': 1.0,
-          'is_premium': true,
-        },
-        {
-          'id': 'mock-9',
-          'title': 'Biology – Cell Biology',
-          'subtitle': 'Chapter Wise',
-          'description': 'Cell structure, organelle functions and DNA/RNA concepts',
-          'category': 'Biology',
-          'questions': 25,
-          'status': 'Draft',
-          'is_draft': true,
-          'created': '28 Sep 2026',
-          'time_limit_seconds': 25,
-          'negative_marks': 0.25,
-          'marks_per_question': 2.0,
-          'is_premium': false,
-        },
-        {
-          'id': 'mock-10',
-          'title': 'Chemistry – Periodic Table',
-          'subtitle': 'MCQ Practice',
-          'description': 'Elements, atomic structure, periods and chemical bonding',
-          'category': 'Chemistry',
-          'questions': 30,
-          'status': 'Published',
-          'is_draft': false,
-          'created': '25 Sep 2026',
-          'time_limit_seconds': 30,
-          'negative_marks': 0.25,
-          'marks_per_question': 2.0,
-          'is_premium': true,
-        },
-      ];
-      list.addAll(sampleTests);
-    }
-
     return list;
   }
 
@@ -430,45 +274,26 @@ class TestsQuestionsTabState extends State<TestsQuestionsTab> {
 
     // Auto-select first quiz if nothing selected yet
     if (_selectedQuizForEdit == null && allTests.isNotEmpty) {
-      _selectedQuizForEdit = allTests.first;
-      _editTestTitleCtrl.text = allTests.first['title']?.toString() ?? '';
-      _editTestDescCtrl.text = allTests.first['description']?.toString() ?? '';
-      _editTestCategory = allTests.first['category']?.toString() ?? 'GK • Bihar';
-      _editTestTimeLimit = ((allTests.first['time_limit_seconds'] as num?)?.toInt() ?? 30);
-      _editTestNegativeMark = ((allTests.first['negative_marks'] as num?)?.toDouble() ?? 0.25);
-      _editTestIsDraft = allTests.first['is_draft'] == true;
+      final firstTest = allTests.first;
+      _selectedQuizForEdit = firstTest;
+      _editTestTitleCtrl.text = firstTest['title']?.toString() ?? '';
+      _editTestDescCtrl.text = firstTest['description']?.toString() ?? '';
+      _editTestCategory = firstTest['category']?.toString() ?? 'General';
+      _editTestTimeLimit = ((firstTest['time_limit_seconds'] as num?)?.toInt() ?? 30);
+      _editTestNegativeMark = ((firstTest['negative_marks'] as num?)?.toDouble() ?? 0.25);
+      _editTestIsDraft = firstTest['is_draft'] == true;
+      _selectedQuizQuestions = [];
 
-      if (_selectedQuizQuestions.isEmpty) {
-        _selectedQuizQuestions = [
-          {
-            'id': 'q-1',
-            'question_text': 'बिहार के किस जिले में स्थित है विश्व प्रसिद्ध नालंदा विश्वविद्यालय?',
-            'options': ['नालंदा', 'पटना', 'गया', 'भागलपुर'],
-            'correct_option_index': 0,
-            'explanation': 'नालंदा विश्वविद्यालय प्राचीन भारत में उच्च शिक्षा का सर्वाधिक महत्वपूर्ण और प्रसिद्ध केंद्र था, जो बिहार के नालंदा (राजगीर के निकट) में स्थित है।',
-            'subject_tag': 'Bihar History',
-            'difficulty': 'Medium',
-          },
-          {
-            'id': 'q-2',
-            'question_text': 'बिहार में 1857 के प्रसिद्ध विद्रोह का नेतृत्व किसने किया था?',
-            'options': ['बाबू वीर कुंवर सिंह', 'नाना साहेब', 'तात्या टोपे', 'अमर सिंह'],
-            'correct_option_index': 0,
-            'explanation': 'बाबू वीर कुंवर सिंह ने जगदीशपुर (भोजपुर) से 1857 की क्रांति का ऐतिहासिक नेतृत्व किया था।',
-            'subject_tag': 'Modern Bihar',
-            'difficulty': 'Easy',
-          },
-          {
-            'id': 'q-3',
-            'question_text': 'चंपारण सत्याग्रह (1917) में गांधीजी को बिहार आने का आमंत्रण किसने दिया था?',
-            'options': ['राजकुमार शुक्ल', 'राजेन्द्र प्रसाद', 'मजहरुल हक', 'ब्रजकिशोर प्रसाद'],
-            'correct_option_index': 0,
-            'explanation': 'पंडित राजकुमार शुक्ल ने लखनऊ अधिवेशन (1916) में महात्मा गांधी से मिलकर चंपारण के नील किसानों की समस्याओं से अवगत कराया था।',
-            'subject_tag': 'National Movement',
-            'difficulty': 'Medium',
-          },
-        ];
-      }
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _selectedQuizForEdit != null) {
+          _loadQuestionsForQuiz(_selectedQuizForEdit!['id']?.toString() ?? '');
+        }
+      });
+    }
+
+    if (_selectedQuizForEdit != null && _selectedQuizForEdit!['id'] != 'new' && !allTests.any((t) => t['id'] == _selectedQuizForEdit!['id'])) {
+      _selectedQuizForEdit = allTests.isNotEmpty ? allTests.first : null;
+      _selectedQuizQuestions = [];
     }
 
     return LayoutBuilder(
@@ -646,15 +471,15 @@ class TestsQuestionsTabState extends State<TestsQuestionsTab> {
     final totalQuestions = all.fold<int>(0, (sum, q) => sum + ((q['questions'] as int?) ?? 0));
     final publishedCount = all.where((q) => q['status'] == 'Published').length;
     final draftCount = all.where((q) => q['status'] == 'Draft').length;
-    final totalAttempts = (_resolvedStats['totalAttempts'] as num?)?.toInt() ?? 104320;
-    final pctPublished = totalTests > 0 ? ((publishedCount / totalTests) * 100).toStringAsFixed(1) : '100.0';
+    final totalAttempts = (_resolvedStats['totalAttempts'] as num?)?.toInt() ?? 0;
+    final pctPublished = totalTests > 0 ? ((publishedCount / totalTests) * 100).toStringAsFixed(1) : '0.0';
     final pctDraft = totalTests > 0 ? ((draftCount / totalTests) * 100).toStringAsFixed(1) : '0.0';
 
     final cards = <Widget>[
       _buildKpiCard(
         title: 'Total Tests',
         count: _formatNumber(totalTests),
-        trend: '+12 this month',
+        trend: null,
         subtext: '$totalTests tests registered',
         icon: Icons.menu_book_rounded,
         iconBg: const Color(0xFFECFDF5),
@@ -662,8 +487,8 @@ class TestsQuestionsTabState extends State<TestsQuestionsTab> {
       ),
       _buildKpiCard(
         title: 'Total Questions',
-        count: _formatNumber(totalQuestions > 0 ? totalQuestions : 5248),
-        trend: '+450 this month',
+        count: _formatNumber(totalQuestions),
+        trend: null,
         subtext: 'Across all active modules',
         icon: Icons.help_outline_rounded,
         iconBg: const Color(0xFFFAF5FF),
@@ -690,8 +515,8 @@ class TestsQuestionsTabState extends State<TestsQuestionsTab> {
       _buildKpiCard(
         title: 'Total Attempts',
         count: _formatNumber(totalAttempts),
-        trend: '+15.3%',
-        subtext: '1.04L candidate exams',
+        trend: null,
+        subtext: '$totalAttempts candidate submissions',
         icon: Icons.people_alt_rounded,
         iconBg: const Color(0xFFEFF6FF),
         iconColor: const Color(0xFF2563EB),
@@ -914,28 +739,36 @@ class TestsQuestionsTabState extends State<TestsQuestionsTab> {
                           border: Border.all(color: isDark ? AppTheme.darkBorderSubtle : const Color(0xFFE2E8F0)),
                         ),
                         child: DropdownButtonHideUnderline(
-                          child: DropdownButton<String>(
-                            value: _quizTableCategoryFilter,
-                            icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 16, color: Color(0xFF64748B)),
-                            style: GoogleFonts.inter(fontSize: 12, color: isDark ? Colors.white : const Color(0xFF334155)),
-                            dropdownColor: isDark ? AppTheme.darkSurface : Colors.white,
-                            items: const [
-                              DropdownMenuItem(value: 'all', child: Text('All Categories')),
-                              DropdownMenuItem(value: 'GK', child: Text('GK • Bihar')),
-                              DropdownMenuItem(value: 'Science', child: Text('Science')),
-                              DropdownMenuItem(value: 'Current', child: Text('Current Affairs')),
-                              DropdownMenuItem(value: 'Math', child: Text('Mathematics')),
-                              DropdownMenuItem(value: 'Reasoning', child: Text('Reasoning')),
-                              DropdownMenuItem(value: 'General', child: Text('General Awareness')),
-                              DropdownMenuItem(value: 'Railway', child: Text('Railway')),
-                              DropdownMenuItem(value: 'Biology', child: Text('Biology')),
-                              DropdownMenuItem(value: 'Chemistry', child: Text('Chemistry')),
-                            ],
-                            onChanged: (val) {
-                              if (val != null) setState(() {
-                                _quizTableCategoryFilter = val;
-                                _quizTablePage = 1;
-                              });
+                          child: Builder(
+                            builder: (context) {
+                              final categories = <String>{'all'};
+                              for (final q in _allDisplayQuizzes) {
+                                final c = q['category']?.toString();
+                                if (c != null && c.trim().isNotEmpty) {
+                                  categories.add(c.trim());
+                                }
+                              }
+                              if (!categories.contains(_quizTableCategoryFilter)) {
+                                categories.add(_quizTableCategoryFilter);
+                              }
+                              return DropdownButton<String>(
+                                value: _quizTableCategoryFilter,
+                                icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 16, color: Color(0xFF64748B)),
+                                style: GoogleFonts.inter(fontSize: 12, color: isDark ? Colors.white : const Color(0xFF334155)),
+                                dropdownColor: isDark ? AppTheme.darkSurface : Colors.white,
+                                items: categories.map((cat) => DropdownMenuItem(
+                                  value: cat,
+                                  child: Text(cat == 'all' ? 'All Categories' : cat),
+                                )).toList(),
+                                onChanged: (val) {
+                                  if (val != null) {
+                                    setState(() {
+                                      _quizTableCategoryFilter = val;
+                                      _quizTablePage = 1;
+                                    });
+                                  }
+                                },
+                              );
                             },
                           ),
                         ),
@@ -964,10 +797,12 @@ class TestsQuestionsTabState extends State<TestsQuestionsTab> {
                               DropdownMenuItem(value: 'draft', child: Text('Draft')),
                             ],
                             onChanged: (val) {
-                              if (val != null) setState(() {
-                                _quizTableStatusFilter = val;
-                                _quizTablePage = 1;
-                              });
+                              if (val != null) {
+                                setState(() {
+                                  _quizTableStatusFilter = val;
+                                  _quizTablePage = 1;
+                                });
+                              }
                             },
                           ),
                         ),
@@ -1372,6 +1207,13 @@ class TestsQuestionsTabState extends State<TestsQuestionsTab> {
                 ),
                 Row(
                   children: [
+                    IconButton(
+                      icon: const Icon(Icons.chevron_left_rounded, size: 18),
+                      visualDensity: VisualDensity.compact,
+                      onPressed: currentPage > 1
+                          ? () => setState(() => _quizTablePage = currentPage - 1)
+                          : null,
+                    ),
                     ...List.generate(min(5, totalPages), (i) {
                       final pageNum = i + 1;
                       final isCurrent = pageNum == currentPage;
@@ -1444,6 +1286,57 @@ class TestsQuestionsTabState extends State<TestsQuestionsTab> {
   Widget _buildEditTestPanelCard(bool isDark) {
     final q = _selectedQuizForEdit;
     final isNew = q != null && q['id'] == 'new';
+
+    if (q == null) {
+      return Container(
+        decoration: BoxDecoration(
+          color: isDark ? AppTheme.darkCard : Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: isDark ? AppTheme.darkBorderSubtle : const Color(0xFFE2E8F0)),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 48),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 56,
+                height: 56,
+                decoration: const BoxDecoration(
+                  color: Color(0xFFEFF6FF),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.assignment_add, size: 28, color: Color(0xFF2563EB)),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'No Test Paper Selected',
+                style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w800, color: isDark ? Colors.white : const Color(0xFF0F172A)),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Select any test paper from the list on the left to edit, or compose a new one.',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
+              ),
+              const SizedBox(height: 20),
+              ElevatedButton.icon(
+                onPressed: _startCreatingNewTest,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF2563EB),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  elevation: 0,
+                ),
+                icon: const Icon(Icons.add_rounded, size: 16),
+                label: Text('Create New Test', style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 13)),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
 
     return Container(
       decoration: BoxDecoration(
@@ -2207,9 +2100,16 @@ class TestsQuestionsTabState extends State<TestsQuestionsTab> {
               IconButton(
                 visualDensity: VisualDensity.compact,
                 padding: EdgeInsets.zero,
-                icon: const Icon(Icons.image_outlined, size: 16, color: Color(0xFF94A3B8)),
-                tooltip: 'Attach Image',
-                onPressed: () => _showToast('Question image attached.'),
+                icon: const Icon(Icons.edit_outlined, size: 16, color: Color(0xFF2563EB)),
+                tooltip: 'Edit Question',
+                onPressed: () => _openEditQuestionDialog(q),
+              ),
+              IconButton(
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                icon: const Icon(Icons.image_outlined, size: 16, color: Color(0xFF64748B)),
+                tooltip: 'Attach Image URL',
+                onPressed: () => _openQuestionImageDialog(q),
               ),
               IconButton(
                 visualDensity: VisualDensity.compact,
@@ -2514,6 +2414,22 @@ class TestsQuestionsTabState extends State<TestsQuestionsTab> {
   // -------------------------------------------------------------
   // Quiz Actions & Controllers
   // -------------------------------------------------------------
+  Future<void> _loadQuestionsForQuiz(String id) async {
+    if (id.isEmpty || id == 'new') return;
+    setState(() => _isLoadingQuestions = true);
+    try {
+      final qList = await _api.getQuizQuestions(id);
+      if (mounted) {
+        setState(() {
+          _selectedQuizQuestions = qList.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+          _isLoadingQuestions = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _isLoadingQuestions = false);
+    }
+  }
+
   Future<void> _selectQuizForEditing(Map<String, dynamic> q) async {
     setState(() {
       _selectedQuizForEdit = q;
@@ -2524,10 +2440,11 @@ class TestsQuestionsTabState extends State<TestsQuestionsTab> {
       _editTestNegativeMark = double.tryParse(q['negative_marks']?.toString() ?? '0.25') ?? 0.25;
       _editTestIsDraft = q['is_draft'] == true;
       _isLoadingQuestions = true;
+      _selectedQuizQuestions = [];
     });
 
     final id = q['id']?.toString() ?? '';
-    if (!id.startsWith('mock-') && id != 'new') {
+    if (id.isNotEmpty && id != 'new') {
       try {
         final qList = await _api.getQuizQuestions(id);
         if (mounted) {
@@ -2579,7 +2496,7 @@ class TestsQuestionsTabState extends State<TestsQuestionsTab> {
     }
 
     _showToast('Saving test and questions...');
-    final isNew = _selectedQuizForEdit!['id'] == 'new' || _selectedQuizForEdit!['id'].toString().startsWith('mock-');
+    final isNew = _selectedQuizForEdit!['id'] == 'new';
 
     if (isNew) {
       final res = await _api.createQuiz(
@@ -2609,6 +2526,7 @@ class TestsQuestionsTabState extends State<TestsQuestionsTab> {
         'description': _editTestDescCtrl.text.trim(),
         'negative_marks': _editTestNegativeMark,
         'time_limit_seconds': _editTestTimeLimit,
+        'is_active': !_editTestIsDraft,
       });
       if (res['success'] == true) {
         _showToast('Test changes saved! 💾');
@@ -2725,7 +2643,7 @@ class TestsQuestionsTabState extends State<TestsQuestionsTab> {
                 };
 
                 final quizId = _selectedQuizForEdit?['id']?.toString();
-                if (quizId != null && !quizId.startsWith('mock-') && quizId != 'new') {
+                if (quizId != null && quizId != 'new') {
                   final res = await _api.addQuestion(
                     quizId,
                     questionText: text,
@@ -2749,6 +2667,143 @@ class TestsQuestionsTabState extends State<TestsQuestionsTab> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _openEditQuestionDialog(Map<String, dynamic> q) {
+    final qCtrl = TextEditingController(text: q['question_text']?.toString() ?? '');
+    final opts = q['options'] is List ? List<String>.from((q['options'] as List).map((e) => e.toString())) : <String>[];
+    final opt0Ctrl = TextEditingController(text: opts.isNotEmpty ? opts[0] : 'Option A');
+    final opt1Ctrl = TextEditingController(text: opts.length > 1 ? opts[1] : 'Option B');
+    final opt2Ctrl = TextEditingController(text: opts.length > 2 ? opts[2] : 'Option C');
+    final opt3Ctrl = TextEditingController(text: opts.length > 3 ? opts[3] : 'Option D');
+    final expCtrl = TextEditingController(text: q['explanation']?.toString() ?? '');
+    int correctIdx = (q['correct_option_index'] as num?)?.toInt() ?? 0;
+    if (correctIdx < 0 || correctIdx > 3) correctIdx = 0;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Text('Edit Question', style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 16)),
+          content: SizedBox(
+            width: 440,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: qCtrl,
+                    maxLines: 2,
+                    decoration: const InputDecoration(labelText: 'Question Text', hintText: 'Type question prompt...'),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(controller: opt0Ctrl, decoration: const InputDecoration(labelText: 'Option A')),
+                  const SizedBox(height: 6),
+                  TextField(controller: opt1Ctrl, decoration: const InputDecoration(labelText: 'Option B')),
+                  const SizedBox(height: 6),
+                  TextField(controller: opt2Ctrl, decoration: const InputDecoration(labelText: 'Option C')),
+                  const SizedBox(height: 6),
+                  TextField(controller: opt3Ctrl, decoration: const InputDecoration(labelText: 'Option D')),
+                  const SizedBox(height: 10),
+                  DropdownButtonFormField<int>(
+                    decoration: const InputDecoration(labelText: 'Correct Option Answer'),
+                    initialValue: correctIdx,
+                    items: const [
+                      DropdownMenuItem(value: 0, child: Text('Option A is Correct ✓')),
+                      DropdownMenuItem(value: 1, child: Text('Option B is Correct ✓')),
+                      DropdownMenuItem(value: 2, child: Text('Option C is Correct ✓')),
+                      DropdownMenuItem(value: 3, child: Text('Option D is Correct ✓')),
+                    ],
+                    onChanged: (val) => setDState(() => correctIdx = val ?? 0),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: expCtrl,
+                    decoration: const InputDecoration(labelText: 'Detailed Explanation (Optional)'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2563EB), foregroundColor: Colors.white),
+              onPressed: () async {
+                final text = qCtrl.text.trim();
+                if (text.isEmpty) {
+                  _showToast('Please type a question prompt.');
+                  return;
+                }
+                Navigator.pop(ctx);
+                final updatedOpts = [opt0Ctrl.text.trim(), opt1Ctrl.text.trim(), opt2Ctrl.text.trim(), opt3Ctrl.text.trim()];
+                final qId = q['id']?.toString();
+
+                if (qId != null && !qId.startsWith('temp-')) {
+                  final res = await _api.updateQuestion(
+                    qId,
+                    questionText: text,
+                    options: updatedOpts,
+                    correctOptionIndex: correctIdx,
+                    explanation: expCtrl.text.trim().isNotEmpty ? expCtrl.text.trim() : null,
+                  );
+                  if (res['success'] == true) {
+                    _showToast('Question updated in database! 💾');
+                    if (_selectedQuizForEdit != null) {
+                      _selectQuizForEditing(_selectedQuizForEdit!);
+                    }
+                    return;
+                  }
+                }
+
+                setState(() {
+                  q['question_text'] = text;
+                  q['options'] = updatedOpts;
+                  q['correct_option_index'] = correctIdx;
+                  q['explanation'] = expCtrl.text.trim();
+                });
+                _showToast('Question updated.');
+              },
+              child: const Text('Save Changes'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _openQuestionImageDialog(Map<String, dynamic> q) {
+    final ctrl = TextEditingController(text: q['image_url']?.toString() ?? '');
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Question Image URL'),
+        content: TextField(
+          controller: ctrl,
+          decoration: const InputDecoration(
+            labelText: 'Image URL',
+            hintText: 'https://example.com/diagram.png',
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () async {
+              final img = ctrl.text.trim();
+              Navigator.pop(ctx);
+              final qId = q['id']?.toString();
+              if (qId != null && !qId.startsWith('temp-')) {
+                await _api.updateQuestion(qId, questionText: q['question_text']?.toString());
+              }
+              setState(() => q['image_url'] = img);
+              _showToast(img.isNotEmpty ? 'Question image URL attached!' : 'Image removed.');
+            },
+            child: const Text('Save'),
+          ),
+        ],
       ),
     );
   }
@@ -2807,7 +2862,7 @@ class TestsQuestionsTabState extends State<TestsQuestionsTab> {
                 final list = decoded.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
                 final quizId = _selectedQuizForEdit?['id']?.toString();
 
-                if (quizId != null && !quizId.startsWith('mock-') && quizId != 'new') {
+                if (quizId != null && quizId != 'new') {
                   final res = await _api.importQuestionsBulk(quizId, list);
                   if (res['success'] == true) {
                     _showToast('Successfully imported ${res['count'] ?? list.length} questions!');
@@ -2849,7 +2904,7 @@ class TestsQuestionsTabState extends State<TestsQuestionsTab> {
     );
     if (confirm == true) {
       final qId = q['id']?.toString();
-      if (qId != null && !qId.startsWith('temp-') && !qId.startsWith('q-')) {
+      if (qId != null && !qId.startsWith('temp-')) {
         await _api.deleteQuestion(qId);
       }
       setState(() {
@@ -2867,14 +2922,19 @@ class TestsQuestionsTabState extends State<TestsQuestionsTab> {
         title: const Text('Change Test Thumbnail Image'),
         content: TextField(
           controller: ctrl,
-          decoration: const InputDecoration(labelText: 'Image URL or Icon Key', hintText: 'https://example.com/banner.png'),
+          decoration: const InputDecoration(labelText: 'Image URL', hintText: 'https://example.com/banner.png'),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
+              final newUrl = ctrl.text.trim();
               Navigator.pop(ctx);
-              setState(() => _editTestImageUrl = ctrl.text.trim());
+              setState(() => _editTestImageUrl = newUrl);
+              final quizId = _selectedQuizForEdit?['id']?.toString();
+              if (quizId != null && quizId != 'new') {
+                await _api.updateQuiz(quizId, {'image_url': newUrl});
+              }
               _showToast('Thumbnail updated! 🖼️');
             },
             child: const Text('Save'),
@@ -2949,6 +3009,14 @@ class TestsQuestionsTabState extends State<TestsQuestionsTab> {
   // Secondary Sub-Tabs: Question Bank, Categories, Import/Export, Trash
   // -------------------------------------------------------------
   Widget _buildQuestionBankView({required bool isDark}) {
+    final search = _questionBankSearch.trim().toLowerCase();
+    final filtered = _selectedQuizQuestions.where((q) {
+      if (search.isEmpty) return true;
+      final text = q['question_text']?.toString().toLowerCase() ?? '';
+      final tag = q['subject_tag']?.toString().toLowerCase() ?? '';
+      return text.contains(search) || tag.contains(search);
+    }).toList();
+
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
@@ -2963,68 +3031,140 @@ class TestsQuestionsTabState extends State<TestsQuestionsTab> {
             children: [
               const Icon(Icons.help_outline_rounded, size: 22, color: Color(0xFF8B5CF6)),
               const SizedBox(width: 10),
-              Text('Universal Question Bank', style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w800)),
+              Text('Question Bank', style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w800)),
+              const Spacer(),
+              if (_selectedQuizForEdit != null)
+                Text(
+                  'Current Test: ${_selectedQuizForEdit!['title'] ?? 'Test'} (${_selectedQuizQuestions.length} Qs)',
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF2563EB)),
+                ),
             ],
           ),
           const SizedBox(height: 4),
-          const Text('Search, organize and reuse questions across multiple test papers.', style: TextStyle(fontSize: 12, color: Color(0xFF64748B))),
+          const Text('Search and review questions in the selected test module.', style: TextStyle(fontSize: 12, color: Color(0xFF64748B))),
           const SizedBox(height: 16),
           TextField(
-            decoration: const InputDecoration(
-              hintText: 'Search universal question repository...',
-              prefixIcon: Icon(Icons.search_rounded, size: 18),
+            onChanged: (val) => setState(() => _questionBankSearch = val),
+            style: GoogleFonts.inter(fontSize: 12.5),
+            decoration: InputDecoration(
+              hintText: 'Search questions in bank by prompt or subject tag...',
+              prefixIcon: const Icon(Icons.search_rounded, size: 18),
+              filled: true,
+              fillColor: isDark ? AppTheme.darkSurface : const Color(0xFFF8FAFC),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
             ),
           ),
           const SizedBox(height: 20),
-          ..._selectedQuizQuestions.map((q) => Container(
-            margin: const EdgeInsets.only(bottom: 10),
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: isDark ? AppTheme.darkSurface : const Color(0xFFF8FAFC),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: isDark ? AppTheme.darkBorderSubtle : const Color(0xFFE2E8F0)),
-            ),
-            child: Row(
-              children: [
-                Expanded(child: Text(q['question_text'] ?? '', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13))),
-                const SizedBox(width: 10),
-                OutlinedButton(
-                  onPressed: () => _showToast('Question cloned into current draft!'),
-                  child: const Text('Add to Test', style: TextStyle(fontSize: 11)),
+          if (_isLoadingQuestions)
+            const Padding(padding: EdgeInsets.all(30), child: Center(child: CircularProgressIndicator()))
+          else if (filtered.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 24),
+              child: Center(
+                child: Text(
+                  _selectedQuizQuestions.isEmpty
+                      ? 'No questions loaded for this test. Select a test paper from "All Tests" to inspect.'
+                      : 'No questions match "$_questionBankSearch"',
+                  style: const TextStyle(fontSize: 12.5, color: Color(0xFF94A3B8)),
                 ),
-              ],
-            ),
-          )),
+              ),
+            )
+          else
+            ...filtered.map((q) => Container(
+              margin: const EdgeInsets.only(bottom: 10),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: isDark ? AppTheme.darkSurface : const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: isDark ? AppTheme.darkBorderSubtle : const Color(0xFFE2E8F0)),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(q['question_text'] ?? '', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                        if (q['explanation'] != null && q['explanation'].toString().isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Text('💡 ${q['explanation']}', style: const TextStyle(fontSize: 11, color: Color(0xFF64748B))),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  IconButton(
+                    icon: const Icon(Icons.edit_outlined, size: 16, color: Color(0xFF2563EB)),
+                    tooltip: 'Edit Question',
+                    onPressed: () => _openEditQuestionDialog(q),
+                  ),
+                ],
+              ),
+            )),
         ],
       ),
     );
   }
 
   Widget _buildCategoriesExplorerView({required bool isDark}) {
-    final categories = ['GK • Bihar', 'Science', 'Current Affairs', 'Mathematics', 'Reasoning', 'General Awareness', 'Railway', 'Biology', 'Chemistry'];
+    final existingCats = <String>{};
+    for (final q in _allDisplayQuizzes) {
+      final c = q['category']?.toString();
+      if (c != null && c.trim().isNotEmpty) {
+        existingCats.add(c.trim());
+      }
+    }
+    if (existingCats.isEmpty) {
+      existingCats.addAll(['General', 'GK', 'Science', 'Current Affairs', 'Mathematics', 'Reasoning']);
+    }
+    final categories = existingCats.toList();
 
     return Wrap(
       spacing: 14,
       runSpacing: 14,
       children: categories.map((cat) {
-        final count = _allDisplayQuizzes.where((q) => q['category']?.toString().toLowerCase().contains(cat.toLowerCase()) == true).length;
-        return Container(
-          width: 240,
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: isDark ? AppTheme.darkCard : Colors.white,
+        final count = _allDisplayQuizzes.where((q) {
+          final c = q['category']?.toString().toLowerCase() ?? '';
+          return c == cat.toLowerCase() || c.contains(cat.toLowerCase());
+        }).length;
+        return Material(
+          color: Colors.transparent,
+          child: InkWell(
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: isDark ? AppTheme.darkBorderSubtle : const Color(0xFFE2E8F0)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildCategoryPill(cat),
-              const SizedBox(height: 12),
-              Text(cat, style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w700)),
-              const SizedBox(height: 4),
-              Text('$count test modules organized', style: const TextStyle(fontSize: 11.5, color: Color(0xFF64748B))),
-            ],
+            onTap: () {
+              setState(() {
+                _testSubTab = 'all';
+                _quizTableCategoryFilter = cat;
+                _quizTablePage = 1;
+              });
+              _showToast('Filtered tests by "$cat"');
+            },
+            child: Container(
+              width: 240,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: isDark ? AppTheme.darkCard : Colors.white,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: isDark ? AppTheme.darkBorderSubtle : const Color(0xFFE2E8F0)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      _buildCategoryPill(cat),
+                      const Icon(Icons.arrow_forward_rounded, size: 14, color: Color(0xFF94A3B8)),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Text(cat, style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 4),
+                  Text('$count test modules organized', style: const TextStyle(fontSize: 11.5, color: Color(0xFF64748B))),
+                ],
+              ),
+            ),
           ),
         );
       }).toList(),

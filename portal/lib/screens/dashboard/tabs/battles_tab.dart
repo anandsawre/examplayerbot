@@ -792,85 +792,97 @@ class _BattlesTabState extends State<BattlesTab> {
           const Divider(height: 1, color: Color(0xFFE2E8F0)),
 
           // Table Rows
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: SizedBox(
-              width: 860,
-              child: Column(
-                children: [
-                  // Table Header
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                    color: isDark ? AppTheme.darkSurface : const Color(0xFFF8FAFC),
-                    child: Row(
-                      children: [
-                        _colHeader('#', 35),
-                        _colHeader('Group / Channel', 215),
-                        _colHeader('Type', 80),
-                        _colHeader('Members', 90),
-                        _colHeader('Active Users (7d)', 140),
-                        _colHeader('Messages', 80),
-                        _colHeader('Status', 80),
-                        _colHeader('Actions', 100, alignment: Alignment.centerRight),
-                      ],
-                    ),
-                  ),
-                  const Divider(height: 1, color: Color(0xFFE2E8F0)),
-                  if (pagedList.isEmpty)
-                    Padding(
-                      padding: const EdgeInsets.all(40),
-                      child: Center(
-                        child: Text(
-                          _isLoading ? 'Loading Telegram groups...' : 'No Telegram groups or channels found',
-                          style: GoogleFonts.inter(color: const Color(0xFF94A3B8), fontSize: 13),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final tableWidth = max(constraints.maxWidth, 920.0);
+              return SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: SizedBox(
+                  width: tableWidth,
+                  child: Column(
+                    children: [
+                      // Table Header
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                        color: isDark ? AppTheme.darkSurface : const Color(0xFFF8FAFC),
+                        child: Row(
+                          children: [
+                            _colHeader('#', 35),
+                            Expanded(
+                              child: Text(
+                                'Group / Channel',
+                                style: GoogleFonts.inter(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: const Color(0xFF64748B),
+                                  letterSpacing: 0.3,
+                                ),
+                              ),
+                            ),
+                            _colHeader('Type', 80),
+                            _colHeader('Members', 90),
+                            _colHeader('Active Users (7d)', 140),
+                            _colHeader('Messages', 80),
+                            _colHeader('Status', 80),
+                            _colHeader('Actions', 115, alignment: Alignment.centerRight),
+                          ],
                         ),
                       ),
-                    )
-                  else
-                  // Rows
-                  ...pagedList.asMap().entries.map((entry) {
-                    final idx = startIndex + entry.key + 1;
-                    final g = entry.value;
-                    final type = g['type'] ?? 'Group';
-                    final isChannel = type == 'Channel';
-                    final isActive = g['status'] == 'Active' || g['is_active'] == true;
-                    final activePercent = g['activePercent'] ?? (isActive ? '40%' : '0%');
-                    final activeUsers = g['activeUsers7d'] ?? 0;
-                    final groupName = g['name'] ?? g['group_title'] ?? 'Community Group';
-                    final groupUsername = g['username'] ?? 'community_${(g['groupId'] ?? g['group_id'] ?? '').toString().replaceAll('-', '')}';
-
-                    return Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                      decoration: BoxDecoration(
-                        border: Border(bottom: BorderSide(color: isDark ? AppTheme.darkBorderSubtle : const Color(0xFFF1F5F9))),
-                      ),
-                      child: Row(
-                        children: [
-                          // #
-                          SizedBox(width: 35, child: Text('$idx', style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF94A3B8)))),
-                          // Group/Channel Name & Icon
-                          SizedBox(
-                            width: 215,
-                            child: Row(
-                              children: [
-                                CircleAvatar(
-                                  radius: 14,
-                                  backgroundColor: isChannel ? const Color(0xFF2563EB) : const Color(0xFF5B3DF5),
-                                  child: Icon(isChannel ? Icons.send_rounded : Icons.groups_rounded, size: 14, color: Colors.white),
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(groupName, style: GoogleFonts.inter(fontSize: 12.5, fontWeight: FontWeight.w700), maxLines: 1, overflow: TextOverflow.ellipsis),
-                                      Text('@$groupUsername', style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)), maxLines: 1, overflow: TextOverflow.ellipsis),
-                                    ],
-                                  ),
-                                ),
-                              ],
+                      const Divider(height: 1, color: Color(0xFFE2E8F0)),
+                      if (pagedList.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.all(40),
+                          child: Center(
+                            child: Text(
+                              _isLoading ? 'Loading Telegram groups...' : 'No Telegram groups or channels found',
+                              style: GoogleFonts.inter(color: const Color(0xFF94A3B8), fontSize: 13),
                             ),
                           ),
+                        )
+                      else
+                      // Rows
+                      ...pagedList.asMap().entries.map((entry) {
+                        final idx = startIndex + entry.key + 1;
+                        final g = entry.value;
+                        final type = g['type'] ?? 'Group';
+                        final isChannel = type == 'Channel';
+                        final isActive = g['status'] == 'Active' || g['is_active'] == true;
+                        final activePercent = g['activePercent'] ?? (isActive ? '40%' : '0%');
+                        final activeUsers = g['activeUsers7d'] ?? 0;
+                        final groupName = g['name'] ?? g['group_title'] ?? 'Community Group';
+                        final groupUsername = g['username'] ?? 'community_${(g['groupId'] ?? g['group_id'] ?? '').toString().replaceAll('-', '')}';
+
+                        return Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                          decoration: BoxDecoration(
+                            border: Border(bottom: BorderSide(color: isDark ? AppTheme.darkBorderSubtle : const Color(0xFFF1F5F9))),
+                          ),
+                          child: Row(
+                            children: [
+                              // #
+                              SizedBox(width: 35, child: Text('$idx', style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF94A3B8)))),
+                              // Group/Channel Name & Icon (Expanded)
+                              Expanded(
+                                child: Row(
+                                  children: [
+                                    CircleAvatar(
+                                      radius: 14,
+                                      backgroundColor: isChannel ? const Color(0xFF2563EB) : const Color(0xFF5B3DF5),
+                                      child: Icon(isChannel ? Icons.send_rounded : Icons.groups_rounded, size: 14, color: Colors.white),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(groupName, style: GoogleFonts.inter(fontSize: 12.5, fontWeight: FontWeight.w700), maxLines: 1, overflow: TextOverflow.ellipsis),
+                                          Text('@$groupUsername', style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)), maxLines: 1, overflow: TextOverflow.ellipsis),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                           // Type
                           SizedBox(
                             width: 80,
@@ -956,7 +968,7 @@ class _BattlesTabState extends State<BattlesTab> {
                           ),
                           // Actions
                           SizedBox(
-                            width: 100,
+                            width: 115,
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.end,
                               children: [
@@ -965,7 +977,7 @@ class _BattlesTabState extends State<BattlesTab> {
                                     backgroundColor: const Color(0xFFEFF6FF),
                                     foregroundColor: const Color(0xFF2563EB),
                                     elevation: 0,
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
                                     minimumSize: const Size(36, 28),
                                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
                                   ),
@@ -973,10 +985,14 @@ class _BattlesTabState extends State<BattlesTab> {
                                   child: Text('Manage', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700)),
                                 ),
                                 const SizedBox(width: 2),
-                                PopupMenuButton<String>(
-                                  icon: const Icon(Icons.more_vert_rounded, size: 16, color: Color(0xFF94A3B8)),
-                                  padding: EdgeInsets.zero,
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                SizedBox(
+                                  width: 24,
+                                  height: 28,
+                                  child: PopupMenuButton<String>(
+                                    icon: const Icon(Icons.more_vert_rounded, size: 16, color: Color(0xFF94A3B8)),
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                                   onSelected: (val) {
                                     if (val == 'battle') {
                                       if (widget.quizzes.isNotEmpty) {
@@ -991,16 +1007,19 @@ class _BattlesTabState extends State<BattlesTab> {
                                     const PopupMenuItem(value: 'link', child: Text('Create Invite Link')),
                                   ],
                                 ),
-                              ],
-                            ),
+                              ),
+                            ],
                           ),
+                        ),
                         ],
                       ),
                     );
                   }),
                 ],
-              ),
-            ),
+                  ),
+                ),
+              );
+            },
           ),
 
           // Pagination

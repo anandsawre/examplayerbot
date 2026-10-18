@@ -55,7 +55,7 @@ import {
   handleRemoveAdminCommand,
   handleAdminCallbackQuery,
 } from './handlers/adminSettings';
-import { syncAdminCache } from './utils/admin';
+import { syncAdminCache, syncOperationalSettings, getOperationalSettings, isAdmin } from './utils/admin';
 import { handleDownloadPdfScorecard } from './handlers/pdfExport';
 import { handleBroadcastCommand, handleBroadcastCallback } from './handlers/broadcast';
 import {
@@ -115,6 +115,7 @@ export function createBot(env: Env): Bot {
   });
   const supabase = getSupabase(env);
   syncAdminCache(supabase).catch((err) => console.error('Failed to init admin cache:', err));
+  syncOperationalSettings(supabase).catch((err) => console.error('Failed to init operational settings:', err));
 
   // Top-level Error Handling Middleware (Safely intercepts errors in webhook & polling modes)
   bot.use(async (ctx, next) => {
@@ -123,6 +124,23 @@ export function createBot(env: Env): Bot {
     } catch (err) {
       handleBotError(err, ctx);
     }
+  });
+
+  // Operational Settings & Maintenance Gatekeeper Middleware
+  bot.use(async (ctx, next) => {
+    try {
+      const ops = getOperationalSettings();
+      if (ops.maintenanceMode && !isAdmin(ctx, env)) {
+        if (ctx.message || ctx.callbackQuery) {
+          await ctx.reply(
+            '🛠️ *Examplayer Bot is currently undergoing scheduled maintenance.*\n\nOur servers are being optimized. Regular quiz sessions and battles will resume shortly.\n\n📢 For live status updates, please check @ExamplayerUpdates',
+            { parse_mode: 'Markdown' }
+          ).catch(() => {});
+        }
+        return;
+      }
+    } catch (_) {}
+    await next();
   });
 
   // Global Error Handler for grammY long polling and background engine

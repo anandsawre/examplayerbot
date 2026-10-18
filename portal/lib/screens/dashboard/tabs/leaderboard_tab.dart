@@ -1,5 +1,6 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../services/api_service.dart';
 import '../../../services/telegram_service.dart';
@@ -37,7 +38,12 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
   String _filterSubject = 'All Subjects';
   String _filterTime = 'All Time';
   String _dateRangeText = '01 Oct 2026 - 31 Oct 2026';
-  final String _searchQuery = '';
+  String _searchQuery = '';
+
+  // Test-wise state
+  String? _selectedQuizId;
+  List<dynamic> _quizLeaderboardAttempts = [];
+  bool _isLoadingQuizLeaderboard = false;
 
   // Pagination
   int _currentPage = 1;
@@ -82,6 +88,12 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
           if (res['recentTopScores'] != null) _recentTopScores = res['recentTopScores'];
           _isLoading = false;
         });
+        if (_selectedQuizId != null) {
+          _loadQuizLeaderboard(_selectedQuizId!);
+        } else if (widget.quizzes.isNotEmpty) {
+          _selectedQuizId = widget.quizzes.first['id']?.toString();
+          _loadQuizLeaderboard(_selectedQuizId!);
+        }
         return;
       }
     } catch (_) {}
@@ -112,6 +124,21 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
       }
       setState(() => _isLoading = false);
     }
+  }
+
+  Future<void> _loadQuizLeaderboard(String quizId) async {
+    setState(() => _isLoadingQuizLeaderboard = true);
+    try {
+      final res = await _api.getQuizLeaderboard(quizId);
+      if (res['success'] == true && mounted) {
+        setState(() {
+          _quizLeaderboardAttempts = (res['attempts'] as List?) ?? [];
+          _isLoadingQuizLeaderboard = false;
+        });
+        return;
+      }
+    } catch (_) {}
+    if (mounted) setState(() => _isLoadingQuizLeaderboard = false);
   }
 
   // Pick Date Range
@@ -201,20 +228,72 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
                   children: [
                     _miniStat('Rank', '#${student['rank'] ?? 1}', const Color(0xFFF59E0B)),
                     _miniStat('Total Score', '${student['total_score'] ?? 0}', const Color(0xFF2563EB)),
-                    _miniStat('Accuracy', '${student['accuracy'] ?? '95%'}', const Color(0xFF10B981)),
-                    _miniStat('Tests', '${student['tests_completed'] ?? 12}', const Color(0xFF6366F1)),
+                    _miniStat('Accuracy', '${student['accuracy'] ?? '0%'}', const Color(0xFF10B981)),
+                    _miniStat('Tests', '${student['tests_completed'] ?? 0}', const Color(0xFF6366F1)),
                   ],
                 ),
               ),
               const SizedBox(height: 20),
               Text(
-                'Recent Performance & Milestones',
+                'Recent Performance & Examination Attempts',
                 style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w700),
               ),
               const SizedBox(height: 10),
-              _recentAttemptItem('Bihar Special Full Test', '100/100', '98% Accuracy · 16 Oct 2026', const Color(0xFF10B981)),
-              _recentAttemptItem('General Science Mock Exam', '94/100', '92% Accuracy · 14 Oct 2026', const Color(0xFF2563EB)),
-              _recentAttemptItem('Reasoning & Speed Test', '92/100', '89% Accuracy · 12 Oct 2026', const Color(0xFFF59E0B)),
+              FutureBuilder<List<dynamic>>(
+                future: _api.getUserAttempts(student['user_id'] ?? student['id']),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 20),
+                      child: Center(
+                        child: SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      ),
+                    );
+                  }
+                  final attempts = snapshot.data ?? [];
+                  if (attempts.isEmpty) {
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      child: Center(
+                        child: Text(
+                          'No examination attempts recorded in database yet.',
+                          style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF94A3B8)),
+                        ),
+                      ),
+                    );
+                  }
+                  return Column(
+                    children: attempts.take(4).map((att) {
+                      final quizTitle = (att['quizzes'] is Map ? att['quizzes']['title'] : null) ??
+                          att['quiz_title'] ??
+                          'Exam #${att['quiz_id'] ?? ''}';
+                      final score = '${att['score'] ?? 0}/${att['total_questions'] ?? 100}';
+                      final accuracy = att['accuracy_percent'] != null ? '${att['accuracy_percent']}% Accuracy' : 'Attempt recorded';
+                      final rawDate = att['completed_at'] ?? att['created_at'];
+                      String dateStr = '';
+                      if (rawDate != null) {
+                        try {
+                          final dt = DateTime.parse(rawDate.toString()).toLocal();
+                          final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                          dateStr = ' · ${dt.day} ${months[dt.month - 1]} ${dt.year}';
+                        } catch (_) {}
+                      }
+                      return _recentAttemptItem(
+                        quizTitle,
+                        score,
+                        '$accuracy$dateStr',
+                        (att['score'] ?? 0) >= ((att['total_questions'] ?? 100) * 0.7)
+                            ? const Color(0xFF10B981)
+                            : const Color(0xFF2563EB),
+                      );
+                    }).toList(),
+                  );
+                },
+              ),
               const SizedBox(height: 20),
               Row(
                 children: [
@@ -243,7 +322,7 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
                       ),
                       onPressed: () {
                         Navigator.pop(ctx);
-                        widget.onShowToast('Candidate profile verified and synced! 🎯');
+                        widget.onShowToast('Candidate standing verified with live records! 🎯');
                       },
                       icon: const Icon(Icons.verified_outlined, size: 16),
                       label: const Text('Verify Record'),
@@ -431,32 +510,1066 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
             _buildKpiMetricsRow(isDark),
             const SizedBox(height: 24),
 
-            // 4. MAIN CONTENT (Split View on Desktop: 65% Table, 35% Panels)
-            if (isDesktop)
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    flex: 65,
-                    child: _buildOverallLeaderboardCard(isDark),
-                  ),
-                  const SizedBox(width: 24),
-                  Expanded(
-                    flex: 35,
-                    child: _buildRightSidePanels(isDark),
-                  ),
-                ],
-              )
-            else
-              Column(
-                children: [
-                  _buildOverallLeaderboardCard(isDark),
-                  const SizedBox(height: 24),
-                  _buildRightSidePanels(isDark),
-                ],
-              ),
+            // 4. MAIN CONTENT (Dynamic per Sub-Nav Tab)
+            _buildActiveTabContent(isDark, isDesktop),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildActiveTabContent(bool isDark, bool isDesktop) {
+    switch (_activeSubTab) {
+      case 'testwise':
+        return _buildTestwiseLeaderboardView(isDark);
+      case 'subjectwise':
+        return _buildSubjectwiseMeritView(isDark);
+      case 'weekly':
+        return _buildWeeklyMonthlyMeritView(isDark);
+      case 'certs':
+        return _buildCertificatesRewardsView(isDark);
+      case 'settings':
+        return _buildLeaderboardSettingsView(isDark);
+      case 'overall':
+      default:
+        if (isDesktop) {
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                flex: 65,
+                child: _buildOverallLeaderboardCard(isDark),
+              ),
+              const SizedBox(width: 24),
+              Expanded(
+                flex: 35,
+                child: _buildRightSidePanels(isDark),
+              ),
+            ],
+          );
+        } else {
+          return Column(
+            children: [
+              _buildOverallLeaderboardCard(isDark),
+              const SizedBox(height: 24),
+              _buildRightSidePanels(isDark),
+            ],
+          );
+        }
+    }
+  }
+
+  Widget _buildTestwiseLeaderboardView(bool isDark) {
+    final quizzes = widget.quizzes;
+    String? dropdownVal = _selectedQuizId;
+    if (quizzes.isNotEmpty && !quizzes.any((q) => q['id']?.toString() == dropdownVal)) {
+      dropdownVal = quizzes.first['id']?.toString();
+    }
+
+    Map<String, dynamic>? selectedQuiz;
+    if (dropdownVal != null && quizzes.isNotEmpty) {
+      selectedQuiz = quizzes.firstWhere(
+        (q) => q['id']?.toString() == dropdownVal,
+        orElse: () => quizzes.first,
+      );
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark ? AppTheme.darkCard : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(20),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF2563EB).withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.assignment_outlined, color: Color(0xFF2563EB), size: 20),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Test-wise Examination Standings',
+                        style: GoogleFonts.inter(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          color: isDark ? Colors.white : const Color(0xFF111B35),
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Select an exam to view detailed candidate attempts, marks and completion speed.',
+                        style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                if (quizzes.isNotEmpty)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: isDark ? AppTheme.darkSurface : const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0)),
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: dropdownVal,
+                        isDense: true,
+                        style: GoogleFonts.inter(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: isDark ? Colors.white : const Color(0xFF1E293B),
+                        ),
+                        items: quizzes.map((q) {
+                          final id = q['id']?.toString() ?? '';
+                          final title = q['title'] ?? 'Test #$id';
+                          return DropdownMenuItem<String>(
+                            value: id,
+                            child: Text(
+                              title.length > 35 ? '${title.substring(0, 32)}...' : title,
+                            ),
+                          );
+                        }).toList(),
+                        onChanged: (val) {
+                          if (val != null) {
+                            setState(() => _selectedQuizId = val);
+                            _loadQuizLeaderboard(val);
+                          }
+                        },
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const Divider(height: 1, color: Color(0xFFE2E8F0)),
+          if (selectedQuiz != null && selectedQuiz.isNotEmpty)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+              color: isDark ? AppTheme.darkSurface.withValues(alpha: 0.5) : const Color(0xFFF8FAFC),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          selectedQuiz['title'] ?? 'Selected Test',
+                          style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w700),
+                        ),
+                        Text(
+                          'Category: ${selectedQuiz['category'] ?? 'General'} · Marks: ${selectedQuiz['marks_per_question'] ?? 2.0} · Neg: ${selectedQuiz['negative_marks'] ?? 0.0}',
+                          style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF10B981).withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      '${_quizLeaderboardAttempts.length} Submissions Recorded',
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: const Color(0xFF10B981),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          const Divider(height: 1, color: Color(0xFFE2E8F0)),
+          if (_isLoadingQuizLeaderboard)
+            const Padding(
+              padding: EdgeInsets.all(40),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else if (_quizLeaderboardAttempts.isEmpty)
+            Padding(
+              padding: const EdgeInsets.all(40),
+              child: Center(
+                child: Column(
+                  children: [
+                    const Icon(Icons.inbox_outlined, size: 40, color: Color(0xFF94A3B8)),
+                    const SizedBox(height: 10),
+                    Text(
+                      'No submissions recorded for this test yet',
+                      style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600, color: const Color(0xFF64748B)),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'When students take this exam in Telegram Bot, their rank, score and accuracy will display here live.',
+                      style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF94A3B8)),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final tableWidth = max(constraints.maxWidth, 1100.0);
+                return SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: SizedBox(
+                    width: tableWidth,
+                    child: Column(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                          color: isDark ? AppTheme.darkSurface : const Color(0xFFF8FAFC),
+                          child: Row(
+                            children: [
+                              _colHeader('#', 40),
+                              Expanded(
+                                child: Text(
+                                  'Candidate',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: const Color(0xFF64748B),
+                                    letterSpacing: 0.3,
+                                  ),
+                                ),
+                              ),
+                              _colHeader('Score', 110),
+                              _colHeader('Accuracy', 120),
+                              _colHeader('Time Taken', 110),
+                              _colHeader('Correct / Wrong', 160),
+                              _colHeader('Actions', 70, alignment: Alignment.centerRight),
+                            ],
+                          ),
+                        ),
+                        const Divider(height: 1, color: Color(0xFFE2E8F0)),
+                        ..._quizLeaderboardAttempts.asMap().entries.map((entry) {
+                          final rank = entry.key + 1;
+                          final att = entry.value;
+                          final user = (att['users'] is Map) ? att['users'] as Map : {};
+                          final nameParts = [user['first_name'], user['last_name']]
+                              .where((s) => s != null && s.toString().trim().isNotEmpty)
+                              .toList();
+                          final name = nameParts.isNotEmpty ? nameParts.join(' ') : 'Candidate';
+                          final username = user['username'] ?? 'user_${att['user_id']}';
+                          final timeTaken = (att['time_taken_seconds'] is num) ? (att['time_taken_seconds'] as num).toInt() : 0;
+                          final timeStr = '${timeTaken ~/ 60}m ${timeTaken % 60}s';
+                          final avatarColor = _getAvatarColor(rank);
+
+                          return Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                            decoration: BoxDecoration(
+                              border: Border(bottom: BorderSide(color: isDark ? AppTheme.darkBorderSubtle : const Color(0xFFF1F5F9))),
+                            ),
+                            child: Row(
+                              children: [
+                                SizedBox(width: 40, child: _buildRankBadge(rank)),
+                                Expanded(
+                                  child: Row(
+                                    children: [
+                                      CircleAvatar(
+                                        radius: 16,
+                                        backgroundColor: avatarColor,
+                                        child: Text(
+                                          name[0].toUpperCase(),
+                                          style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              name,
+                                              style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                            Text(
+                                              '@$username',
+                                              style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                SizedBox(
+                                  width: 110,
+                                  child: Text(
+                                    '${att['score'] ?? 0}/${att['total_questions'] ?? 100}',
+                                    style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700, color: const Color(0xFF2563EB)),
+                                  ),
+                                ),
+                                SizedBox(
+                                  width: 120,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF10B981).withValues(alpha: 0.12),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: Text(
+                                      '${att['accuracy_percent'] ?? 0}% Accuracy',
+                                      style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w700, color: const Color(0xFF10B981)),
+                                    ),
+                                  ),
+                                ),
+                                SizedBox(
+                                  width: 110,
+                                  child: Text(timeStr, style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B))),
+                                ),
+                                SizedBox(
+                                  width: 160,
+                                  child: Text(
+                                    '✓ ${att['correct_count'] ?? 0}  ✗ ${att['wrong_count'] ?? 0}  – ${att['skipped_count'] ?? 0}',
+                                    style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF475569)),
+                                  ),
+                                ),
+                                SizedBox(
+                                  width: 70,
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.end,
+                                    children: [
+                                      IconButton(
+                                        icon: const Icon(Icons.mail_outline_rounded, size: 18, color: Color(0xFF2563EB)),
+                                        tooltip: 'Send Telegram Message',
+                                        onPressed: () => _showSendMessageDialog({
+                                          'user_id': att['user_id'],
+                                          'username': username,
+                                          'first_name': name,
+                                        }),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSubjectwiseMeritView(bool isDark) {
+    final subjects = _subjectPerformers.keys.toList();
+    if (subjects.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(40),
+        decoration: BoxDecoration(
+          color: isDark ? AppTheme.darkCard : Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0)),
+        ),
+        child: Center(
+          child: Text('No subject categories recorded yet.', style: GoogleFonts.inter(color: const Color(0xFF94A3B8))),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: isDark ? AppTheme.darkCard : Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0)),
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF7C3AED).withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.category_outlined, color: Color(0xFF7C3AED), size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Subject-wise Merit & Category Standings',
+                      style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w800),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'High-scoring students organized across specific exam disciplines and syllabus categories.',
+                      style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final isDesktop = constraints.maxWidth > 700;
+            return Wrap(
+              spacing: 16,
+              runSpacing: 16,
+              children: subjects.map((subj) {
+                final performers = (_subjectPerformers[subj] as List?) ?? [];
+                final width = isDesktop ? (constraints.maxWidth - 16) / 2 : constraints.maxWidth;
+
+                return Container(
+                  width: width,
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: isDark ? AppTheme.darkCard : Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(Icons.stars_rounded, color: Color(0xFFF59E0B), size: 18),
+                              const SizedBox(width: 8),
+                              Text(
+                                subj,
+                                style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w700),
+                              ),
+                            ],
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF2563EB).withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              '${performers.length} Performers',
+                              style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF2563EB)),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      const Divider(height: 1, color: Color(0xFFE2E8F0)),
+                      const SizedBox(height: 10),
+                      if (performers.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 20),
+                          child: Center(
+                            child: Text('No attempts recorded yet for $subj', style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF94A3B8))),
+                          ),
+                        )
+                      else
+                        ...performers.map((p) {
+                          final rank = p['rank'] ?? 1;
+                          final name = p['name'] ?? 'Candidate';
+                          final username = p['username'] ?? 'user';
+                          final score = p['score'] ?? '0%';
+                          final avatarColor = _getAvatarColor(rank);
+
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 6),
+                            child: Row(
+                              children: [
+                                SizedBox(width: 26, child: _buildRankBadge(rank)),
+                                const SizedBox(width: 8),
+                                CircleAvatar(
+                                  radius: 14,
+                                  backgroundColor: avatarColor,
+                                  child: Text(name[0].toUpperCase(), style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white)),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(name, style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis),
+                                      Text('@$username', style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B))),
+                                    ],
+                                  ),
+                                ),
+                                Text(
+                                  score,
+                                  style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700, color: const Color(0xFF10B981)),
+                                ),
+                              ],
+                            ),
+                          );
+                        }),
+                    ],
+                  ),
+                );
+              }).toList(),
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildWeeklyMonthlyMeritView(bool isDark) {
+    final topThree = _leaderboardList.take(3).toList();
+    final remaining = _leaderboardList.skip(3).take(15).toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: isDark ? AppTheme.darkCard : Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0)),
+          ),
+          child: Column(
+            children: [
+              Text(
+                'Weekly / Monthly Merit Podium 🏆',
+                style: GoogleFonts.inter(fontSize: 18, fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Celebrated champions with highest cumulative examination points',
+                style: GoogleFonts.inter(fontSize: 12.5, color: const Color(0xFF64748B)),
+              ),
+              const SizedBox(height: 24),
+              if (topThree.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Text('No contenders on podium yet.', style: GoogleFonts.inter(color: const Color(0xFF94A3B8))),
+                )
+              else
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    if (topThree.length >= 2)
+                      _buildPodiumStep(topThree[1] as Map<String, dynamic>, 2, '🥈 Silver Medalist', const Color(0xFF94A3B8), 140, isDark),
+                    const SizedBox(width: 16),
+                    _buildPodiumStep(topThree[0] as Map<String, dynamic>, 1, '🥇 Grand Champion', const Color(0xFFF59E0B), 180, isDark),
+                    const SizedBox(width: 16),
+                    if (topThree.length >= 3)
+                      _buildPodiumStep(topThree[2] as Map<String, dynamic>, 3, '🥉 Bronze Merit', const Color(0xFFEA580C), 120, isDark),
+                  ],
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 20),
+        if (remaining.isNotEmpty)
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: isDark ? AppTheme.darkCard : Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Honor Roll & Top Standings',
+                  style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 14),
+                ...remaining.map((u) {
+                  final rank = u['rank'] ?? 4;
+                  final avatarColor = _getAvatarColor(rank);
+                  final name = u['first_name'] ?? 'Student';
+                  final username = u['username'] ?? 'user';
+                  final score = u['total_score'] ?? 0;
+                  final tests = u['tests_completed'] ?? 0;
+                  final accuracy = u['accuracy'] ?? '0%';
+
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Row(
+                      children: [
+                        SizedBox(width: 32, child: Text('#$rank', style: GoogleFonts.inter(fontWeight: FontWeight.w700, color: const Color(0xFF64748B)))),
+                        CircleAvatar(
+                          radius: 16,
+                          backgroundColor: avatarColor,
+                          child: Text(name[0].toUpperCase(), style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white)),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(name, style: GoogleFonts.inter(fontSize: 13.5, fontWeight: FontWeight.w700)),
+                              Text('@$username', style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF64748B))),
+                            ],
+                          ),
+                        ),
+                        Text('$score pts', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700, color: const Color(0xFF2563EB))),
+                        const SizedBox(width: 16),
+                        Text('$tests tests', style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B))),
+                        const SizedBox(width: 16),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF10B981).withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            accuracy,
+                            style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF10B981)),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildPodiumStep(
+    Map<String, dynamic> user,
+    int rank,
+    String title,
+    Color medalColor,
+    double height,
+    bool isDark,
+  ) {
+    final name = user['first_name'] ?? 'Champion';
+    final score = user['total_score'] ?? 0;
+    final accuracy = user['accuracy'] ?? '0%';
+
+    return SizedBox(
+      width: 180,
+      child: Column(
+        children: [
+          CircleAvatar(
+            radius: rank == 1 ? 28 : 22,
+            backgroundColor: medalColor.withValues(alpha: 0.2),
+            child: Text(
+              name[0].toUpperCase(),
+              style: GoogleFonts.inter(
+                fontSize: rank == 1 ? 22 : 16,
+                fontWeight: FontWeight.bold,
+                color: medalColor,
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            name,
+            style: GoogleFonts.inter(fontSize: 13.5, fontWeight: FontWeight.w700),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          Text(
+            '$score pts · $accuracy',
+            style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF64748B)),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            height: height,
+            width: double.infinity,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  medalColor.withValues(alpha: 0.25),
+                  medalColor.withValues(alpha: 0.08),
+                ],
+              ),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+              border: Border.all(color: medalColor.withValues(alpha: 0.5)),
+            ),
+            child: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    rank == 1 ? '👑 #1' : '#$rank',
+                    style: GoogleFonts.inter(fontSize: 18, fontWeight: FontWeight.w900, color: medalColor),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    title,
+                    style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w600, color: medalColor),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCertificatesRewardsView(bool isDark) {
+    final qualifiers = _leaderboardList.where((u) {
+      final acc = double.tryParse((u['accuracy'] ?? '0').toString().replaceAll('%', '')) ?? 0.0;
+      return acc >= 60.0 || (u['total_score'] ?? 0) > 0;
+    }).toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: isDark ? AppTheme.darkCard : Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0)),
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF59E0B).withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.military_tech_outlined, color: Color(0xFFF59E0B), size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Certificates & Merit Honors Directory',
+                      style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w800),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Candidate qualification status for official certificates, distinction awards and Telegram honors.',
+                      style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
+                    ),
+                  ],
+                ),
+              ),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF2563EB),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+                onPressed: () {
+                  final csv = [
+                    'Rank,Name,Username,Score,Accuracy,Tests Completed',
+                    ...qualifiers.map((q) =>
+                        '${q['rank']},"${q['first_name']}","@${q['username']}",${q['total_score']},${q['accuracy']},${q['tests_completed']}'),
+                  ];
+                  Clipboard.setData(ClipboardData(text: csv.join('\n')));
+                  widget.onShowToast('Honours directory exported to clipboard as CSV! 📋');
+                },
+                icon: const Icon(Icons.download_rounded, size: 16),
+                label: const Text('Export Honours (CSV)'),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        if (qualifiers.isEmpty)
+          Container(
+            padding: const EdgeInsets.all(40),
+            decoration: BoxDecoration(
+              color: isDark ? AppTheme.darkCard : Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0)),
+            ),
+            child: Center(
+              child: Text('No candidates have met the certificate threshold yet.', style: GoogleFonts.inter(color: const Color(0xFF94A3B8))),
+            ),
+          )
+        else
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: isDark ? AppTheme.darkCard : Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: qualifiers.map((candidate) {
+                final acc = double.tryParse((candidate['accuracy'] ?? '0').toString().replaceAll('%', '')) ?? 0.0;
+                final tierTitle = acc >= 90.0 ? 'Gold Distinction 🥇' : (acc >= 75.0 ? 'Silver Honours 🥈' : 'Merit Certificate 🎖️');
+                final tierColor = acc >= 90.0 ? const Color(0xFFF59E0B) : (acc >= 75.0 ? const Color(0xFF6366F1) : const Color(0xFF10B981));
+
+                return Container(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  decoration: BoxDecoration(
+                    border: Border(bottom: BorderSide(color: isDark ? AppTheme.darkBorderSubtle : const Color(0xFFF1F5F9))),
+                  ),
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 18,
+                        backgroundColor: tierColor.withValues(alpha: 0.15),
+                        child: Text(
+                          (candidate['first_name'] ?? 'C')[0].toUpperCase(),
+                          style: GoogleFonts.inter(fontWeight: FontWeight.bold, color: tierColor),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Text(
+                                  candidate['first_name'] ?? 'Candidate',
+                                  style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w700),
+                                ),
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: tierColor.withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    tierTitle,
+                                    style: GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.w700, color: tierColor),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            Text(
+                              '@${candidate['username'] ?? 'user'} · Score: ${candidate['total_score']} · Accuracy: ${candidate['accuracy']}',
+                              style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
+                            ),
+                          ],
+                        ),
+                      ),
+                      OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                        onPressed: () {
+                          Clipboard.setData(ClipboardData(text: candidate['user_id']?.toString() ?? ''));
+                          widget.onShowToast('Merit User ID copied! 📋');
+                        },
+                        icon: const Icon(Icons.copy_rounded, size: 14),
+                        label: const Text('Copy ID'),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF2563EB),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                        onPressed: () => _showSendMessageDialog(candidate as Map<String, dynamic>),
+                        icon: const Icon(Icons.send_rounded, size: 14),
+                        label: const Text('Congratulate'),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildLeaderboardSettingsView(bool isDark) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: isDark ? AppTheme.darkCard : Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF5B3DF5).withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.settings_outlined, color: Color(0xFF5B3DF5), size: 20),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Leaderboard Engine & Standing Rules',
+                          style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w800),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Configure deterministic ranking criteria, bot command visibility and sync settings.',
+                          style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              const Divider(height: 1, color: Color(0xFFE2E8F0)),
+              const SizedBox(height: 20),
+              Text('Ranking & Tie-Breaking Rules', style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 8),
+              _settingRuleItem(
+                '1. Total Cumulative Score',
+                'Candidates with the highest raw marks and positive points rank higher.',
+                Icons.looks_one_rounded,
+                const Color(0xFF2563EB),
+              ),
+              _settingRuleItem(
+                '2. Speed & Execution Efficiency',
+                'For equal scores, candidates completing tests in fewer seconds receive priority.',
+                Icons.looks_two_rounded,
+                const Color(0xFF10B981),
+              ),
+              _settingRuleItem(
+                '3. Earliest Submission Timestamp',
+                'If score and speed are identical, the earliest timestamp submitted to Supabase wins.',
+                Icons.looks_3_rounded,
+                const Color(0xFFF59E0B),
+              ),
+              const SizedBox(height: 24),
+              Text('Telegram Bot Integration', style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: isDark ? AppTheme.darkSurface : const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.smart_toy_outlined, color: Color(0xFF2563EB)),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('/top & /leaderboard Command', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700)),
+                          Text(
+                            'Telegram users can view the top 10 ranked candidates instantly via live database query.',
+                            style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF10B981).withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text('🟢 Live Synced', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF10B981))),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF2563EB),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                    onPressed: () async {
+                      await _loadAllAnalytics();
+                      await widget.onRefreshLeaderboard();
+                      widget.onShowToast('Merit standings successfully recalculated and synchronized! ⚡');
+                    },
+                    icon: const Icon(Icons.sync_rounded, size: 16),
+                    label: const Text('Force Recalculate Leaderboard'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _settingRuleItem(String title, String desc, IconData icon, Color color) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 18, color: color),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600)),
+                Text(desc, style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF64748B))),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -630,31 +1743,38 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
         final cardWidth = (constraints.maxWidth - 4 * 16) / 5;
         final isMobile = constraints.maxWidth < 900;
 
+        final participants = '${_analyticsMetrics['totalParticipants'] ?? 0}';
+        final attempts = '${_analyticsMetrics['testsAttempted'] ?? 0}';
+        final topScore = '${_analyticsMetrics['topScore'] ?? '0/0'}';
+        final topScoreTitle = '${_analyticsMetrics['topScoreTitle'] ?? 'No attempts yet'}';
+        final avgScore = '${_analyticsMetrics['averageScore'] ?? '0%'}';
+        final active7d = '${_analyticsMetrics['activeLast7Days'] ?? 0}';
+
         if (isMobile) {
           return Wrap(
             spacing: 12,
             runSpacing: 12,
             children: [
-              _kpiMetricCard('Total Participants', '${_analyticsMetrics['totalParticipants'] ?? 12548}', '+18% from last month', Icons.people_alt_rounded, const Color(0xFF2563EB), const Color(0xFFEFF6FF), isDark, 170),
-              _kpiMetricCard('Tests Attempted', '${_analyticsMetrics['testsAttempted'] ?? 28412}', '+26%', Icons.emoji_events_rounded, const Color(0xFF10B981), const Color(0xFFECFDF5), isDark, 170),
-              _kpiMetricCard('Top Score', '${_analyticsMetrics['topScore'] ?? '100/100'}', '${_analyticsMetrics['topScoreTitle'] ?? 'Bihar Special - Full Test'}', Icons.star_rounded, const Color(0xFF7C3AED), const Color(0xFFF5F3FF), isDark, 170),
-              _kpiMetricCard('Average Score', '${_analyticsMetrics['averageScore'] ?? '62.4%'}', '+8.5%', Icons.bar_chart_rounded, const Color(0xFFF59E0B), const Color(0xFFFFFBEB), isDark, 170),
-              _kpiMetricCard('Active in Last 7 Days', '${_analyticsMetrics['activeLast7Days'] ?? 3281}', '+12%', Icons.military_tech_rounded, const Color(0xFFEF4444), const Color(0xFFFEF2F2), isDark, 170),
+              _kpiMetricCard('Total Participants', participants, 'Registered Candidates', Icons.people_alt_rounded, const Color(0xFF2563EB), const Color(0xFFEFF6FF), isDark, 170),
+              _kpiMetricCard('Tests Attempted', attempts, 'Database Submissions', Icons.emoji_events_rounded, const Color(0xFF10B981), const Color(0xFFECFDF5), isDark, 170),
+              _kpiMetricCard('Top Score', topScore, topScoreTitle, Icons.star_rounded, const Color(0xFF7C3AED), const Color(0xFFF5F3FF), isDark, 170),
+              _kpiMetricCard('Average Score', avgScore, 'Across All Exams', Icons.bar_chart_rounded, const Color(0xFFF59E0B), const Color(0xFFFFFBEB), isDark, 170),
+              _kpiMetricCard('Active in Last 7 Days', active7d, 'Active Examinees', Icons.military_tech_rounded, const Color(0xFFEF4444), const Color(0xFFFEF2F2), isDark, 170),
             ],
           );
         }
 
         return Row(
           children: [
-            Expanded(child: _kpiMetricCard('Total Participants', '${_analyticsMetrics['totalParticipants'] ?? 12548}', '+18% from last month', Icons.people_alt_rounded, const Color(0xFF2563EB), const Color(0xFFEFF6FF), isDark, cardWidth)),
+            Expanded(child: _kpiMetricCard('Total Participants', participants, 'Registered Candidates', Icons.people_alt_rounded, const Color(0xFF2563EB), const Color(0xFFEFF6FF), isDark, cardWidth)),
             const SizedBox(width: 14),
-            Expanded(child: _kpiMetricCard('Tests Attempted', '${_analyticsMetrics['testsAttempted'] ?? 28412}', '+26%', Icons.emoji_events_rounded, const Color(0xFF10B981), const Color(0xFFECFDF5), isDark, cardWidth)),
+            Expanded(child: _kpiMetricCard('Tests Attempted', attempts, 'Database Submissions', Icons.emoji_events_rounded, const Color(0xFF10B981), const Color(0xFFECFDF5), isDark, cardWidth)),
             const SizedBox(width: 14),
-            Expanded(child: _kpiMetricCard('Top Score', '${_analyticsMetrics['topScore'] ?? '100/100'}', '${_analyticsMetrics['topScoreTitle'] ?? 'Bihar Special - Full Test'}', Icons.star_rounded, const Color(0xFF7C3AED), const Color(0xFFF5F3FF), isDark, cardWidth)),
+            Expanded(child: _kpiMetricCard('Top Score', topScore, topScoreTitle, Icons.star_rounded, const Color(0xFF7C3AED), const Color(0xFFF5F3FF), isDark, cardWidth)),
             const SizedBox(width: 14),
-            Expanded(child: _kpiMetricCard('Average Score', '${_analyticsMetrics['averageScore'] ?? '62.4%'}', '+8.5%', Icons.bar_chart_rounded, const Color(0xFFF59E0B), const Color(0xFFFFFBEB), isDark, cardWidth)),
+            Expanded(child: _kpiMetricCard('Average Score', avgScore, 'Across All Exams', Icons.bar_chart_rounded, const Color(0xFFF59E0B), const Color(0xFFFFFBEB), isDark, cardWidth)),
             const SizedBox(width: 14),
-            Expanded(child: _kpiMetricCard('Active in Last 7 Days', '${_analyticsMetrics['activeLast7Days'] ?? 3281}', '+12%', Icons.military_tech_rounded, const Color(0xFFEF4444), const Color(0xFFFEF2F2), isDark, cardWidth)),
+            Expanded(child: _kpiMetricCard('Active in Last 7 Days', active7d, 'Active Examinees', Icons.military_tech_rounded, const Color(0xFFEF4444), const Color(0xFFFEF2F2), isDark, cardWidth)),
           ],
         );
       },
@@ -763,10 +1883,14 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
   // =========================================================================
 
   Widget _buildOverallLeaderboardCard(bool isDark) {
+    // Dynamic options
+    final testOptions = ['All Tests', ...widget.quizzes.map((q) => (q['title'] ?? 'Quiz ${q['id']}').toString())];
+    final subjectOptions = ['All Subjects', ..._subjectPerformers.keys];
+
     // Filter leaderboard
     var displayList = _leaderboardList;
-    if (_searchQuery.isNotEmpty) {
-      final q = _searchQuery.toLowerCase();
+    if (_searchQuery.trim().isNotEmpty) {
+      final q = _searchQuery.trim().toLowerCase();
       displayList = displayList.where((u) {
         final name = (u['first_name'] ?? '').toString().toLowerCase();
         final username = (u['username'] ?? '').toString().toLowerCase();
@@ -798,7 +1922,7 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Table Card Header with Dropdowns
+          // Table Card Header with Search & Dropdowns
           Padding(
             padding: const EdgeInsets.all(20),
             child: Row(
@@ -836,15 +1960,50 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
                     ],
                   ),
                 ),
-                // Filter Dropdowns
+                // Search & Filter Dropdowns
                 Wrap(
                   spacing: 8,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    _dropdownPill(_filterTest, ['All Tests', 'Bihar Special', 'General Science', 'Mock Series'], (val) {
-                      setState(() => _filterTest = val);
+                    SizedBox(
+                      width: 180,
+                      height: 34,
+                      child: TextField(
+                        onChanged: (val) => setState(() {
+                          _searchQuery = val;
+                          _currentPage = 1;
+                        }),
+                        style: GoogleFonts.inter(fontSize: 12),
+                        decoration: InputDecoration(
+                          hintText: 'Search candidate...',
+                          hintStyle: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF94A3B8)),
+                          prefixIcon: const Icon(Icons.search_rounded, size: 16, color: Color(0xFF94A3B8)),
+                          contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 8),
+                          filled: true,
+                          fillColor: isDark ? AppTheme.darkSurface : const Color(0xFFF1F5F9),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide(color: isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0)),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide(color: isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0)),
+                          ),
+                        ),
+                      ),
+                    ),
+                    _dropdownPill(_filterTest, testOptions, (val) {
+                      setState(() {
+                        _filterTest = val;
+                        _currentPage = 1;
+                      });
                     }, isDark),
-                    _dropdownPill(_filterSubject, ['All Subjects', 'Science', 'Maths', 'Reasoning', 'GK'], (val) {
-                      setState(() => _filterSubject = val);
+                    _dropdownPill(_filterSubject, subjectOptions, (val) {
+                      setState(() {
+                        _filterSubject = val;
+                        _currentPage = 1;
+                      });
                     }, isDark),
                     _dropdownPill(_filterTime, ['All Time', 'This Month', 'This Week', 'Today'], (val) {
                       setState(() => _filterTime = val);
@@ -870,202 +2029,380 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
               ),
             )
           else
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: SizedBox(
-                width: 780,
-                child: Column(
-                  children: [
-                    // Table Header
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                      color: isDark ? AppTheme.darkSurface : const Color(0xFFF8FAFC),
-                      child: Row(
-                        children: [
-                          _colHeader('#', 40),
-                          _colHeader('User', 200),
-                          _colHeader('Total Score', 100),
-                          _colHeader('Tests', 70),
-                          _colHeader('Accuracy', 90),
-                          _colHeader('Trending', 80),
-                          _colHeader('Actions', 140, alignment: Alignment.centerRight),
-                        ],
-                      ),
-                    ),
-                    const Divider(height: 1, color: Color(0xFFE2E8F0)),
-
-                    // Table Body
-                    ...pagedList.map((student) {
-                      final rank = student['rank'] ?? 1;
-                      final isUp = student['is_trending_up'] ?? true;
-                      final trendingText = student['trending'] ?? '+1';
-                      final avatarColor = _getAvatarColor(rank);
-
-                      return Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                        decoration: BoxDecoration(
-                          border: Border(
-                            bottom: BorderSide(
-                              color: isDark ? AppTheme.darkBorderSubtle : const Color(0xFFF1F5F9),
-                            ),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final tableWidth = max(constraints.maxWidth, 1100.0);
+                return SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: SizedBox(
+                    width: tableWidth,
+                    child: Column(
+                      children: [
+                        // Table Header
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                          color: isDark ? AppTheme.darkSurface : const Color(0xFFF8FAFC),
+                          child: Row(
+                            children: [
+                              _colHeader('#', 40),
+                              Expanded(
+                                child: Text(
+                                  'Candidate',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: const Color(0xFF64748B),
+                                    letterSpacing: 0.3,
+                                  ),
+                                ),
+                              ),
+                              _colHeader('Total Score', 105),
+                              _colHeader('Tests', 80),
+                              _colHeader('Accuracy', 130),
+                              _colHeader('Merit Tier', 125),
+                              _colHeader('Trending', 80),
+                              _colHeader('Last Active', 105),
+                              _colHeader('Actions', 165, alignment: Alignment.centerRight),
+                            ],
                           ),
                         ),
-                        child: Row(
-                          children: [
-                            // # Rank
-                            SizedBox(
-                              width: 40,
-                              child: _buildRankBadge(rank),
-                            ),
+                        const Divider(height: 1, color: Color(0xFFE2E8F0)),
 
-                            // User Avatar + Name + Username
-                            SizedBox(
-                              width: 200,
-                              child: Row(
-                                children: [
-                                  CircleAvatar(
-                                    radius: 17,
-                                    backgroundColor: avatarColor,
-                                    child: Text(
-                                      (student['first_name'] ?? 'U')[0].toUpperCase(),
-                                      style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
-                                    ),
+                        // Table Body
+                        ...pagedList.map((student) {
+                          final rank = student['rank'] ?? 1;
+                          final isUp = student['is_trending_up'] ?? true;
+                          final trendingText = student['trending'] ?? '+0';
+                          final avatarColor = _getAvatarColor(rank);
+
+                          final accStr = (student['accuracy'] ?? '0%').toString();
+                          final cleanAcc = double.tryParse(accStr.replaceAll('%', '').trim()) ?? 0.0;
+                          final Color accColor = cleanAcc >= 75.0
+                              ? const Color(0xFF10B981)
+                              : (cleanAcc >= 50.0
+                                  ? const Color(0xFF2563EB)
+                                  : (cleanAcc > 0.0 ? const Color(0xFFF59E0B) : const Color(0xFF94A3B8)));
+
+                          String tierLabel;
+                          Color tierColor;
+                          if (rank == 1) {
+                            tierLabel = '🏆 Champion';
+                            tierColor = const Color(0xFFF59E0B);
+                          } else if (rank <= 3) {
+                            tierLabel = '🥇 Top Merit';
+                            tierColor = const Color(0xFF7C3AED);
+                          } else if (cleanAcc >= 75.0) {
+                            tierLabel = '⭐ Distinction';
+                            tierColor = const Color(0xFF10B981);
+                          } else if (cleanAcc >= 50.0) {
+                            tierLabel = '🎖️ First Class';
+                            tierColor = const Color(0xFF2563EB);
+                          } else {
+                            tierLabel = '📚 Aspirant';
+                            tierColor = const Color(0xFF64748B);
+                          }
+
+                          final rawDate = student['last_active_at'] ?? student['created_at'];
+                          String activeDateStr = 'Active';
+                          if (rawDate != null) {
+                            try {
+                              final dt = DateTime.parse(rawDate.toString()).toLocal();
+                              final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                              activeDateStr = '${dt.day} ${months[dt.month - 1]} ${dt.year}';
+                            } catch (_) {}
+                          }
+
+                          return Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                            decoration: BoxDecoration(
+                              border: Border(
+                                bottom: BorderSide(
+                                  color: isDark ? AppTheme.darkBorderSubtle : const Color(0xFFF1F5F9),
+                                ),
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                // # Rank
+                                SizedBox(
+                                  width: 40,
+                                  child: _buildRankBadge(rank),
+                                ),
+
+                                // User Avatar + Name + Username
+                                Expanded(
+                                  child: Row(
+                                    children: [
+                                      CircleAvatar(
+                                        radius: 17,
+                                        backgroundColor: avatarColor,
+                                        child: Text(
+                                          (student['first_name'] ?? 'U')[0].toUpperCase(),
+                                          style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              student['first_name'] ?? 'Student',
+                                              style: GoogleFonts.inter(
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.w700,
+                                                color: isDark ? Colors.white : const Color(0xFF1E293B),
+                                              ),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                            Text(
+                                              '@${student['username'] ?? 'user'}',
+                                              style: GoogleFonts.inter(
+                                                fontSize: 11,
+                                                color: const Color(0xFF64748B),
+                                              ),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                  const SizedBox(width: 10),
-                                  Expanded(
+                                ),
+
+                                // Total Score
+                                SizedBox(
+                                  width: 105,
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        '${student['total_score'] ?? 0}',
+                                        style: GoogleFonts.inter(
+                                          fontSize: 13.5,
+                                          fontWeight: FontWeight.w800,
+                                          color: isDark ? Colors.white : const Color(0xFF1E293B),
+                                        ),
+                                      ),
+                                      Text(
+                                        'marks pts',
+                                        style: GoogleFonts.inter(
+                                          fontSize: 10.5,
+                                          color: const Color(0xFF94A3B8),
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+
+                                // Tests Completed
+                                SizedBox(
+                                  width: 80,
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        '${student['tests_completed'] ?? 0}',
+                                        style: GoogleFonts.inter(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w700,
+                                          color: isDark ? Colors.white70 : const Color(0xFF334155),
+                                        ),
+                                      ),
+                                      Text(
+                                        'attempts',
+                                        style: GoogleFonts.inter(
+                                          fontSize: 10.5,
+                                          color: const Color(0xFF94A3B8),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+
+                                // Accuracy with Linear Visual Meter
+                                SizedBox(
+                                  width: 130,
+                                  child: Padding(
+                                    padding: const EdgeInsets.only(right: 12),
                                     child: Column(
                                       crossAxisAlignment: CrossAxisAlignment.start,
+                                      mainAxisSize: MainAxisSize.min,
                                       children: [
                                         Text(
-                                          student['first_name'] ?? 'Student',
+                                          accStr,
                                           style: GoogleFonts.inter(
-                                            fontSize: 13,
+                                            fontSize: 12.5,
                                             fontWeight: FontWeight.w700,
-                                            color: isDark ? Colors.white : const Color(0xFF1E293B),
+                                            color: accColor,
                                           ),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
                                         ),
-                                        Text(
-                                          '@${student['username'] ?? 'user'}',
-                                          style: GoogleFonts.inter(
-                                            fontSize: 11,
-                                            color: const Color(0xFF64748B),
+                                        const SizedBox(height: 4),
+                                        ClipRRect(
+                                          borderRadius: BorderRadius.circular(3),
+                                          child: LinearProgressIndicator(
+                                            value: cleanAcc <= 0 ? 0.0 : (cleanAcc / 100.0).clamp(0.0, 1.0),
+                                            minHeight: 4,
+                                            backgroundColor: isDark ? Colors.white10 : const Color(0xFFE2E8F0),
+                                            valueColor: AlwaysStoppedAnimation<Color>(accColor),
                                           ),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
                                         ),
                                       ],
                                     ),
                                   ),
-                                ],
-                              ),
-                            ),
-
-                            // Total Score
-                            SizedBox(
-                              width: 100,
-                              child: Text(
-                                '${student['total_score'] ?? 0}',
-                                style: GoogleFonts.inter(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w700,
-                                  color: isDark ? Colors.white : const Color(0xFF1E293B),
                                 ),
-                              ),
-                            ),
 
-                            // Tests Completed
-                            SizedBox(
-                              width: 70,
-                              child: Text(
-                                '${student['tests_completed'] ?? 1}',
-                                style: GoogleFonts.inter(
-                                  fontSize: 13,
-                                  color: const Color(0xFF475569),
-                                ),
-                              ),
-                            ),
-
-                            // Accuracy
-                            SizedBox(
-                              width: 90,
-                              child: Text(
-                                '${student['accuracy'] ?? '90%'}',
-                                style: GoogleFonts.inter(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: const Color(0xFF10B981),
-                                ),
-                              ),
-                            ),
-
-                            // Trending Indicator
-                            SizedBox(
-                              width: 80,
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    isUp ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded,
-                                    size: 13,
-                                    color: isUp ? const Color(0xFF10B981) : const Color(0xFFEF4444),
-                                  ),
-                                  const SizedBox(width: 2),
-                                  Text(
-                                    trendingText,
-                                    style: GoogleFonts.inter(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w700,
-                                      color: isUp ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+                                // Merit Tier Badge
+                                SizedBox(
+                                  width: 125,
+                                  child: Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: tierColor.withValues(alpha: 0.12),
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: Border.all(color: tierColor.withValues(alpha: 0.25)),
+                                      ),
+                                      child: Text(
+                                        tierLabel,
+                                        style: GoogleFonts.inter(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w700,
+                                          color: tierColor,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
                                     ),
                                   ),
-                                ],
-                              ),
-                            ),
+                                ),
 
-                            // Actions
-                            SizedBox(
-                              width: 140,
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.end,
-                                children: [
-                                  ElevatedButton(
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: const Color(0xFF2563EB),
-                                      foregroundColor: Colors.white,
-                                      elevation: 0,
-                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                    ),
-                                    onPressed: () => _openStudentDetailsModal(student),
-                                    child: Text(
-                                      'View Profile',
-                                      style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w700),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 4),
-                                  PopupMenuButton<String>(
-                                    icon: const Icon(Icons.more_vert_rounded, size: 18, color: Color(0xFF94A3B8)),
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                    onSelected: (val) {
-                                      if (val == 'msg') _showSendMessageDialog(student);
-                                      if (val == 'verify') widget.onShowToast('Candidate merit authenticated! 🏅');
-                                    },
-                                    itemBuilder: (ctx) => [
-                                      const PopupMenuItem(value: 'msg', child: Text('Send Telegram Message')),
-                                      const PopupMenuItem(value: 'verify', child: Text('Verify Exam Submissions')),
+                                // Trending Indicator
+                                SizedBox(
+                                  width: 80,
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        isUp ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded,
+                                        size: 13,
+                                        color: isUp ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+                                      ),
+                                      const SizedBox(width: 2),
+                                      Text(
+                                        trendingText,
+                                        style: GoogleFonts.inter(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700,
+                                          color: isUp ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+                                        ),
+                                      ),
                                     ],
                                   ),
-                                ],
-                              ),
+                                ),
+
+                                // Last Active
+                                SizedBox(
+                                  width: 105,
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        activeDateStr,
+                                        style: GoogleFonts.inter(
+                                          fontSize: 11.5,
+                                          fontWeight: FontWeight.w600,
+                                          color: isDark ? Colors.white70 : const Color(0xFF475569),
+                                        ),
+                                      ),
+                                      Text(
+                                        'Verified',
+                                        style: GoogleFonts.inter(
+                                          fontSize: 10,
+                                          color: const Color(0xFF10B981),
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+
+                                // Actions
+                                SizedBox(
+                                  width: 165,
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.end,
+                                    children: [
+                                      ElevatedButton(
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: const Color(0xFF2563EB),
+                                          foregroundColor: Colors.white,
+                                          elevation: 0,
+                                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                          minimumSize: const Size(0, 30),
+                                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
+                                        ),
+                                        onPressed: () => _openStudentDetailsModal(student),
+                                        child: Text(
+                                          'View Profile',
+                                          style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w700),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      SizedBox(
+                                        width: 28,
+                                        height: 28,
+                                        child: IconButton(
+                                          padding: EdgeInsets.zero,
+                                          constraints: const BoxConstraints(),
+                                          icon: const Icon(Icons.mail_outline_rounded, size: 17, color: Color(0xFF2563EB)),
+                                          tooltip: 'Send Telegram Message',
+                                          onPressed: () => _showSendMessageDialog(student),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 2),
+                                      SizedBox(
+                                        width: 24,
+                                        height: 28,
+                                        child: PopupMenuButton<String>(
+                                          padding: EdgeInsets.zero,
+                                          constraints: const BoxConstraints(),
+                                          icon: const Icon(Icons.more_vert_rounded, size: 18, color: Color(0xFF94A3B8)),
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                          onSelected: (val) {
+                                            if (val == 'msg') _showSendMessageDialog(student);
+                                            if (val == 'copy') {
+                                              Clipboard.setData(ClipboardData(text: student['user_id']?.toString() ?? ''));
+                                              widget.onShowToast('Candidate ID copied! 📋');
+                                            }
+                                            if (val == 'verify') widget.onShowToast('Candidate merit authenticated! 🏅');
+                                          },
+                                          itemBuilder: (ctx) => [
+                                            const PopupMenuItem(value: 'msg', child: Text('Send Telegram Message')),
+                                            const PopupMenuItem(value: 'copy', child: Text('Copy Telegram User ID')),
+                                            const PopupMenuItem(value: 'verify', child: Text('Verify Exam Submissions')),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ),
-                          ],
-                        ),
-                      );
-                    }),
-                  ],
-                ),
-              ),
+                          );
+                        }),
+                      ],
+                    ),
+                  ),
+                );
+              },
             ),
 
           // Pagination Footer
@@ -1087,6 +2424,11 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
                 ),
                 Row(
                   children: [
+                    IconButton(
+                      icon: const Icon(Icons.chevron_left_rounded, size: 20),
+                      onPressed: _currentPage > 1 ? () => setState(() => _currentPage--) : null,
+                    ),
+                    const SizedBox(width: 4),
                     _paginationBtn('1', _currentPage == 1, () => setState(() => _currentPage = 1)),
                     if (totalPages >= 2) _paginationBtn('2', _currentPage == 2, () => setState(() => _currentPage = 2)),
                     if (totalPages >= 3) _paginationBtn('3', _currentPage == 3, () => setState(() => _currentPage = 3)),

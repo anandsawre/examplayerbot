@@ -43,7 +43,7 @@ class FoldersTabState extends State<FoldersTab> {
   String? _selectedFolderId;
 
   // Expanded folders in the tree
-  final Set<String> _expandedFolderIds = {'root', 'gk_bihar', 'science', 'mathematics'};
+  final Set<String> _expandedFolderIds = {'root'};
 
   // Middle panel state
   int _activeSubTab = 0; // 0 = Tests, 1 = Subfolders, 2 = Bulk Actions
@@ -80,85 +80,39 @@ class FoldersTabState extends State<FoldersTab> {
   }
 
   void _initSelection() {
-    if (_folders.isNotEmpty) {
-      _selectedFolderId = _folders.first['id']?.toString();
-      _expandedFolderIds.add('root');
-      for (final f in _folders) {
+    _expandedFolderIds.add('root');
+    for (final f in _folders) {
+      if (f['id'] != null) {
         _expandedFolderIds.add(f['id'].toString());
       }
-    } else {
-      _selectedFolderId = 'gk_bihar';
-      _expandedFolderIds.addAll({'root', 'gk_bihar', 'science', 'mathematics'});
     }
+    _selectedFolderId ??= 'root';
   }
 
-  // Fallback demo structure if database has minimal folders
+  // Real database folder structure with UI styling properties
   List<Map<String, dynamic>> _getMergedFolders() {
-    if (_folders.isNotEmpty) {
-      final palette = [0xFF2563EB, 0xFF10B981, 0xFF0284C7, 0xFFF59E0B, 0xFF8B5CF6, 0xFFEC4899];
-      return _folders.asMap().entries.map((entry) {
-        final f = Map<String, dynamic>.from(entry.value as Map);
-        f['color'] ??= palette[entry.key % palette.length];
-        f['icon'] ??= Icons.folder_rounded;
-        f['description'] ??= '${f['name']} - All categorized tests & practice sets.';
-        return f;
-      }).toList();
-    }
-
-    // High fidelity default hierarchical folder dataset matching provided UI
-    return [
-      {'id': 'gk_bihar', 'name': 'GK - Bihar', 'parent_id': null, 'description': 'Bihar se related sabhi GK tests, questions aur study material.', 'color': 0xFF2563EB, 'icon': Icons.folder_rounded, 'created_at': '2026-10-10'},
-      {'id': 'bihar_special', 'name': 'Bihar Special', 'parent_id': 'gk_bihar', 'description': 'State specific special tests', 'color': 0xFFEC4899, 'created_at': '2026-10-10'},
-      {'id': 'bihar_history', 'name': 'History', 'parent_id': 'gk_bihar', 'description': 'Ancient to modern Bihar history', 'color': 0xFF3B82F6, 'created_at': '2026-10-10'},
-      {'id': 'bihar_geography', 'name': 'Geography', 'parent_id': 'gk_bihar', 'description': 'Rivers, climate and districts of Bihar', 'color': 0xFF10B981, 'created_at': '2026-10-10'},
-      {'id': 'bihar_polity', 'name': 'Polity', 'parent_id': 'gk_bihar', 'description': 'Legislature and governance', 'color': 0xFFF59E0B, 'created_at': '2026-10-10'},
-
-      {'id': 'science', 'name': 'Science', 'parent_id': null, 'description': 'General science and technology modules', 'color': 0xFF10B981, 'icon': Icons.folder_rounded, 'created_at': '2026-10-08'},
-      {'id': 'sci_physics', 'name': 'Physics', 'parent_id': 'science', 'color': 0xFF06B6D4, 'created_at': '2026-10-08'},
-      {'id': 'sci_chem', 'name': 'Chemistry', 'parent_id': 'science', 'color': 0xFF8B5CF6, 'created_at': '2026-10-08'},
-      {'id': 'sci_bio', 'name': 'Biology', 'parent_id': 'science', 'color': 0xFF10B981, 'created_at': '2026-10-08'},
-      {'id': 'sci_practice', 'name': 'Practice Sets', 'parent_id': 'science', 'color': 0xFFF59E0B, 'created_at': '2026-10-08'},
-
-      {'id': 'mathematics', 'name': 'Mathematics', 'parent_id': null, 'description': 'Quantitative aptitude and calculation drills', 'color': 0xFF0284C7, 'icon': Icons.folder_rounded, 'created_at': '2026-10-05'},
-      {'id': 'math_arith', 'name': 'Arithmetic', 'parent_id': 'mathematics', 'color': 0xFFF97316, 'created_at': '2026-10-05'},
-      {'id': 'math_alg', 'name': 'Algebra', 'parent_id': 'mathematics', 'color': 0xFF8B5CF6, 'created_at': '2026-10-05'},
-      {'id': 'math_geom', 'name': 'Geometry', 'parent_id': 'mathematics', 'color': 0xFF06B6D4, 'created_at': '2026-10-05'},
-      {'id': 'math_practice', 'name': 'Practice Sets', 'parent_id': 'mathematics', 'color': 0xFFF59E0B, 'created_at': '2026-10-05'},
-
-      {'id': 'reasoning', 'name': 'Reasoning', 'parent_id': null, 'description': 'Logical and analytical reasoning', 'color': 0xFF059669, 'created_at': '2026-10-04'},
-      {'id': 'current_affairs', 'name': 'Current Affairs', 'parent_id': null, 'description': 'National and international daily affairs', 'color': 0xFFEF4444, 'created_at': '2026-10-02'},
-      {'id': 'railway_exams', 'name': 'Railway Exams', 'parent_id': null, 'description': 'RRB NTPC, Group D mock series', 'color': 0xFF7C3AED, 'created_at': '2026-10-01'},
-      {'id': 'mixed_tests', 'name': 'Mixed Tests', 'parent_id': null, 'description': 'Full syllabus mock exams', 'color': 0xFF4F46E5, 'created_at': '2026-09-28'},
-    ];
+    if (_folders.isEmpty) return [];
+    final palette = [0xFF2563EB, 0xFF10B981, 0xFF0284C7, 0xFFF59E0B, 0xFF8B5CF6, 0xFFEC4899];
+    return _folders.asMap().entries.map((entry) {
+      final f = Map<String, dynamic>.from(entry.value as Map);
+      f['color'] ??= palette[entry.key % palette.length];
+      f['icon'] ??= Icons.folder_rounded;
+      f['description'] ??= f['description'] ?? '${f['name']} - Categorized tests & practice sets.';
+      return f;
+    }).toList();
   }
 
-  // Fallback demo tests matching image
+  // Real database quizzes with UI badge properties
   List<Map<String, dynamic>> _getMergedTests() {
-    if (_quizzes.isNotEmpty) {
-      final palette = [0xFFF59E0B, 0xFF8B5CF6, 0xFFEC4899, 0xFF0284C7, 0xFF10B981, 0xFF06B6D4, 0xFF3B82F6];
-      return _quizzes.asMap().entries.map((entry) {
-        final q = Map<String, dynamic>.from(entry.value as Map);
-        q['iconColor'] ??= palette[entry.key % palette.length];
-        q['icon'] ??= Icons.menu_book_rounded;
-        q['type'] ??= q['category'] ?? 'Mock Test';
-        return q;
-      }).toList();
-    }
-
-    return [
-      {'id': 't1', 'title': 'Bihar Special', 'folder_id': 'gk_bihar', 'total_questions': 50, 'category': 'Mock Test', 'type': 'Mock Test', 'is_published': true, 'created_at': '2026-10-15', 'icon': Icons.menu_book_rounded, 'iconColor': 0xFFF59E0B},
-      {'id': 't2', 'title': 'Bihar History - 1', 'folder_id': 'gk_bihar', 'total_questions': 25, 'category': 'Topic Test', 'type': 'Topic Test', 'is_published': true, 'created_at': '2026-10-14', 'icon': Icons.auto_stories_rounded, 'iconColor': 0xFF8B5CF6},
-      {'id': 't3', 'title': 'Bihar Geography', 'folder_id': 'gk_bihar', 'total_questions': 25, 'category': 'Topic Test', 'type': 'Topic Test', 'is_published': true, 'created_at': '2026-10-14', 'icon': Icons.public_rounded, 'iconColor': 0xFFEC4899},
-      {'id': 't4', 'title': 'Bihar Polity', 'folder_id': 'gk_bihar', 'total_questions': 25, 'category': 'Topic Test', 'type': 'Topic Test', 'is_published': false, 'created_at': '2026-10-13', 'icon': Icons.gavel_rounded, 'iconColor': 0xFFEAB308},
-      {'id': 't5', 'title': 'Bihar Economy', 'folder_id': 'gk_bihar', 'total_questions': 25, 'category': 'Topic Test', 'type': 'Topic Test', 'is_published': true, 'created_at': '2026-10-12', 'icon': Icons.bar_chart_rounded, 'iconColor': 0xFF0284C7},
-      {'id': 't6', 'title': 'Bihar Culture', 'folder_id': 'gk_bihar', 'total_questions': 25, 'category': 'Topic Test', 'type': 'Topic Test', 'is_published': true, 'created_at': '2026-10-12', 'icon': Icons.account_balance_rounded, 'iconColor': 0xFF059669},
-      {'id': 't7', 'title': 'Bihar Current Affairs', 'folder_id': 'gk_bihar', 'total_questions': 50, 'category': 'Mock Test', 'type': 'Mock Test', 'is_published': true, 'created_at': '2026-10-11', 'icon': Icons.newspaper_rounded, 'iconColor': 0xFF10B981},
-      {'id': 't8', 'title': 'Important MCQs', 'folder_id': 'gk_bihar', 'total_questions': 100, 'category': 'Practice Set', 'type': 'Practice Set', 'is_published': true, 'created_at': '2026-10-10', 'icon': Icons.fact_check_rounded, 'iconColor': 0xFF0284C7},
-      {'id': 't9', 'title': 'Previous Year Qs', 'folder_id': 'gk_bihar', 'total_questions': 50, 'category': 'PYQ', 'type': 'PYQ', 'is_published': false, 'created_at': '2026-10-09', 'icon': Icons.assignment_turned_in_rounded, 'iconColor': 0xFFF59E0B},
-      {'id': 't10', 'title': 'Bihar Mix Test', 'folder_id': 'gk_bihar', 'total_questions': 50, 'category': 'Mock Test', 'type': 'Mock Test', 'is_published': true, 'created_at': '2026-10-08', 'icon': Icons.quiz_rounded, 'iconColor': 0xFF06B6D4},
-      {'id': 't11', 'title': 'Bihar Dist Mock Paper', 'folder_id': 'gk_bihar', 'total_questions': 30, 'category': 'Topic Test', 'type': 'Topic Test', 'is_published': true, 'created_at': '2026-10-07', 'icon': Icons.quiz_rounded, 'iconColor': 0xFF3B82F6},
-      {'id': 't12', 'title': 'Patna Division GK Drill', 'folder_id': 'gk_bihar', 'total_questions': 45, 'category': 'Practice Set', 'type': 'Practice Set', 'is_published': true, 'created_at': '2026-10-06', 'icon': Icons.quiz_rounded, 'iconColor': 0xFF10B981},
-    ];
+    if (_quizzes.isEmpty) return [];
+    final palette = [0xFFF59E0B, 0xFF8B5CF6, 0xFFEC4899, 0xFF0284C7, 0xFF10B981, 0xFF06B6D4, 0xFF3B82F6];
+    return _quizzes.asMap().entries.map((entry) {
+      final q = Map<String, dynamic>.from(entry.value as Map);
+      q['iconColor'] ??= palette[entry.key % palette.length];
+      q['icon'] ??= Icons.menu_book_rounded;
+      q['type'] ??= q['category'] ?? 'Mock Test';
+      return q;
+    }).toList();
   }
 
   // Active folder object
@@ -168,16 +122,16 @@ class FoldersTabState extends State<FoldersTab> {
         'id': 'root',
         'name': 'All Content',
         'description': 'Root catalog containing all question sets and subject hierarchies.',
-        'created_at': allFolders.isNotEmpty ? allFolders.first['created_at'] : '2026-10-01',
+        'created_at': allFolders.isNotEmpty ? allFolders.first['created_at'] : null,
       };
     }
     return allFolders.firstWhere(
       (f) => f['id']?.toString() == _selectedFolderId,
-      orElse: () => allFolders.isNotEmpty ? allFolders.first : {
-        'id': 'gk_bihar',
-        'name': 'GK - Bihar',
-        'description': 'Bihar se related sabhi GK tests, questions aur study material.',
-        'created_at': '2026-10-10',
+      orElse: () => {
+        'id': _selectedFolderId,
+        'name': 'Folder',
+        'description': 'Selected category folder',
+        'created_at': null,
       },
     );
   }
@@ -206,7 +160,7 @@ class FoldersTabState extends State<FoldersTab> {
     );
     final folderName = activeFolder['name']?.toString().toLowerCase().trim();
 
-    final tests = allTests.where((t) {
+    return allTests.where((t) {
       final tFolderId = t['folder_id']?.toString();
       if (tFolderId != null && folderIds.contains(tFolderId)) return true;
       if (folderName != null && folderName.isNotEmpty) {
@@ -216,11 +170,6 @@ class FoldersTabState extends State<FoldersTab> {
       }
       return false;
     }).toList();
-
-    if (tests.isEmpty && folderId == 'gk_bihar' && _quizzes.isEmpty) {
-      return allTests.take(12).toList();
-    }
-    return tests;
   }
 
   // Get subfolders for a folder
@@ -236,12 +185,11 @@ class FoldersTabState extends State<FoldersTab> {
     for (final t in tests) {
       total += (t['total_questions'] as num?)?.toInt() ?? 0;
     }
-    if (_quizzes.isNotEmpty) return total;
-    return total > 0 ? total : 875;
+    return total;
   }
 
   String _formatDate(dynamic date) {
-    if (date == null) return '10 Oct 2026';
+    if (date == null) return 'N/A';
     try {
       final dt = DateTime.parse(date.toString());
       final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -283,7 +231,7 @@ class FoldersTabState extends State<FoldersTab> {
       filteredTests.sort((a, b) => ((b['total_questions'] as num?) ?? 0).compareTo((a['total_questions'] as num?) ?? 0));
     }
 
-    // Top KPI counts
+    // Top KPI counts from actual data
     final totalFoldersCount = allFolders.where((f) => f['parent_id'] == null).length;
     final totalTestsCount = allTests.length;
     final totalQuestionsCount = _countTotalQuestions(allTests);
@@ -303,13 +251,13 @@ class FoldersTabState extends State<FoldersTab> {
               _buildHeaderBanner(isDark, isMobile),
               const SizedBox(height: 16),
 
-              // 2. Four KPI Metric Cards
+              // 2. Four KPI Metric Cards with real Supabase database counts
               _buildKpiMetricsRow(
                 isDark: isDark,
-                totalFolders: _folders.isNotEmpty ? totalFoldersCount : 6,
-                totalTests: _quizzes.isNotEmpty ? totalTestsCount : 113,
-                totalQuestions: _quizzes.isNotEmpty ? totalQuestionsCount : 5248,
-                totalSubfolders: _folders.isNotEmpty ? subfoldersCount : 28,
+                totalFolders: totalFoldersCount,
+                totalTests: totalTestsCount,
+                totalQuestions: totalQuestionsCount,
+                totalSubfolders: subfoldersCount,
               ),
               const SizedBox(height: 16),
 
@@ -322,7 +270,7 @@ class FoldersTabState extends State<FoldersTab> {
                     const SizedBox(height: 16),
                     _buildActiveFolderContentPanel(activeFolder, filteredTests, subfolders, isDark),
                     const SizedBox(height: 16),
-                    _buildFolderDetailsPanel(activeFolder, folderTests, subfolders, isDark),
+                    _buildFolderDetailsPanel(activeFolder, folderTests, subfolders, allTests, allFolders, isDark),
                   ],
                 )
               else if (isMedium)
@@ -343,7 +291,7 @@ class FoldersTabState extends State<FoldersTab> {
                       ],
                     ),
                     const SizedBox(height: 16),
-                    _buildFolderDetailsPanel(activeFolder, folderTests, subfolders, isDark),
+                    _buildFolderDetailsPanel(activeFolder, folderTests, subfolders, allTests, allFolders, isDark),
                   ],
                 )
               else
@@ -368,7 +316,7 @@ class FoldersTabState extends State<FoldersTab> {
                     // Column 3: Folder Details & Actions
                     SizedBox(
                       width: 320,
-                      child: _buildFolderDetailsPanel(activeFolder, folderTests, subfolders, isDark),
+                      child: _buildFolderDetailsPanel(activeFolder, folderTests, subfolders, allTests, allFolders, isDark),
                     ),
                   ],
                 ),
@@ -544,7 +492,7 @@ class FoldersTabState extends State<FoldersTab> {
               child: _kpiCard(
                 label: 'Total Folders',
                 value: '$totalFolders',
-                trend: '+2 this month',
+                subtext: 'Root subject categories',
                 icon: Icons.folder_rounded,
                 iconBg: const Color(0xFFEFF6FF),
                 iconColor: const Color(0xFF2563EB),
@@ -556,7 +504,7 @@ class FoldersTabState extends State<FoldersTab> {
               child: _kpiCard(
                 label: 'Total Tests',
                 value: '$totalTests',
-                trend: '+12 this month',
+                subtext: 'Across all hierarchies',
                 icon: Icons.description_rounded,
                 iconBg: const Color(0xFFFAF5FF),
                 iconColor: const Color(0xFF9333EA),
@@ -569,7 +517,7 @@ class FoldersTabState extends State<FoldersTab> {
                 label: 'Total Questions',
                 value: totalQuestions > 999 ? '${(totalQuestions / 1000).toStringAsFixed(totalQuestions % 1000 == 0 ? 0 : 1)}k' : '$totalQuestions',
                 fullValue: '$totalQuestions',
-                trend: '+450 this month',
+                subtext: 'Live in database',
                 icon: Icons.help_rounded,
                 iconBg: const Color(0xFFECFDF5),
                 iconColor: const Color(0xFF059669),
@@ -581,7 +529,7 @@ class FoldersTabState extends State<FoldersTab> {
               child: _kpiCard(
                 label: 'Subfolders',
                 value: '$totalSubfolders',
-                subtext: 'Across all folders',
+                subtext: 'Nested categories',
                 icon: Icons.folder_shared_rounded,
                 iconBg: const Color(0xFFFEF3C7),
                 iconColor: const Color(0xFFD97706),
@@ -805,8 +753,45 @@ class FoldersTabState extends State<FoldersTab> {
           ),
 
           // 2. Hierarchical Folders
-          if (_expandedFolderIds.contains('root'))
-            ...rootFolders.map((folder) => _buildFolderTreeBranch(folder, allFolders, allTests, isDark, 0)),
+          if (_expandedFolderIds.contains('root')) ...[
+            if (rootFolders.isEmpty)
+              Padding(
+                padding: const EdgeInsets.only(left: 28, top: 10, bottom: 10, right: 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'No folders created yet',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: isDark ? AppTheme.darkTextMuted : const Color(0xFF94A3B8),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    InkWell(
+                      onTap: () => _createFolderDialog(),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.add_rounded, size: 14, color: Color(0xFF2563EB)),
+                          SizedBox(width: 4),
+                          Text(
+                            'Create Folder',
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF2563EB),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            else
+              ...rootFolders.map((folder) => _buildFolderTreeBranch(folder, allFolders, allTests, isDark, 0)),
+          ],
         ],
       ),
     );
@@ -975,8 +960,9 @@ class FoldersTabState extends State<FoldersTab> {
     List<Map<String, dynamic>> subfolders,
     bool isDark,
   ) {
-    final folderName = activeFolder['name'] ?? 'GK - Bihar';
-    final path = 'Path: /$folderName';
+    final isRoot = activeFolder['id'] == null || activeFolder['id'] == 'root';
+    final folderName = activeFolder['name'] ?? (isRoot ? 'All Content' : 'Folder');
+    final path = isRoot ? 'Path: /' : 'Path: /$folderName';
 
     // Pagination slice
     final totalCount = tests.length;
@@ -1049,7 +1035,7 @@ class FoldersTabState extends State<FoldersTab> {
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                 ),
-                onPressed: () => _createFolderDialog(preselectedParentId: activeFolder['id']?.toString()),
+                onPressed: () => _createFolderDialog(preselectedParentId: isRoot ? null : activeFolder['id']?.toString()),
                 icon: const Icon(Icons.add_rounded, size: 15),
                 label: const Text('Add Subfolder', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700)),
               ),
@@ -1062,7 +1048,7 @@ class FoldersTabState extends State<FoldersTab> {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   elevation: 0,
                 ),
-                onPressed: () => _createQuizInFolder(activeFolder['id']?.toString()),
+                onPressed: () => _createQuizInFolder(isRoot ? null : activeFolder['id']?.toString()),
                 icon: const Icon(Icons.add_rounded, size: 16),
                 label: const Text('Add Test', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
               ),
@@ -1271,6 +1257,18 @@ class FoldersTabState extends State<FoldersTab> {
                 ),
                 Row(
                   children: [
+                    if (totalPages > 1) ...[
+                      IconButton(
+                        visualDensity: VisualDensity.compact,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                        icon: const Icon(Icons.chevron_left_rounded, size: 18),
+                        onPressed: _currentPage > 1
+                            ? () => setState(() => _currentPage--)
+                            : null,
+                      ),
+                      const SizedBox(width: 4),
+                    ],
                     for (int p = 1; p <= max(1, totalPages); p++)
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 2),
@@ -1689,10 +1687,80 @@ class FoldersTabState extends State<FoldersTab> {
               const SizedBox(height: 4),
               Text('$qCount Questions', style: TextStyle(fontSize: 11, color: isDark ? AppTheme.darkTextMuted : const Color(0xFF64748B))),
               const SizedBox(height: 10),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2563EB), visualDensity: VisualDensity.compact),
-                onPressed: () => widget.onLaunchQuiz(q['id'].toString(), title),
-                child: const Text('Launch Test', style: TextStyle(fontSize: 11, color: Colors.white)),
+              Row(
+                children: [
+                  if (isPublished)
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF2563EB),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                          visualDensity: VisualDensity.compact,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                        ),
+                        onPressed: () => widget.onLaunchQuiz(q['id'].toString(), title),
+                        icon: const Icon(Icons.send_rounded, size: 12),
+                        label: const Text('Launch', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+                      ),
+                    )
+                  else
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          backgroundColor: const Color(0xFFEFF6FF),
+                          foregroundColor: const Color(0xFF2563EB),
+                          side: const BorderSide(color: Color(0xFFBFDBFE)),
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                          visualDensity: VisualDensity.compact,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                        ),
+                        onPressed: () => widget.onPreviewQuiz(q),
+                        icon: const Icon(Icons.edit_outlined, size: 12),
+                        label: const Text('Edit', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+                      ),
+                    ),
+                  const SizedBox(width: 4),
+                  PopupMenuButton<String>(
+                    padding: EdgeInsets.zero,
+                    iconSize: 18,
+                    icon: Icon(
+                      Icons.more_vert_rounded,
+                      size: 18,
+                      color: isDark ? AppTheme.darkTextMuted : const Color(0xFF94A3B8),
+                    ),
+                    tooltip: 'Options',
+                    onSelected: (val) async {
+                      if (val == 'preview') widget.onPreviewQuiz(q);
+                      if (val == 'move') _moveQuizDialog(q);
+                      if (val == 'toggle_publish') {
+                        final res = await _api.updateQuiz(q['id'].toString(), {
+                          'is_published': !isPublished,
+                          'is_active': !isPublished,
+                        });
+                        if (res['success'] == true) {
+                          _showToast(isPublished ? 'Test converted to Draft' : 'Test published successfully!');
+                          _loadAllData();
+                        } else {
+                          _showToast(res['error'] ?? 'Updated!');
+                        }
+                      }
+                      if (val == 'delete') widget.onDeleteQuiz(q);
+                    },
+                    itemBuilder: (ctx) => [
+                      const PopupMenuItem(value: 'preview', child: Text('Preview Questions')),
+                      const PopupMenuItem(value: 'move', child: Text('Move Folder')),
+                      PopupMenuItem(
+                        value: 'toggle_publish',
+                        child: Text(isPublished ? 'Unpublish (Draft)' : 'Publish Test'),
+                      ),
+                      const PopupMenuItem(
+                        value: 'delete',
+                        child: Text('Delete Test', style: TextStyle(color: Color(0xFFEF4444))),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ],
           ),
@@ -1909,10 +1977,16 @@ class FoldersTabState extends State<FoldersTab> {
     Map<String, dynamic> activeFolder,
     List<Map<String, dynamic>> tests,
     List<Map<String, dynamic>> subfolders,
+    List<Map<String, dynamic>> allTests,
+    List<Map<String, dynamic>> allFolders,
     bool isDark,
   ) {
-    final folderName = activeFolder['name'] ?? 'GK - Bihar';
-    final desc = activeFolder['description'] ?? 'Bihar se related sabhi GK tests, questions aur study material.';
+    final isRoot = activeFolder['id'] == null || activeFolder['id'] == 'root';
+    final folderName = activeFolder['name'] ?? (isRoot ? 'All Content' : 'Folder');
+    final desc = activeFolder['description'] ??
+        (isRoot
+            ? 'Root catalog containing all question sets and subject hierarchies.'
+            : 'Categorized folder tests and materials.');
     final totalQ = _countTotalQuestions(tests);
     final dateStr = _formatDate(activeFolder['created_at']);
 
@@ -1947,18 +2021,19 @@ class FoldersTabState extends State<FoldersTab> {
                   color: isDark ? Colors.white : const Color(0xFF0F172A),
                 ),
               ),
-              OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  visualDensity: VisualDensity.compact,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  side: const BorderSide(color: Color(0xFFE2E8F0)),
-                  foregroundColor: const Color(0xFF2563EB),
+              if (!isRoot)
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    visualDensity: VisualDensity.compact,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    side: const BorderSide(color: Color(0xFFE2E8F0)),
+                    foregroundColor: const Color(0xFF2563EB),
+                  ),
+                  onPressed: () => _renameFolderDialog(activeFolder['id'].toString(), folderName),
+                  icon: const Icon(Icons.edit_outlined, size: 13),
+                  label: const Text('Edit', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
                 ),
-                onPressed: () => _renameFolderDialog(activeFolder['id']?.toString() ?? '', folderName),
-                icon: const Icon(Icons.edit_outlined, size: 13),
-                label: const Text('Edit', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
-              ),
             ],
           ),
           const SizedBox(height: 14),
@@ -2090,7 +2165,7 @@ class FoldersTabState extends State<FoldersTab> {
                   label: 'Add Subfolder',
                   color: const Color(0xFF2563EB),
                   bg: const Color(0xFFEFF6FF),
-                  onTap: () => _createFolderDialog(preselectedParentId: activeFolder['id']?.toString()),
+                  onTap: () => _createFolderDialog(preselectedParentId: isRoot ? null : activeFolder['id']?.toString()),
                   isDark: isDark,
                 ),
               ),
@@ -2101,7 +2176,7 @@ class FoldersTabState extends State<FoldersTab> {
                   label: 'Add Test',
                   color: const Color(0xFF9333EA),
                   bg: const Color(0xFFFAF5FF),
-                  onTap: () => _createQuizInFolder(activeFolder['id']?.toString()),
+                  onTap: () => _createQuizInFolder(isRoot ? null : activeFolder['id']?.toString()),
                   isDark: isDark,
                 ),
               ),
@@ -2114,9 +2189,11 @@ class FoldersTabState extends State<FoldersTab> {
                 child: _actionButton(
                   icon: Icons.edit_outlined,
                   label: 'Rename',
-                  color: const Color(0xFF0284C7),
-                  bg: const Color(0xFFF0F9FF),
-                  onTap: () => _renameFolderDialog(activeFolder['id']?.toString() ?? '', folderName),
+                  color: isRoot ? const Color(0xFF94A3B8) : const Color(0xFF0284C7),
+                  bg: isDark ? const Color(0xFF1E293B) : const Color(0xFFF0F9FF),
+                  onTap: isRoot
+                      ? () => _showToast('Root catalog cannot be renamed.')
+                      : () => _renameFolderDialog(activeFolder['id']?.toString() ?? '', folderName),
                   isDark: isDark,
                 ),
               ),
@@ -2125,9 +2202,11 @@ class FoldersTabState extends State<FoldersTab> {
                 child: _actionButton(
                   icon: Icons.swap_horiz_rounded,
                   label: 'Move',
-                  color: const Color(0xFF0284C7),
-                  bg: const Color(0xFFF0F9FF),
-                  onTap: () => _moveFolderDialog(activeFolder),
+                  color: isRoot ? const Color(0xFF94A3B8) : const Color(0xFF0284C7),
+                  bg: isDark ? const Color(0xFF1E293B) : const Color(0xFFF0F9FF),
+                  onTap: isRoot
+                      ? () => _showToast('Root catalog cannot be moved.')
+                      : () => _moveFolderDialog(activeFolder),
                   isDark: isDark,
                 ),
               ),
@@ -2140,9 +2219,11 @@ class FoldersTabState extends State<FoldersTab> {
                 child: _actionButton(
                   icon: Icons.copy_all_outlined,
                   label: 'Duplicate',
-                  color: const Color(0xFF0284C7),
-                  bg: const Color(0xFFF0F9FF),
-                  onTap: () => _duplicateFolder(activeFolder),
+                  color: isRoot ? const Color(0xFF94A3B8) : const Color(0xFF0284C7),
+                  bg: isDark ? const Color(0xFF1E293B) : const Color(0xFFF0F9FF),
+                  onTap: isRoot
+                      ? () => _showToast('Root catalog cannot be duplicated.')
+                      : () => _duplicateFolder(activeFolder),
                   isDark: isDark,
                 ),
               ),
@@ -2151,9 +2232,11 @@ class FoldersTabState extends State<FoldersTab> {
                 child: _actionButton(
                   icon: Icons.delete_outline_rounded,
                   label: 'Delete',
-                  color: const Color(0xFFEF4444),
-                  bg: const Color(0xFFFEF2F2),
-                  onTap: () => _deleteFolderDialog(activeFolder),
+                  color: isRoot ? const Color(0xFF94A3B8) : const Color(0xFFEF4444),
+                  bg: isDark ? const Color(0xFF1E293B) : const Color(0xFFFEF2F2),
+                  onTap: isRoot
+                      ? () => _showToast('Root catalog cannot be deleted.')
+                      : () => _deleteFolderDialog(activeFolder),
                   isDark: isDark,
                 ),
               ),
@@ -2161,7 +2244,7 @@ class FoldersTabState extends State<FoldersTab> {
           ),
           const SizedBox(height: 20),
 
-          // Section 3: Subfolders in this Folder (4)
+          // Section 3: Subfolders in this Folder
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -2173,17 +2256,18 @@ class FoldersTabState extends State<FoldersTab> {
                   color: isDark ? Colors.white : const Color(0xFF0F172A),
                 ),
               ),
-              InkWell(
-                onTap: () => setState(() => _activeSubTab = 1),
-                child: const Text(
-                  'View All',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF2563EB),
+              if (subfolders.isNotEmpty)
+                InkWell(
+                  onTap: () => setState(() => _activeSubTab = 1),
+                  child: const Text(
+                    'View All',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF2563EB),
+                    ),
                   ),
                 ),
-              ),
             ],
           ),
           const SizedBox(height: 10),
@@ -2201,6 +2285,7 @@ class FoldersTabState extends State<FoldersTab> {
               final subName = sub['name'] ?? 'Subfolder';
               final subId = sub['id'].toString();
               final subColor = Color(sub['color'] is int ? sub['color'] : 0xFFEC4899);
+              final subTestsCount = _getTestsForFolder(subId, allTests, allFolders).length;
 
               return Padding(
                 padding: const EdgeInsets.only(bottom: 8),
@@ -2237,7 +2322,7 @@ class FoldersTabState extends State<FoldersTab> {
                                 overflow: TextOverflow.ellipsis,
                               ),
                               Text(
-                                '4 tests',
+                                '$subTestsCount ${subTestsCount == 1 ? "test" : "tests"}',
                                 style: TextStyle(fontSize: 10, color: isDark ? AppTheme.darkTextMuted : const Color(0xFF64748B)),
                               ),
                             ],
@@ -2479,7 +2564,7 @@ class FoldersTabState extends State<FoldersTab> {
               TextField(
                 controller: titleCtrl,
                 autofocus: true,
-                decoration: const InputDecoration(labelText: 'Test Title Name', hintText: 'e.g. Bihar Special Mock 2'),
+                decoration: const InputDecoration(labelText: 'Test Title Name', hintText: 'e.g. Full Syllabus Mock 1'),
               ),
               const SizedBox(height: 12),
               TextField(
