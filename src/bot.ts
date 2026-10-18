@@ -101,6 +101,8 @@ import {
 } from './handlers/folders';
 
 
+import { handleBotError } from './utils/telegramErrors';
+
 export function createBot(env: Env): Bot {
   if (!env.BOT_TOKEN) {
     throw new Error('BOT_TOKEN is required to initialize Telegram Bot!');
@@ -114,9 +116,18 @@ export function createBot(env: Env): Bot {
   const supabase = getSupabase(env);
   syncAdminCache(supabase).catch((err) => console.error('Failed to init admin cache:', err));
 
-  // Global Error Handler
+  // Top-level Error Handling Middleware (Safely intercepts errors in webhook & polling modes)
+  bot.use(async (ctx, next) => {
+    try {
+      await next();
+    } catch (err) {
+      handleBotError(err, ctx);
+    }
+  });
+
+  // Global Error Handler for grammY long polling and background engine
   bot.catch((err) => {
-    console.error('Unhandled error in Examplayer Bot:', err);
+    handleBotError(err.error, err.ctx);
   });
 
   // ================= COMMANDS =================

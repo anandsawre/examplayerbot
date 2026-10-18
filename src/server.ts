@@ -15,6 +15,16 @@ import { registerBotCommands } from './utils/setCommands';
 import { getSupabase } from './db/supabase';
 import { handleAdminApiRequest } from './admin/adminApi';
 import { getAdminHtml } from './admin/adminUi';
+import { handleBotError, sanitizeError } from './utils/telegramErrors';
+
+// Process-level safeguards against unexpected uncaught errors
+process.on('unhandledRejection', (reason) => {
+  console.error('⚠️ [Process] Unhandled Promise Rejection intercepted:', sanitizeError(reason));
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('⚠️ [Process] Uncaught Exception intercepted:', sanitizeError(err));
+});
 
 async function main() {
   console.log('🚀 Initializing Examplayer Bot Server (Render / Production Node.js)...');
@@ -46,30 +56,39 @@ async function main() {
 
   // 1. START HTTP SERVER IMMEDIATELY so Render health check always passes on boot!
   const server = http.createServer(async (req, res) => {
-    const rawUrl = req.url || '';
-    const rawPath = rawUrl.split('?')[0];
-    const urlPath = rawPath.replace(/\/$/, '');
+    try {
+      const rawUrl = req.url || '';
+      const rawPath = rawUrl.split('?')[0];
+      const urlPath = rawPath.replace(/\/$/, '');
 
-    // Health check endpoint for Render & Uptime monitoring
-    if (req.method === 'GET' && (urlPath === '' || urlPath === '/health')) {
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(
-        JSON.stringify({
-          status: 'ok',
-          service: 'Examplayer Bot',
-          bot: `@${botUsername}`,
-          mode: isWebhookMode ? 'webhook' : 'polling',
-          uptimeSeconds: Math.floor(process.uptime()),
-        })
-      );
-      return;
-    }
+      // Health check endpoint for Render & Uptime monitoring
+      if (req.method === 'GET' && (urlPath === '' || urlPath === '/health')) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(
+          JSON.stringify({
+            status: 'ok',
+            service: 'Examplayer Bot',
+            bot: `@${botUsername}`,
+            mode: isWebhookMode ? 'webhook' : 'polling',
+            uptimeSeconds: Math.floor(process.uptime()),
+          })
+        );
+        return;
+      }
 
-    // Webhook payload from Telegram
-    if (req.method === 'POST' && urlPath === webhookPath) {
-      handleWebhook(req, res);
-      return;
-    }
+      // Webhook payload from Telegram (safely awaited and caught so errors never crash HTTP server)
+      if (req.method === 'POST' && urlPath === webhookPath) {
+        try {
+          await handleWebhook(req, res);
+        } catch (webhookErr: any) {
+          handleBotError(webhookErr);
+          if (!res.writableEnded && !res.headersSent) {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ ok: true, handled_error: true }));
+          }
+        }
+        return;
+      }
 
     // Legacy HTML portal direct access
     if (req.method === 'GET' && (urlPath === '/admin/legacy' || urlPath === '/admin/legacy/index.html')) {
@@ -154,7 +173,14 @@ async function main() {
 
     res.writeHead(404, { 'Content-Type': 'text/plain' });
     res.end('Not Found');
-  });
+  } catch (topLevelHttpErr) {
+    console.error('⚠️ [HTTP Server] Request processing error:', sanitizeError(topLevelHttpErr));
+    if (!res.writableEnded && !res.headersSent) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Internal Server Error' }));
+    }
+  }
+});
 
   server.listen(port, '0.0.0.0', () => {
     console.log(`🎯 HTTP Webhook server running on port ${port} (Health check active)`);
@@ -224,6 +250,8 @@ async function main() {
           } catch {}
           bot.start({
             onStart: () => console.log('✅ Bot long-polling started! Ready to receive messages.'),
+          }).catch((pollErr) => {
+            console.error('⚠️ [Polling] Error in bot long-polling loop:', sanitizeError(pollErr));
           });
         }
       } catch (err: any) {

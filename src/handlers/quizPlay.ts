@@ -18,6 +18,7 @@ import { renderScorecardMessage } from '../services/quizEngine';
 import { calculateQuizResult } from '../services/scoring';
 import { AnswerRecord, Question, Quiz } from '../types';
 import { checkChannelMembership, sendJoinChannelPrompt } from './membership';
+import { isTelegramForbidden, sanitizeError } from '../utils/telegramErrors';
 import { showPaymentPrompt } from './payment';
 import { isAdmin } from '../utils/admin';
 import { groupPollToChatMap } from './groupQuiz';
@@ -266,11 +267,20 @@ export async function sendNextPollQuestion(
 
   // If question text is long, send full text first
   if (cleanQuestionText.length > 280) {
-    await api.sendMessage(
-      session.chatId,
-      `📖 *Question ${qNum}:*\n\n${escapeMarkdown(cleanQuestionText)}`,
-      { parse_mode: 'Markdown' }
-    );
+    try {
+      await api.sendMessage(
+        session.chatId,
+        `📖 *Question ${qNum}:*\n\n${escapeMarkdown(cleanQuestionText)}`,
+        { parse_mode: 'Markdown' }
+      );
+    } catch (msgErr: any) {
+      if (isTelegramForbidden(msgErr)) {
+        console.warn(`[QuizPlay] User ${userId} blocked bot (403 Forbidden). Aborting assessment session.`);
+        soloPollSessions.delete(userId);
+        return;
+      }
+      console.error(`[QuizPlay] Failed to send question text for Q${qNum}:`, sanitizeError(msgErr));
+    }
   }
 
   // If image URL is present, send photo
@@ -341,11 +351,19 @@ export async function sendNextPollQuestion(
         });
         recordMistake(supabase, userId, q.id, curSession.quizId).catch(() => {});
 
-        await api.sendMessage(
-          curSession.chatId,
-          `⏰ *Time Expired! (Question ${qNum})*\n_Allocated duration elapsed. Proceeding to next question..._`,
-          { parse_mode: 'Markdown' }
-        );
+        try {
+          await api.sendMessage(
+            curSession.chatId,
+            `⏰ *Time Expired! (Question ${qNum})*\n_Allocated duration elapsed. Proceeding to next question..._`,
+            { parse_mode: 'Markdown' }
+          );
+        } catch (timerSendErr: any) {
+          if (isTelegramForbidden(timerSendErr)) {
+            console.warn(`[QuizPlay] User ${userId} blocked bot during timer alert. Aborting.`);
+            soloPollSessions.delete(userId);
+            return;
+          }
+        }
 
         curSession.currentIndex++;
         await updateActiveSession(supabase, userId, curSession.currentIndex, curSession.answers);
@@ -357,10 +375,18 @@ export async function sendNextPollQuestion(
     }, (timeLimit + 1) * 1000);
 
   } catch (err: any) {
-    console.error(`Error sending poll for Q${qNum}:`, err);
-    // If poll fails for any reason, skip forward
+    if (isTelegramForbidden(err)) {
+      console.warn(`[QuizPlay] User ${userId} blocked bot during poll dispatch (403 Forbidden). Aborting assessment.`);
+      soloPollSessions.delete(userId);
+      return;
+    }
+
+    console.error(`Error sending poll for Q${qNum}:`, sanitizeError(err));
+    // If poll fails for non-fatal reason, skip forward once without looping indefinitely
     session.currentIndex++;
-    await sendNextPollQuestion(api, supabase, env, userId);
+    if (session.currentIndex < session.questions.length) {
+      await sendNextPollQuestion(api, supabase, env, userId);
+    }
   }
 }
 
@@ -485,11 +511,19 @@ export async function handlePollClosed(
   const totalQuestions = activeSession.question_ids.length;
 
   // Notify student that time is up for this question
-  await ctx.api.sendMessage(
-    meta.userId,
-    `⏰ *Time Expired! (Question ${meta.qIndex + 1})*\n_Allocated duration elapsed. Proceeding to next question..._`,
-    { parse_mode: 'Markdown' }
-  );
+  try {
+    await ctx.api.sendMessage(
+      meta.userId,
+      `⏰ *Time Expired! (Question ${meta.qIndex + 1})*\n_Allocated duration elapsed. Proceeding to next question..._`,
+      { parse_mode: 'Markdown' }
+    );
+  } catch (notifyErr: any) {
+    if (isTelegramForbidden(notifyErr)) {
+      console.warn(`[QuizPlay] User ${meta.userId} blocked bot. Aborting timeout notice.`);
+      soloPollSessions.delete(meta.userId);
+      return;
+    }
+  }
 
   if (nextIndex < totalQuestions) {
     await updateActiveSession(supabase, meta.userId, nextIndex, currentAnswers);
@@ -605,10 +639,18 @@ async function finishSoloPollQuiz(
   // Render official scorecard
   const { text, keyboard } = renderScorecardMessage(quiz, studentName, result, botUsername);
 
-  await api.sendMessage(session.chatId, text, {
-    parse_mode: 'Markdown',
-    reply_markup: keyboard,
-  });
+  try {
+    await api.sendMessage(session.chatId, text, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard,
+    });
+  } catch (err: any) {
+    if (isTelegramForbidden(err)) {
+      console.warn(`[QuizPlay] User ${session.userId} blocked bot. Scorecard not delivered (403 Forbidden).`);
+      return;
+    }
+    console.error('Error sending scorecard:', sanitizeError(err));
+  }
 }
 
 /**

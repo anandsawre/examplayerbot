@@ -13,6 +13,7 @@ import {
   getQuizzesByFolder,
 } from '../db/queries';
 import { isAdmin } from '../utils/admin';
+import { isTelegramForbidden, sanitizeError } from '../utils/telegramErrors';
 
 function escapeMarkdown(text: string): string {
   if (!text) return '';
@@ -22,6 +23,33 @@ function escapeMarkdown(text: string): string {
     .replace(/\[/g, '\\[')
     .replace(/\]/g, '\\]')
     .replace(/`/g, '\\`');
+}
+
+async function safeReplyOrEdit(ctx: Context, text: string, keyboard: InlineKeyboard) {
+  try {
+    if (ctx.callbackQuery) {
+      await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup: keyboard });
+      await ctx.answerCallbackQuery().catch(() => {});
+    } else {
+      await ctx.reply(text, { parse_mode: 'Markdown', reply_markup: keyboard });
+    }
+  } catch (err: any) {
+    if (isTelegramForbidden(err)) {
+      return;
+    }
+    try {
+      const plain = text.replace(/[*_`\[\]]/g, '');
+      if (ctx.callbackQuery) {
+        await ctx.editMessageText(plain, { reply_markup: keyboard });
+        await ctx.answerCallbackQuery().catch(() => {});
+      } else {
+        await ctx.reply(plain, { reply_markup: keyboard });
+      }
+    } catch (fallbackErr: any) {
+      if (isTelegramForbidden(fallbackErr)) return;
+      console.error('Failed to send quiz text/edit:', sanitizeError(fallbackErr));
+    }
+  }
 }
 
 export async function handleQuizzesList(
@@ -83,20 +111,7 @@ export async function handleQuizzesList(
     }
     keyboard.row().text('🏠 Platform Dashboard', 'menu_start');
 
-    if (ctx.callbackQuery) {
-      try {
-        await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup: keyboard });
-      } catch {
-        await ctx.editMessageText(text.replace(/[*_`\[\]]/g, ''), { reply_markup: keyboard });
-      }
-      ctx.answerCallbackQuery().catch(() => {});
-    } else {
-      try {
-        await ctx.reply(text, { parse_mode: 'Markdown', reply_markup: keyboard });
-      } catch {
-        await ctx.reply(text.replace(/[*_`\[\]]/g, ''), { reply_markup: keyboard });
-      }
-    }
+    await safeReplyOrEdit(ctx, text, keyboard);
     return;
   }
 
@@ -138,20 +153,7 @@ export async function handleQuizzesList(
       }
       keyboard.text('🏠 Platform Dashboard', 'menu_start');
 
-      if (ctx.callbackQuery) {
-        try {
-          await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup: keyboard });
-        } catch {
-          await ctx.editMessageText(text.replace(/[*_`\[\]]/g, ''), { reply_markup: keyboard });
-        }
-        ctx.answerCallbackQuery().catch(() => {});
-      } else {
-        try {
-          await ctx.reply(text, { parse_mode: 'Markdown', reply_markup: keyboard });
-        } catch {
-          await ctx.reply(text.replace(/[*_`\[\]]/g, ''), { reply_markup: keyboard });
-        }
-      }
+      await safeReplyOrEdit(ctx, text, keyboard);
       return;
     }
 
@@ -173,20 +175,7 @@ export async function handleQuizzesList(
     }
     keyboard.text('🔙 Platform Dashboard', 'menu_start');
 
-    if (ctx.callbackQuery) {
-      try {
-        await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup: keyboard });
-      } catch {
-        await ctx.editMessageText(text.replace(/[*_`\[\]]/g, ''), { reply_markup: keyboard });
-      }
-      ctx.answerCallbackQuery().catch(() => {});
-    } else {
-      try {
-        await ctx.reply(text, { parse_mode: 'Markdown', reply_markup: keyboard });
-      } catch {
-        await ctx.reply(text.replace(/[*_`\[\]]/g, ''), { reply_markup: keyboard });
-      }
-    }
+    await safeReplyOrEdit(ctx, text, keyboard);
     return;
   }
 
@@ -216,20 +205,7 @@ export async function handleQuizzesList(
   }
   keyboard.text('🔙 Platform Dashboard', 'menu_start');
 
-  if (ctx.callbackQuery) {
-    try {
-      await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup: keyboard });
-    } catch {
-      await ctx.editMessageText(text.replace(/[*_`\[\]]/g, ''), { reply_markup: keyboard });
-    }
-    ctx.answerCallbackQuery().catch(() => {});
-  } else {
-    try {
-      await ctx.reply(text, { parse_mode: 'Markdown', reply_markup: keyboard });
-    } catch {
-      await ctx.reply(text.replace(/[*_`\[\]]/g, ''), { reply_markup: keyboard });
-    }
-  }
+  await safeReplyOrEdit(ctx, text, keyboard);
 }
 
 export async function handleViewQuiz(
@@ -309,12 +285,7 @@ export async function handleViewQuiz(
     keyboard.url('📚 Browse All Papers in Bot DM', `https://t.me/${botUsername}?start=quizzes`);
   }
 
-  if (ctx.callbackQuery) {
-    await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup: keyboard });
-    await ctx.answerCallbackQuery();
-  } else {
-    await ctx.reply(text, { parse_mode: 'Markdown', reply_markup: keyboard });
-  }
+  await safeReplyOrEdit(ctx, text, keyboard);
 }
 
 export async function handleToggleQuizPremium(

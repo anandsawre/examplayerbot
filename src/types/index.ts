@@ -6,6 +6,7 @@ export interface User {
   total_score: number;
   tests_completed: number;
   streak_days: number;
+  is_active?: boolean;
   is_premium?: boolean;
   longest_streak?: number;
   referrals_count?: number;

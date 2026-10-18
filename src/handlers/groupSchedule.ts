@@ -3,6 +3,7 @@ import { SupabaseClient } from '@supabase/supabase-js';
 import { getActiveQuizzes, getQuizById, isGroupAuthorized } from '../db/queries';
 import { isGroupAdmin } from '../utils/admin';
 import { activeGroupBattles, executeGroupQuizBattle } from './groupQuiz';
+import { isTelegramForbidden, sanitizeError } from '../utils/telegramErrors';
 
 export interface ScheduledQuiz {
   chatId: number;
@@ -561,32 +562,51 @@ export async function registerGroupScheduleDirect(
           `All participating candidates please prepare your screens. 🎯`,
           { parse_mode: 'Markdown' }
         );
-      } catch (err) {
-        console.error('Error sending 1-minute schedule reminder:', err);
+      } catch (err: any) {
+        if (isTelegramForbidden(err)) {
+          console.warn(`[Schedule] Cannot send reminder to group ${chatId} (403 Forbidden). Cancelling schedule.`);
+          cancelGroupSchedule(chatId);
+          return;
+        }
+        console.error('Error sending 1-minute schedule reminder:', sanitizeError(err));
       }
     }, reminderDelayMs);
   }
 
   // Main automated launch timer using executeGroupQuizBattle
   const timer = setTimeout(async () => {
-    scheduledGroupQuizzes.delete(chatId);
+    try {
+      scheduledGroupQuizzes.delete(chatId);
 
-    // Verify group still authorized
-    const isAuth = await isGroupAuthorized(supabase, chatId);
-    if (!isAuth) {
-      await api.sendMessage(chatId, '⚠️ Group authorization has expired. Scheduled examination could not be initiated.');
-      return;
+      // Verify group still authorized
+      const isAuth = await isGroupAuthorized(supabase, chatId);
+      if (!isAuth) {
+        try {
+          await api.sendMessage(chatId, '⚠️ Group authorization has expired. Scheduled examination could not be initiated.');
+        } catch {}
+        return;
+      }
+
+      if (activeGroupBattles.has(chatId)) {
+        try {
+          await api.sendMessage(chatId, '⚠️ An active assessment is currently running in this group. Scheduled launch skipped.');
+        } catch {}
+        return;
+      }
+
+      // Launch group quiz with pure execution engine
+      executeGroupQuizBattle(api, supabase, chatId, quizId, botUsername).catch((err) => {
+        if (!isTelegramForbidden(err)) {
+          console.error('Error in executeGroupQuizBattle from schedule timer:', sanitizeError(err));
+        }
+      });
+    } catch (schedErr: any) {
+      if (isTelegramForbidden(schedErr)) {
+        console.warn(`[Schedule] Group ${chatId} inaccessible or kicked bot (403 Forbidden). Schedule aborted.`);
+      } else {
+        console.error(`[Schedule] Unexpected error in scheduled launch timer for group ${chatId}:`, sanitizeError(schedErr));
+      }
     }
-
-    if (activeGroupBattles.has(chatId)) {
-      await api.sendMessage(chatId, '⚠️ An active assessment is currently running in this group. Scheduled launch skipped.');
-      return;
-    }
-
-    // Launch group quiz with pure execution engine
-    executeGroupQuizBattle(api, supabase, chatId, quizId, botUsername).catch((err) => {
-      console.error('Error in executeGroupQuizBattle from schedule timer:', err);
-    });
   }, delayMs);
 
   scheduledGroupQuizzes.set(chatId, {
@@ -615,7 +635,9 @@ export async function registerGroupScheduleDirect(
     parse_mode: 'Markdown',
     reply_markup: cancelKeyboard,
   }).catch((err) => {
-    console.error('Failed to dispatch schedule announcement in group:', err);
+    if (!isTelegramForbidden(err)) {
+      console.error('Failed to dispatch schedule announcement in group:', sanitizeError(err));
+    }
   });
 
   return { success: true, quiz, targetTime, timeFormatted, dateFormatted };

@@ -2,6 +2,8 @@ import { Context, InlineKeyboard } from 'grammy';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { Env } from '../config';
 import { isAdmin } from '../utils/admin';
+import { markUserInactive, markGroupInactive } from '../db/queries';
+import { isTelegramForbidden, sanitizeError } from '../utils/telegramErrors';
 
 export interface PendingBroadcast {
   id: string;
@@ -231,11 +233,17 @@ async function dispatchBroadcastInBackground(
       }
       delivered++;
     } catch (err: any) {
-      const errStr = String(err?.message || err);
-      if (errStr.includes('blocked') || errStr.includes('deactivated') || errStr.includes('403')) {
+      if (isTelegramForbidden(err)) {
         blocked++;
+        if (targetChatId > 0) {
+          markUserInactive(supabase, targetChatId).catch(() => {});
+        } else {
+          markGroupInactive(supabase, targetChatId).catch(() => {});
+        }
+        console.warn(`[Broadcast] Recipient ${targetChatId} is unreachable / blocked bot (403). Skipped cleanly.`);
       } else {
         failed++;
+        console.warn(`[Broadcast] Message delivery failed for ${targetChatId}:`, sanitizeError(err?.message || err));
       }
     }
 
@@ -274,10 +282,12 @@ async function dispatchBroadcastInBackground(
       { parse_mode: 'Markdown' }
     );
   } catch {
-    await ctx.reply(
-      `✅ *Broadcast Complete*\nDelivered: ${delivered}/${total} in ${durationSec}s.`,
-      { parse_mode: 'Markdown' }
-    );
+    try {
+      await ctx.reply(
+        `✅ *Broadcast Complete*\nDelivered: ${delivered}/${total} in ${durationSec}s.`,
+        { parse_mode: 'Markdown' }
+      );
+    } catch {}
   }
 }
 

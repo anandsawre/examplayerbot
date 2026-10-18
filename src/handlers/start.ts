@@ -12,60 +12,73 @@ import { handleStartGroupQuizFromDm } from './groupQuiz';
 import { handleStartGroupScheduleFromDm } from './groupSchedule';
 import { handleDownloadPdfScorecard } from './pdfExport';
 import { handleQuizLeaderboard } from './leaderboard';
+import { isTelegramForbidden, sanitizeError } from '../utils/telegramErrors';
 
 export async function handleStart(ctx: Context, supabase: SupabaseClient, env?: Env) {
   const from = ctx.from;
   if (!from) return;
 
   // Auto register or update user profile
-  await upsertUser(supabase, {
-    id: from.id,
-    first_name: from.first_name || 'Student',
-    last_name: from.last_name,
-    username: from.username,
-  });
+  try {
+    await upsertUser(supabase, {
+      id: from.id,
+      first_name: from.first_name || 'Student',
+      last_name: from.last_name,
+      username: from.username,
+    });
+  } catch (dbErr) {
+    console.error(`[handleStart] Failed to upsert user ${from.id}:`, sanitizeError(dbErr));
+  }
 
   // Check Deep Linking payload
   const payload = ctx.match as string | undefined;
   if (payload) {
-    if (payload.startsWith('ref_')) {
-      const referrerId = payload.replace('ref_', '');
-      await handleIncomingReferral(ctx, supabase, referrerId);
-    } else if (payload.startsWith('quiz_')) {
-      const quizId = payload.replace('quiz_', '');
-      return handleViewQuiz(ctx, supabase, env || ({} as any), quizId);
-    } else if (payload === 'profile') {
-      return handleProfile(ctx, supabase);
-    } else if (payload === 'quizzes') {
-      return handleQuizzesList(ctx, supabase);
-    } else if (payload === 'mistakes') {
-      return handleMistakesCommand(ctx, supabase);
-    } else if (payload === 'revision') {
-      return handleStartRevisionTest(ctx, supabase, env || ({} as any));
-    } else if (payload === 'daily' || payload === 'streak') {
-      return handleDailyQotdCommand(ctx, supabase, env || ({} as any));
-    } else if (payload.startsWith('duel_')) {
-      return handleIncomingDuelInvite(ctx, supabase, payload);
-    } else if (payload === 'duel') {
-      return handleDuelCommand(ctx, supabase);
-    } else if (payload === 'refer') {
-      return handleReferralCommand(ctx, supabase);
-    } else if (payload.startsWith('launch_')) {
-      const groupId = Number(payload.replace('launch_', ''));
-      if (!isNaN(groupId)) {
-        return handleStartGroupQuizFromDm(ctx, supabase, groupId);
+    try {
+      if (payload.startsWith('ref_')) {
+        const referrerId = payload.replace('ref_', '');
+        await handleIncomingReferral(ctx, supabase, referrerId);
+      } else if (payload.startsWith('quiz_')) {
+        const quizId = payload.replace('quiz_', '');
+        return await handleViewQuiz(ctx, supabase, env || ({} as any), quizId);
+      } else if (payload === 'profile') {
+        return await handleProfile(ctx, supabase);
+      } else if (payload === 'quizzes') {
+        return await handleQuizzesList(ctx, supabase);
+      } else if (payload === 'mistakes') {
+        return await handleMistakesCommand(ctx, supabase);
+      } else if (payload === 'revision') {
+        return await handleStartRevisionTest(ctx, supabase, env || ({} as any));
+      } else if (payload === 'daily' || payload === 'streak') {
+        return await handleDailyQotdCommand(ctx, supabase, env || ({} as any));
+      } else if (payload.startsWith('duel_')) {
+        return await handleIncomingDuelInvite(ctx, supabase, payload);
+      } else if (payload === 'duel') {
+        return await handleDuelCommand(ctx, supabase);
+      } else if (payload === 'refer') {
+        return await handleReferralCommand(ctx, supabase);
+      } else if (payload.startsWith('launch_')) {
+        const groupId = Number(payload.replace('launch_', ''));
+        if (!isNaN(groupId)) {
+          return await handleStartGroupQuizFromDm(ctx, supabase, groupId);
+        }
+      } else if (payload.startsWith('sch_')) {
+        const groupId = Number(payload.replace('sch_', ''));
+        if (!isNaN(groupId)) {
+          return await handleStartGroupScheduleFromDm(ctx, supabase, groupId);
+        }
+      } else if (payload.startsWith('pdf_')) {
+        const qId = payload.replace('pdf_', '');
+        return await handleDownloadPdfScorecard(ctx, supabase, qId);
+      } else if (payload.startsWith('lb_')) {
+        const qId = payload.replace('lb_', '');
+        return await handleQuizLeaderboard(ctx, supabase, qId);
       }
-    } else if (payload.startsWith('sch_')) {
-      const groupId = Number(payload.replace('sch_', ''));
-      if (!isNaN(groupId)) {
-        return handleStartGroupScheduleFromDm(ctx, supabase, groupId);
+    } catch (deepLinkErr: any) {
+      if (isTelegramForbidden(deepLinkErr)) {
+        console.warn(`[handleStart] User ${from.id} blocked the bot during deep link (${payload}): 403 Forbidden.`);
+        return;
       }
-    } else if (payload.startsWith('pdf_')) {
-      const qId = payload.replace('pdf_', '');
-      return handleDownloadPdfScorecard(ctx, supabase, qId);
-    } else if (payload.startsWith('lb_')) {
-      const qId = payload.replace('lb_', '');
-      return handleQuizLeaderboard(ctx, supabase, qId);
+      console.error(`[handleStart] Error handling deep link (${payload}) for user ${from.id}:`, sanitizeError(deepLinkErr));
     }
   }
 
@@ -97,10 +110,30 @@ export async function handleStart(ctx: Context, supabase: SupabaseClient, env?: 
     .text('👤 Candidate Profile & Analytics', 'menu_profile')
     .text('ℹ️ User Manual & Commands', 'menu_help');
 
-  await ctx.reply(welcomeText, {
-    parse_mode: 'Markdown',
-    reply_markup: keyboard,
-  });
+  try {
+    await ctx.reply(welcomeText, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard,
+    });
+  } catch (err: any) {
+    if (isTelegramForbidden(err)) {
+      console.warn(`[handleStart] User ${from.id} blocked the bot or chat inaccessible (403 Forbidden). Skipped welcome message.`);
+      return;
+    }
+
+    // Attempt plain-text fallback if Markdown formatting caused rejection
+    try {
+      await ctx.reply(welcomeText.replace(/[*_`\[\]]/g, ''), {
+        reply_markup: keyboard,
+      });
+    } catch (fallbackErr: any) {
+      if (isTelegramForbidden(fallbackErr)) {
+        console.warn(`[handleStart] User ${from.id} blocked the bot on fallback.`);
+        return;
+      }
+      console.error(`[handleStart] Failed to send start message to user ${from.id}:`, sanitizeError(fallbackErr));
+    }
+  }
 }
 
 export async function handleHelp(ctx: Context) {
@@ -133,11 +166,31 @@ export async function handleHelp(ctx: Context) {
 
   const keyboard = new InlineKeyboard().text('🔙 Back to Platform Dashboard', 'menu_start');
 
-  if (ctx.callbackQuery) {
-    await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup: keyboard });
-    await ctx.answerCallbackQuery();
-  } else {
-    await ctx.reply(text, { parse_mode: 'Markdown', reply_markup: keyboard });
+  try {
+    if (ctx.callbackQuery) {
+      await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup: keyboard });
+      await ctx.answerCallbackQuery().catch(() => {});
+    } else {
+      await ctx.reply(text, { parse_mode: 'Markdown', reply_markup: keyboard });
+    }
+  } catch (err: any) {
+    if (isTelegramForbidden(err)) {
+      console.warn(`[handleHelp] Chat inaccessible or bot blocked (403 Forbidden).`);
+      return;
+    }
+
+    try {
+      const plain = text.replace(/[*_`\[\]]/g, '');
+      if (ctx.callbackQuery) {
+        await ctx.editMessageText(plain, { reply_markup: keyboard });
+        await ctx.answerCallbackQuery().catch(() => {});
+      } else {
+        await ctx.reply(plain, { reply_markup: keyboard });
+      }
+    } catch (fallbackErr: any) {
+      if (isTelegramForbidden(fallbackErr)) return;
+      console.error('[handleHelp] Failed to send help message:', sanitizeError(fallbackErr));
+    }
   }
 }
 

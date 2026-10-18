@@ -5,6 +5,15 @@ import 'dotenv/config';
 import { createBot } from './bot';
 import { getConfig } from './config';
 import { registerBotCommands } from './utils/setCommands';
+import { sanitizeError } from './utils/telegramErrors';
+
+process.on('unhandledRejection', (reason) => {
+  console.error('⚠️ [Local Process] Unhandled Promise Rejection:', sanitizeError(reason));
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('⚠️ [Local Process] Uncaught Exception:', sanitizeError(err));
+});
 
 async function runLocalBot() {
   console.log('🚀 Starting Examplayer Bot locally (Long Polling Mode)...');

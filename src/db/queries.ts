@@ -73,6 +73,31 @@ export async function setUserPremium(
   return true;
 }
 
+export async function markUserInactive(
+  supabase: SupabaseClient,
+  userId: number
+): Promise<boolean> {
+  try {
+    const { error } = await supabase
+      .from('users')
+      .update({ is_active: false })
+      .eq('id', userId);
+    if (error) {
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function markGroupInactive(
+  supabase: SupabaseClient,
+  groupId: number
+): Promise<boolean> {
+  return revokeGroup(supabase, groupId);
+}
+
 // ================= QUIZ & QUESTION QUERIES =================
 export async function getActiveQuizzes(supabase: SupabaseClient): Promise<Quiz[]> {
   const { data, error } = await supabase

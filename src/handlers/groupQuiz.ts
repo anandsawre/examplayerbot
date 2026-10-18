@@ -5,6 +5,7 @@ import { isGroupAdmin } from '../utils/admin';
 import { recentUserAttempts } from './pdfExport';
 import { UserAnswerRecord } from '../services/pdfGenerator';
 import { generateLeaderboardImage, LeaderboardCardEntry } from '../services/leaderboardImage';
+import { isTelegramForbidden, sanitizeError } from '../utils/telegramErrors';
 
 // In-memory pending selection for admins launching quiz from DM for a group
 export const pendingGroupQuizSelection = new Map<number, { groupChatId: number; groupTitle: string }>();
@@ -370,7 +371,9 @@ export async function executeGroupQuizBattle(
     `⚡ All participating candidates please prepare your screens. Polls loading...`;
 
   await api.sendMessage(chatId, introMsg, { parse_mode: 'Markdown' }).catch((err) => {
-    console.error('Failed to send group intro msg:', err);
+    if (!isTelegramForbidden(err)) {
+      console.error('Failed to send group intro msg:', sanitizeError(err));
+    }
   });
 
   await sleep(5000);
@@ -548,11 +551,21 @@ export async function executeGroupQuizBattle(
       parse_mode: 'Markdown',
       reply_markup: finishKeyboard,
     }).catch(async (err) => {
-      console.error('Failed to send leaderboard photo, falling back to text:', err);
-      await api.sendMessage(chatId, completionMessage, {
-        parse_mode: 'Markdown',
-        reply_markup: finishKeyboard,
-      });
+      if (isTelegramForbidden(err)) {
+        console.warn(`[GroupQuiz] Bot was kicked from group ${chatId} (403 Forbidden). Leaderboard omitted.`);
+        return;
+      }
+      console.error('Failed to send leaderboard photo, falling back to text:', sanitizeError(err));
+      try {
+        await api.sendMessage(chatId, completionMessage, {
+          parse_mode: 'Markdown',
+          reply_markup: finishKeyboard,
+        });
+      } catch (fallbackErr: any) {
+        if (!isTelegramForbidden(fallbackErr)) {
+          console.error('Failed to send group completion message fallback:', sanitizeError(fallbackErr));
+        }
+      }
     });
   } else {
     const emptyMsg =
@@ -564,7 +577,9 @@ export async function executeGroupQuizBattle(
       parse_mode: 'Markdown',
       reply_markup: finishKeyboard,
     }).catch((err) => {
-      console.error('Failed to send group completion message:', err);
+      if (!isTelegramForbidden(err)) {
+        console.error('Failed to send group completion message:', sanitizeError(err));
+      }
     });
   }
 }

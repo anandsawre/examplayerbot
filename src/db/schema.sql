@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS public.quizzes (
 );
 
 -- Run these if updating an existing database:
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
 ALTER TABLE public.users ADD COLUMN IF NOT EXISTS is_premium BOOLEAN DEFAULT FALSE;
 ALTER TABLE public.quizzes ADD COLUMN IF NOT EXISTS is_premium BOOLEAN DEFAULT FALSE;
 

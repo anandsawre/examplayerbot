@@ -1,6 +1,7 @@
 import { webhookCallback } from 'grammy';
 import { createBot } from './bot';
 import { Env, getConfig } from './config';
+import { isTelegramForbidden, sanitizeError } from './utils/telegramErrors';
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -24,8 +25,18 @@ export default {
 
       return await handleUpdate(request);
     } catch (err: any) {
-      console.error('Error handling webhook update:', err);
-      return new Response(`Internal Error: ${err.message}`, { status: 500 });
+      if (isTelegramForbidden(err)) {
+        console.warn('Recoverable Telegram 403 Forbidden in Worker update');
+        return new Response(JSON.stringify({ ok: true, handled: true }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      console.error('Error handling webhook update:', sanitizeError(err));
+      return new Response(JSON.stringify({ ok: true, error: 'Handled error' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
     }
   },
 };
