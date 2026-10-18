@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:web/web.dart' as web;
 
 class ApiService {
   static final ApiService _instance = ApiService._internal();
@@ -17,6 +18,53 @@ class ApiService {
 
   String? authToken;
   String? masterKey;
+
+  static const String _tokenStorageKey = 'examplayer_admin_token';
+  static const String _keyStorageKey = 'examplayer_master_key';
+
+  void _persistCredentials(String? token, [String? key]) {
+    try {
+      if (token != null && token.isNotEmpty) {
+        web.window.localStorage.setItem(_tokenStorageKey, token);
+      }
+      if (key != null && key.isNotEmpty) {
+        web.window.localStorage.setItem(_keyStorageKey, key);
+      }
+    } catch (_) {}
+  }
+
+  void _clearPersistedCredentials() {
+    try {
+      web.window.localStorage.removeItem(_tokenStorageKey);
+      web.window.localStorage.removeItem(_keyStorageKey);
+    } catch (_) {}
+  }
+
+  Future<bool> restoreSession() async {
+    try {
+      final savedToken = web.window.localStorage.getItem(_tokenStorageKey);
+      final savedKey = web.window.localStorage.getItem(_keyStorageKey);
+
+      final hasToken = savedToken != null && savedToken.isNotEmpty;
+      final hasKey = savedKey != null && savedKey.isNotEmpty;
+
+      if (!hasToken && !hasKey) {
+        return false;
+      }
+
+      authToken = hasToken ? savedToken : null;
+      masterKey = hasKey ? savedKey : null;
+
+      final isValid = await verifySession();
+      if (!isValid) {
+        logout();
+        return false;
+      }
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
 
   Map<String, String> get _headers {
     final headers = <String, String>{
@@ -56,6 +104,7 @@ class ApiService {
     final data = jsonDecode(res.body);
     if (data['success'] == true && data['token'] != null) {
       authToken = data['token'];
+      _persistCredentials(authToken);
     }
     return data;
   }
@@ -74,16 +123,25 @@ class ApiService {
     if (data['success'] == true && data['token'] != null) {
       authToken = data['token'];
       masterKey = password;
+      _persistCredentials(authToken, masterKey);
     }
     return data;
   }
 
   Future<bool> verifySession() async {
     try {
-      final res = await http.get(Uri.parse('$baseUrl/stats'), headers: _headers);
+      final res = await http.get(Uri.parse('$baseUrl/auth/verify'), headers: _headers);
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
         return data['success'] == true;
+      }
+      if (res.statusCode == 404) {
+        // Fallback to /stats if /auth/verify is not yet active on running server
+        final statsRes = await http.get(Uri.parse('$baseUrl/stats'), headers: _headers);
+        if (statsRes.statusCode == 200) {
+          final statsData = jsonDecode(statsRes.body);
+          return statsData['success'] == true;
+        }
       }
       return false;
     } catch (_) {
@@ -92,8 +150,17 @@ class ApiService {
   }
 
   void logout() {
+    try {
+      if (authToken != null) {
+        http.post(
+          Uri.parse('$baseUrl/auth/logout'),
+          headers: _headers,
+        ).catchError((_) => http.Response('', 200));
+      }
+    } catch (_) {}
     authToken = null;
     masterKey = null;
+    _clearPersistedCredentials();
   }
 
   // 2. DASHBOARD KPI STATS

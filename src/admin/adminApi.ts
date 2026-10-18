@@ -1,4 +1,5 @@
 import http from 'node:http';
+import crypto from 'node:crypto';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { Bot, InlineKeyboard } from 'grammy';
 import { Env } from '../config';
@@ -37,9 +38,52 @@ import {
   parseIndianDateTime,
 } from '../handlers/groupSchedule';
 
-// Simple in-memory session token tracking
+// Simple in-memory session token tracking with HMAC persistence
 const validTokens: Set<string> = new Set();
 const blockedUserIds: Set<number> = new Set();
+
+function generateAdminToken(env: Env, prefix: string = 'adm'): string {
+  const ts = Date.now();
+  const random = crypto.randomBytes(8).toString('hex');
+  const secret = process.env.ADMIN_PASSWORD || env.BOT_TOKEN || 'ExamPlayer@Admin2026';
+  const payload = `${prefix}_${ts}_${random}`;
+  const sig = crypto.createHmac('sha256', secret).update(payload).digest('hex').slice(0, 16);
+  const token = `${payload}_${sig}`;
+  validTokens.add(token);
+  return token;
+}
+
+function verifyToken(token: string, env: Env): boolean {
+  if (!token) return false;
+  if (validTokens.has(token)) return true;
+
+  // Format: [prefix]_[ts]_[random]_[sig]
+  // e.g. adm_1729230000000_1a2b3c4d5e6f7g8h_a1b2c3d4e5f6g7h8
+  const parts = token.split('_');
+  if (parts.length === 4) {
+    const [prefix, tsStr, random, sig] = parts;
+    const ts = parseInt(tsStr, 10);
+    if (isNaN(ts)) return false;
+
+    // Check expiration: valid for 30 days
+    const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+    const now = Date.now();
+    if (now - ts > THIRTY_DAYS_MS || ts > now + 300000) {
+      return false;
+    }
+
+    const secret = process.env.ADMIN_PASSWORD || env.BOT_TOKEN || 'ExamPlayer@Admin2026';
+    const payload = `${prefix}_${tsStr}_${random}`;
+    const expectedSig = crypto.createHmac('sha256', secret).update(payload).digest('hex').slice(0, 16);
+
+    if (sig === expectedSig) {
+      validTokens.add(token); // Re-cache in memory
+      return true;
+    }
+  }
+
+  return false;
+}
 
 // In-memory OTP storage for Telegram 2FA
 interface OtpRecord {
@@ -131,7 +175,7 @@ function sendJson(res: http.ServerResponse, status: number, data: any) {
 function verifyAuth(req: http.IncomingMessage, env: Env): boolean {
   const authHeader = req.headers['authorization'] || '';
   const token = authHeader.replace(/^Bearer\s+/i, '').trim();
-  if (token && validTokens.has(token)) return true;
+  if (token && verifyToken(token, env)) return true;
 
   // Also allow passing secret key directly
   const secret = req.headers['x-admin-key'] as string;
@@ -293,8 +337,7 @@ export async function handleAdminApiRequest(
 
         // OTP Verified successfully!
         otpStore.delete(idStr);
-        const token = `adm_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
-        validTokens.add(token);
+        const token = generateAdminToken(env, 'adm');
         sendJson(res, 200, {
           success: true,
           token,
@@ -307,8 +350,7 @@ export async function handleAdminApiRequest(
       // Option 2: MASTER PASSWORD LOGIN
       const passInput = (password || key || '').trim();
       if (passInput && isMasterSecret(passInput, env)) {
-        const token = `adm_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
-        validTokens.add(token);
+        const token = generateAdminToken(env, 'adm');
         sendJson(res, 200, {
           success: true,
           token,
@@ -327,6 +369,17 @@ export async function handleAdminApiRequest(
       sendJson(res, 400, { success: false, error: 'Malformed JSON payload.' });
       return true;
     }
+  }
+
+  // 1C. LOGOUT ENDPOINT
+  if (path === '/api/admin/auth/logout' && method === 'POST') {
+    const authHeader = req.headers['authorization'] || '';
+    const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+    if (token) {
+      validTokens.delete(token);
+    }
+    sendJson(res, 200, { success: true, message: 'Logged out successfully.' });
+    return true;
   }
 
   // USER TELEGRAM AVATAR PROXY (Public GET for <img> / Image.network tags)
@@ -378,6 +431,12 @@ export async function handleAdminApiRequest(
     // Authenticate all other /api/admin endpoints
     if (!verifyAuth(req, env)) {
       sendJson(res, 401, { success: false, error: 'Unauthorized: Valid admin token required.' });
+      return true;
+    }
+
+    // Fast session verification endpoint
+    if (path === '/api/admin/auth/verify' && method === 'GET') {
+      sendJson(res, 200, { success: true, message: 'Session is active and valid.' });
       return true;
     }
 
