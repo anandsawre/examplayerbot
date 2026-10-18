@@ -75,6 +75,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   // Live Telemetry & Dynamic State
   DateTime? _lastSyncTime;
+  bool _isSidebarCollapsed = false;
+  int _dbLatencyMs = 28;
 
   Map<String, dynamic> get _resolvedStats {
     if (_stats['stats'] is Map<String, dynamic>) {
@@ -144,6 +146,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       _isLoading = true;
       _statusMsg = '';
     });
+    final stopwatch = Stopwatch()..start();
     try {
       final results = await Future.wait([
         _api.getStats().catchError((_) => <String, dynamic>{}),
@@ -155,6 +158,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _api.getAdmins().catchError((_) => <dynamic>[]),
         _api.getSettings().catchError((_) => <String, dynamic>{}),
       ]);
+      final elapsed = stopwatch.elapsedMilliseconds;
 
       if (mounted) {
         setState(() {
@@ -167,6 +171,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           _admins = results[6] as List<dynamic>;
           _settings = results[7] as Map<String, dynamic>;
           _lastSyncTime = DateTime.now();
+          _dbLatencyMs = elapsed > 0 ? elapsed : 28;
           _isLoading = false;
         });
       }
@@ -368,6 +373,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       onOpenActivities: _openRecentActivitiesDialog,
       onToast: (msg) => _showToast(msg),
       tg: _tg,
+      isCollapsed: _isSidebarCollapsed,
     );
   }
 
@@ -405,6 +411,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       adminId: _adminId,
       adminPhotoUrl: _adminPhotoUrl,
       onOpenDrawer: () => _scaffoldKey.currentState?.openDrawer(),
+      onToggleSidebar: () => setState(() => _isSidebarCollapsed = !_isSidebarCollapsed),
       onOpenSearch: _openSearchDialog,
       onOpenActivities: _openRecentActivitiesDialog,
       onToggleTheme: widget.onToggleTheme,
@@ -438,6 +445,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       api: _api,
       tg: _tg,
       isDark: isDark,
+      dbLatencyMs: _dbLatencyMs,
       onNavigateNav: (navIndex) {
         setState(() => _selectedNav = navIndex);
       },

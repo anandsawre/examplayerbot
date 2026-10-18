@@ -12,6 +12,7 @@ class DashboardTopNavbar extends StatelessWidget {
   final String adminId;
   final String? adminPhotoUrl;
   final VoidCallback onOpenDrawer;
+  final VoidCallback? onToggleSidebar;
   final VoidCallback onOpenSearch;
   final VoidCallback onOpenActivities;
   final VoidCallback onToggleTheme;
@@ -29,6 +30,7 @@ class DashboardTopNavbar extends StatelessWidget {
     required this.adminId,
     required this.adminPhotoUrl,
     required this.onOpenDrawer,
+    this.onToggleSidebar,
     required this.onOpenSearch,
     required this.onOpenActivities,
     required this.onToggleTheme,
@@ -133,7 +135,7 @@ class DashboardTopNavbar extends StatelessWidget {
           IconButton(
             icon: Icon(Icons.menu_rounded, color: isDark ? Colors.white70 : const Color(0xFF64748B), size: 22),
             tooltip: 'Toggle Sidebar',
-            onPressed: () {},
+            onPressed: onToggleSidebar ?? onOpenDrawer,
           ),
           const SizedBox(width: 10),
 

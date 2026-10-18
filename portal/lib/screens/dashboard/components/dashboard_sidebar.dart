@@ -22,6 +22,7 @@ class DashboardSidebar extends StatelessWidget {
   final VoidCallback onOpenActivities;
   final Function(String msg) onToast;
   final TelegramService tg;
+  final bool isCollapsed;
 
   const DashboardSidebar({
     super.key,
@@ -43,12 +44,15 @@ class DashboardSidebar extends StatelessWidget {
     required this.onOpenActivities,
     required this.onToast,
     required this.tg,
+    this.isCollapsed = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 255,
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeInOut,
+      width: isCollapsed ? 70 : 255,
       decoration: const BoxDecoration(
         color: Color(0xFF0D1424),
         border: Border(right: BorderSide(color: Color(0xFF1E293B))),
@@ -59,65 +63,86 @@ class DashboardSidebar extends StatelessWidget {
           // Brand Header
           Container(
             height: 64,
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+            padding: EdgeInsets.symmetric(horizontal: isCollapsed ? 12 : 16),
             decoration: const BoxDecoration(
               border: Border(bottom: BorderSide(color: Color(0xFF1E293B))),
             ),
-            child: Row(
-              children: [
-                Container(
-                  width: 38,
-                  height: 38,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF2563EB),
-                    borderRadius: BorderRadius.circular(10),
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color(0xFF2563EB).withValues(alpha: 0.35),
-                        blurRadius: 8,
-                        offset: const Offset(0, 3),
-                      )
-                    ],
-                  ),
-                  child: const Center(
-                    child: Icon(Icons.smart_toy_rounded, size: 22, color: Colors.white),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Text(
-                            'Examplayer',
-                            style: GoogleFonts.inter(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w800,
-                              color: Colors.white,
-                              letterSpacing: -0.3,
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          const Text('👑', style: TextStyle(fontSize: 13)),
+            child: isCollapsed
+                ? Center(
+                    child: Container(
+                      width: 38,
+                      height: 38,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF2563EB),
+                        borderRadius: BorderRadius.circular(10),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFF2563EB).withValues(alpha: 0.35),
+                            blurRadius: 8,
+                            offset: const Offset(0, 3),
+                          )
                         ],
                       ),
-                      Text(
-                        'ENTERPRISE 2026',
-                        style: GoogleFonts.inter(
-                          fontSize: 8.5,
-                          fontWeight: FontWeight.w800,
-                          color: const Color(0xFF818CF8),
-                          letterSpacing: 0.8,
+                      child: const Center(
+                        child: Icon(Icons.smart_toy_rounded, size: 22, color: Colors.white),
+                      ),
+                    ),
+                  )
+                : Row(
+                    children: [
+                      Container(
+                        width: 38,
+                        height: 38,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF2563EB),
+                          borderRadius: BorderRadius.circular(10),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFF2563EB).withValues(alpha: 0.35),
+                              blurRadius: 8,
+                              offset: const Offset(0, 3),
+                            )
+                          ],
+                        ),
+                        child: const Center(
+                          child: Icon(Icons.smart_toy_rounded, size: 22, color: Colors.white),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Text(
+                                  'Examplayer',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w800,
+                                    color: Colors.white,
+                                    letterSpacing: -0.3,
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                const Text('👑', style: TextStyle(fontSize: 13)),
+                              ],
+                            ),
+                            Text(
+                              'ENTERPRISE 2026',
+                              style: GoogleFonts.inter(
+                                fontSize: 8.5,
+                                fontWeight: FontWeight.w800,
+                                color: const Color(0xFF818CF8),
+                                letterSpacing: 0.8,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
                   ),
-                ),
-              ],
-            ),
           ),
           const SizedBox(height: 8),
 
@@ -149,51 +174,65 @@ class DashboardSidebar extends StatelessWidget {
 
           // User Profile Pill & Logout
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            padding: EdgeInsets.symmetric(horizontal: isCollapsed ? 8 : 16, vertical: 14),
             decoration: const BoxDecoration(
               border: Border(top: BorderSide(color: Color(0xFF1E293B))),
             ),
-            child: Row(
-              children: [
-                UserAvatar(
-                  userId: adminId,
-                  name: 'ST',
-                  radius: 17,
-                  isRootAdmin: true,
-                  customUrl: adminPhotoUrl,
-                  showBadge: false,
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        adminName,
-                        style: GoogleFonts.inter(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+            child: isCollapsed
+                ? Center(
+                    child: Tooltip(
+                      message: '$adminName (@$adminUsername)',
+                      child: UserAvatar(
+                        userId: adminId,
+                        name: 'ST',
+                        radius: 17,
+                        isRootAdmin: true,
+                        customUrl: adminPhotoUrl,
+                        showBadge: false,
                       ),
-                      Text(
-                        '@$adminUsername',
-                        style: const TextStyle(fontSize: 10.5, color: Color(0xFF94A3B8)),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                    ),
+                  )
+                : Row(
+                    children: [
+                      UserAvatar(
+                        userId: adminId,
+                        name: 'ST',
+                        radius: 17,
+                        isRootAdmin: true,
+                        customUrl: adminPhotoUrl,
+                        showBadge: false,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              adminName,
+                              style: GoogleFonts.inter(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            Text(
+                              '@$adminUsername',
+                              style: const TextStyle(fontSize: 10.5, color: Color(0xFF94A3B8)),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.logout_rounded, size: 17, color: Color(0xFFEF4444)),
+                        tooltip: 'Logout',
+                        onPressed: onLogout,
                       ),
                     ],
                   ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.logout_rounded, size: 17, color: Color(0xFFEF4444)),
-                  tooltip: 'Logout',
-                  onPressed: onLogout,
-                ),
-              ],
-            ),
           ),
         ],
       ),
@@ -201,6 +240,12 @@ class DashboardSidebar extends StatelessWidget {
   }
 
   Widget _sidebarSectionHeader(String title) {
+    if (isCollapsed) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 4),
+        child: Divider(color: Color(0xFF1E293B), height: 12, thickness: 1, indent: 14, endIndent: 14),
+      );
+    }
     return Padding(
       padding: const EdgeInsets.only(left: 16, right: 16, top: 12, bottom: 6),
       child: Text(
@@ -225,6 +270,51 @@ class DashboardSidebar extends StatelessWidget {
     bool closeDrawerOnTap = false,
   }) {
     final isSelected = selectedNav == index;
+
+    if (isCollapsed) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        child: Tooltip(
+          message: title,
+          waitDuration: const Duration(milliseconds: 200),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(10),
+              onTap: () {
+                tg.hapticImpact('light');
+                if (index == 101) {
+                  onOpenPayments();
+                } else if (index == 102) {
+                  onOpenCommands();
+                } else if (index == 103) {
+                  onSelectNav(0);
+                  onToast('Viewing Platform Analytics');
+                } else if (index == 104) {
+                  onOpenActivities();
+                } else {
+                  onSelectNav(index);
+                }
+              },
+              child: Container(
+                height: 40,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: isSelected ? const Color(0xFF1E293B) : Colors.transparent,
+                  borderRadius: BorderRadius.circular(10),
+                  border: isSelected ? Border.all(color: const Color(0xFF334155), width: 1) : null,
+                ),
+                child: Icon(
+                  icon,
+                  size: 20,
+                  color: isSelected ? const Color(0xFF38BDF8) : const Color(0xFF94A3B8),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 1.5),
