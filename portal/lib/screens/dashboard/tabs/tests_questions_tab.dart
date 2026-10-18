@@ -6,9 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../services/api_service.dart';
 import '../../../services/telegram_service.dart';
 import '../../../theme/app_theme.dart';
-import '../../../widgets/custom_toggle.dart';
 import '../../../widgets/kpi_card.dart';
-import '../../../widgets/status_badge.dart';
 
 class TestsQuestionsTab extends StatefulWidget {
   final List<dynamic> quizzes;

@@ -1097,4 +1097,83 @@ export async function moveQuizToFolder(
   return true;
 }
 
+// =============================================================================
+// ENTERPRISE ADMIN PORTAL QUERIES (Audit Logs, Payments, Plans, Broadcasts)
+// =============================================================================
+
+export interface AdminAuditLog {
+  id?: string;
+  admin_id: number;
+  admin_name: string;
+  action: string;
+  target_type?: string;
+  target_id?: string;
+  details?: Record<string, any>;
+  ip_address?: string;
+  created_at?: string;
+}
+
+export async function logAdminAudit(
+  supabase: SupabaseClient,
+  log: AdminAuditLog
+): Promise<void> {
+  try {
+    const entry = {
+      admin_id: log.admin_id,
+      admin_name: log.admin_name,
+      action: log.action,
+      target_type: log.target_type || null,
+      target_id: log.target_id || null,
+      details: log.details || {},
+      ip_address: log.ip_address || null,
+      created_at: new Date().toISOString(),
+    };
+
+    // Try inserting into public.admin_audit_logs
+    const { error } = await supabase.from('admin_audit_logs').insert(entry);
+    if (error) {
+      // Fallback: append to bot_settings JSON list
+      const raw = await getSetting(supabase, 'admin_activity_logs', '[]');
+      let list: any[] = [];
+      try { list = JSON.parse(raw); } catch {}
+      list.unshift({
+        name: log.admin_name,
+        action: `${log.action}: ${log.target_type || ''} ${log.target_id || ''}`.trim(),
+        time: new Date().toLocaleString('en-IN'),
+        details: log.details,
+      });
+      if (list.length > 50) list = list.slice(0, 50);
+      await setSetting(supabase, 'admin_activity_logs', JSON.stringify(list));
+    }
+  } catch (err) {
+    console.error('Failed to record admin audit log:', err);
+  }
+}
+
+export async function getAdminAuditLogs(
+  supabase: SupabaseClient,
+  limit = 20
+): Promise<any[]> {
+  try {
+    const { data, error } = await supabase
+      .from('admin_audit_logs')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (!error && data && data.length > 0) {
+      return data;
+    }
+  } catch {}
+
+  // Fallback to bot_settings
+  try {
+    const raw = await getSetting(supabase, 'admin_activity_logs', '[]');
+    return JSON.parse(raw);
+  } catch {
+    return [];
+  }
+}
+
+
 

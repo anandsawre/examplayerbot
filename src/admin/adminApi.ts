@@ -21,6 +21,8 @@ import {
   revokeGroup,
   getGlobalLeaderboard,
   getQuizLeaderboard,
+  logAdminAudit,
+  getAdminAuditLogs,
 } from '../db/queries';
 import {
   getRootAdmins,

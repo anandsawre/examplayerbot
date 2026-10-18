@@ -58,7 +58,10 @@ class UsersTabState extends State<UsersTab> {
     setState(() => _userSearch = search);
   }
 
-  void _showToast(String msg, {bool isError = false}) => widget.onShowToast(msg, isError: isError);
+  void _showToast(String msg, {bool isError = false}) {
+    _tg.hapticImpact(isError ? 'heavy' : 'light');
+    widget.onShowToast(msg, isError: isError);
+  }
   Future<void> _loadAllData() => widget.onRefreshAll();
 
   ApiService get _api => widget.api;

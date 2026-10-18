@@ -291,9 +291,6 @@ class OverviewTabState extends State<OverviewTab> {
   String get _statusMsg => widget.statusMsg;
   DateTime? get _lastSyncTime => widget.lastSyncTime;
   String get _adminName => widget.adminName;
-  String get _adminUsername => widget.adminUsername;
-  String get _adminId => widget.adminId;
-  String? get _adminPhotoUrl => widget.adminPhotoUrl;
 
   Map<String, dynamic> get _resolvedStats {
     if (_stats['stats'] is Map<String, dynamic>) {
@@ -305,7 +302,6 @@ class OverviewTabState extends State<OverviewTab> {
   void _showToast(String msg, {bool isError = false}) => widget.onShowToast(msg, isError: isError);
   Future<void> _loadAllData() => widget.onRefreshAll();
   void _openLaunchQuizDialog(String id, String title) => widget.onLaunchQuiz(id, title);
-  void _previewQuestionsDialog(Map<String, dynamic> q) => widget.onPreviewQuiz(q);
 
   String _formatNumber(dynamic n) {
     if (n == null) return '0';

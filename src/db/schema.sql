@@ -221,3 +221,83 @@ CREATE INDEX IF NOT EXISTS idx_folders_parent_id ON public.quiz_folders(parent_i
 ALTER TABLE public.quizzes ADD COLUMN IF NOT EXISTS folder_id UUID REFERENCES public.quiz_folders(id) ON DELETE SET NULL;
 CREATE INDEX IF NOT EXISTS idx_quizzes_folder_id ON public.quizzes(folder_id);
 
+-- ==========================================================
+-- ENTERPRISE ADMIN PORTAL EXTENSIONS
+-- ==========================================================
+
+-- 13. Subscription Plans Table
+CREATE TABLE IF NOT EXISTS public.subscription_plans (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    price NUMERIC NOT NULL DEFAULT 0,
+    billing_period TEXT NOT NULL DEFAULT 'month',
+    price_display TEXT,
+    period_display TEXT,
+    features JSONB NOT NULL DEFAULT '[]'::jsonb,
+    status TEXT NOT NULL DEFAULT 'Active',
+    is_popular BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 14. Financial Payments & Transactions Ledger Table
+CREATE TABLE IF NOT EXISTS public.payments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    transaction_id TEXT NOT NULL UNIQUE,
+    user_id BIGINT REFERENCES public.users(id) ON DELETE SET NULL,
+    plan_id TEXT REFERENCES public.subscription_plans(id) ON DELETE SET NULL,
+    amount NUMERIC NOT NULL DEFAULT 0,
+    currency TEXT NOT NULL DEFAULT 'INR',
+    gateway TEXT NOT NULL DEFAULT 'UPI',
+    status TEXT NOT NULL DEFAULT 'Pending',
+    payment_method TEXT,
+    customer_name TEXT,
+    customer_phone TEXT,
+    receipt_url TEXT,
+    metadata JSONB DEFAULT '{}'::jsonb,
+    refund_reason TEXT,
+    refunded_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_payments_user_id ON public.payments(user_id);
+CREATE INDEX IF NOT EXISTS idx_payments_transaction_id ON public.payments(transaction_id);
+CREATE INDEX IF NOT EXISTS idx_payments_status ON public.payments(status);
+CREATE INDEX IF NOT EXISTS idx_payments_created_at ON public.payments(created_at DESC);
+
+-- 15. Administrative Audit Logs Table
+CREATE TABLE IF NOT EXISTS public.admin_audit_logs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    admin_id BIGINT NOT NULL,
+    admin_name TEXT NOT NULL,
+    action TEXT NOT NULL,
+    target_type TEXT,
+    target_id TEXT,
+    details JSONB DEFAULT '{}'::jsonb,
+    ip_address TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_audit_admin_id ON public.admin_audit_logs(admin_id);
+CREATE INDEX IF NOT EXISTS idx_audit_action ON public.admin_audit_logs(action);
+CREATE INDEX IF NOT EXISTS idx_audit_created_at ON public.admin_audit_logs(created_at DESC);
+
+-- 16. Broadcast Campaigns Table
+CREATE TABLE IF NOT EXISTS public.broadcast_campaigns (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    title TEXT NOT NULL,
+    message TEXT NOT NULL,
+    media_url TEXT,
+    buttons JSONB DEFAULT '[]'::jsonb,
+    target TEXT NOT NULL DEFAULT 'all',
+    target_count INTEGER DEFAULT 0,
+    delivered_count INTEGER DEFAULT 0,
+    failed_count INTEGER DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'Delivered',
+    created_by BIGINT,
+    sent_at TIMESTAMPTZ DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_broadcast_created_at ON public.broadcast_campaigns(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_broadcast_status ON public.broadcast_campaigns(status);
+
+
