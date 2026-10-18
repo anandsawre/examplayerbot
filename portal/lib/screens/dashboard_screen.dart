@@ -50,7 +50,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // 7: Broadcast Studio (Announcement Broadcast Studio)
   // 8: System Settings (Global Platform Settings)
   int _selectedNav = 0;
-  bool _isLoading = true;
+  bool _isSyncing = false;
+  bool _hasInitialDataLoaded = false;
   String _statusMsg = '';
 
   // Data
@@ -64,8 +65,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Map<String, dynamic> _settings = {};
 
   // Search queries passed to modular tabs
-  String _quizTableSearch = '';
-  String _userSearch = '';
+  final String _quizTableSearch = '';
+  final String _userSearch = '';
 
   // Admin Profile Info
   String _adminId = '613840274';
@@ -141,11 +142,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
-  Future<void> _loadAllData() async {
-    setState(() {
-      _isLoading = true;
-      _statusMsg = '';
-    });
+  Future<void> _loadAllData({bool showBlockingLoader = false}) async {
+    if (!mounted) return;
+    if (showBlockingLoader) {
+      setState(() {
+        _hasInitialDataLoaded = false;
+        _isSyncing = false;
+        _statusMsg = '';
+      });
+    } else if (_hasInitialDataLoaded) {
+      setState(() {
+        _isSyncing = true;
+        _statusMsg = '';
+      });
+    }
+
     final stopwatch = Stopwatch()..start();
     try {
       final results = await Future.wait([
@@ -172,14 +183,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
           _settings = results[7] as Map<String, dynamic>;
           _lastSyncTime = DateTime.now();
           _dbLatencyMs = elapsed > 0 ? elapsed : 28;
-          _isLoading = false;
+          _isSyncing = false;
+          _hasInitialDataLoaded = true;
         });
       }
     } catch (e) {
       if (mounted) {
         setState(() {
           _statusMsg = 'Sync note: $e';
-          _isLoading = false;
+          _isSyncing = false;
+          _hasInitialDataLoaded = true;
         });
       }
     }
@@ -682,9 +695,68 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 child: Column(
                   children: [
                     _buildTopNavbar(isDesktop: isDesktop),
+                    // Sleek professional top sync bar (non-intrusive background sync)
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      height: _isSyncing ? 2.5 : 0.0,
+                      child: _isSyncing
+                          ? const LinearProgressIndicator(
+                              minHeight: 2.5,
+                              backgroundColor: Colors.transparent,
+                              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF6366F1)),
+                            )
+                          : const SizedBox.shrink(),
+                    ),
                     Expanded(
-                      child: _isLoading
-                          ? const Center(child: CircularProgressIndicator())
+                      child: !_hasInitialDataLoaded
+                          ? Center(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Container(
+                                    width: 58,
+                                    height: 58,
+                                    decoration: BoxDecoration(
+                                      gradient: const LinearGradient(
+                                        colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+                                        begin: Alignment.topLeft,
+                                        end: Alignment.bottomRight,
+                                      ),
+                                      borderRadius: BorderRadius.circular(18),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: const Color(0xFF6366F1).withValues(alpha: 0.35),
+                                          blurRadius: 20,
+                                          offset: const Offset(0, 6),
+                                        ),
+                                      ],
+                                    ),
+                                    child: const Center(
+                                      child: Icon(Icons.school_rounded, color: Colors.white, size: 32),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 22),
+                                  const SizedBox(
+                                    width: 26,
+                                    height: 26,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2.5,
+                                      valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF6366F1)),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 14),
+                                  Text(
+                                    'Loading Platform Console...',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      letterSpacing: 0.3,
+                                      color: widget.isDark ? Colors.white70 : const Color(0xFF64748B),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            )
                           : IndexedStack(
                               index: _selectedNav,
                               children: [
